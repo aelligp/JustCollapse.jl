@@ -61,7 +61,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     Nx,Ny,Nz                = 100,100,100   # 3D grid size (does not yet matter)
         arrow_steps         = 4;            # number of arrows in the quiver plot
 
-    nt                      = 500             # number of timesteps
+    nt                      = 10             # number of timesteps
     InjectionInterval       = 500yr        # number of timesteps between injections (if Inject_Dike=true). Increase this at higher resolution. 
     
     η_uppercrust            = 1e21          #viscosity of the upper crust
@@ -138,8 +138,8 @@ println("Done loading Model... starting Dike Injection 2D routine")
     #-------rheology parameters--------------------------------------------------------------
     # plasticity setup
     do_DP                   = false               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
-    # η_reg                   =0.0Pas           # regularisation "viscosity"
-    τ_y                     = 35MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    η_reg                   =0.0Pas           # regularisation "viscosity"
+    # τ_y                     = 35MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     # τ_y                     = 25MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     τ_y                     = 0.0MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     # τ_y                     = Inf              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
@@ -401,15 +401,10 @@ println("Done loading Model... starting Dike Injection 2D routine")
         @parallel (@idx ni) computeViscosity!(η, ϕ, S, mfac, η_f, η_s)
 
         if toy == true
-            for i in CartesianIndices(thermal.T)
-                if thermal.T[i] == nondimensionalize(900C,CharDim)
-                    P_anomaly[i] = nondimensionalize(50MPa,CharDim)
-                end
-            end
-            stokes.P .= stokes.P .+ P_anomaly
+           @views stokes.P[phase_c .==2] .= nondimensionalize(20MPa,CharDim)
         end
     # ----------------------------------------------------  
-    @views P_Dirichlet = stokes.P[phase_c .== 2] .+ nondimensionalize(5MPa,CharDim) # Dirichlet pressure for the magma
+   
     # Time loop
     t, it       = 0.0, 0
     interval    = 1.0
@@ -421,21 +416,8 @@ println("Done loading Model... starting Dike Injection 2D routine")
     @parallel (@idx ni) update_G!(G, MatParam, phase_c);
     @copy stokes.P0 stokes.P;
     
-    while it < nt    
-        # Update buoyancy and viscosity -
-        # @copy thermal.Told thermal.T
-        # @timeit "compute_melt_while" @parallel (@idx ni) compute_melt_fraction!(ϕ, MatParam, phase_c,  (T=thermal.Tc,))
-        # # @timeit "compute_visc_while"  @parallel (@idx ni) compute_viscosity_gp!(η, phase_c, phase_v, args, MatParam)
-        # # if it == 1
-        # @parallel (@idx ni) compute_ρg!(ρg[2], ϕ, MatParam,(T=thermal.Tc, P=stokes.P))
-        # # end
-        # # @parallel (@idx ni) compute_viscosity!(η, ν, @strain(stokes)..., args, MatParam)
-        # @parallel (@idx ni) computeViscosity!(η, ϕ, S, mfac, η_f, η_s)
-        # @parallel (@idx ni) compute_viscosity_MTK!(
-        #     η, ν, @strain(stokes)..., args, tupleize(MatParam), phase_c
-        # )
-        # @copy η_vep η
-        # @parallel (@idx ni) update_G!(G, MatParam, phase_c)
+    while it < nt   
+     
         args = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s) 
         if Inject_Dike == true
               # if rem(it, 2) == 0
@@ -490,18 +472,10 @@ println("Done loading Model... starting Dike Injection 2D routine")
         if ustrip(dimensionalize(t,yr,CharDim)) > (ustrip(InjectionInterval)*interval)
             interval += 1.0 
         end
-
-        # if rem(it, 2) == 0
-        #     for i in CartesianIndices(phase_c)
-        #         if phase_c[i] == 2
-        #             # stokes.P[i] .+= nondimensionalize(10MPa,CharDim)
-        #             P_anomaly[i] += nondimensionalize(50MPa,CharDim)
-        #         end
-        #     end
-        # end
-        # stokes.P .= stokes.P .+ P_dike
-        # stokes.P .= stokes.P .+ P_anomaly
-        # @copy stokes.P0 stokes.P;
+       
+        @views P_Dirichlet = stokes.P[phase_c .== 2] .+ nondimensionalize(50MPa,CharDim)
+        # @views thermal.T[phase_v .==2] .+= nondimensionalize(100C,CharDim) 
+        # @parallel (@idx ni) temperature2center!(thermal.Tc, thermal.T)  
         args = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s) 
         # Stokes solver ----------------
         iters = MTK_solve!(
@@ -518,7 +492,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
             MatParam, # do a few initial time-steps without plasticity to improve convergence
             dt,   # if no elasticity then Inf otherwise dt
             igg;
-            iterMax=50000,  # 10e3 for testing
+            iterMax=100e3,  # 10e3 for testing
             nout=1000,
             b_width,
             verbose=true,
@@ -527,19 +501,19 @@ println("Done loading Model... starting Dike Injection 2D routine")
         # ------------------------------
        @show dt
 
-        # Thermal solver ---------------
-        heatdiffusion_PT!(
-            thermal,
-            pt_thermal,
-            thermal_bc,
-            MatParam,
-            args,
-            dt,
-            di;
-            igg=igg,
-            phase = phase_v,
-        ) #crashing at dike injection - phase_v the reason?
-        # ------------------------------
+        # # Thermal solver ---------------
+        # heatdiffusion_PT!(
+        #     thermal,
+        #     pt_thermal,
+        #     thermal_bc,
+        #     MatParam,
+        #     args,
+        #     dt,
+        #     di;
+        #     igg=igg,
+        #     phase = phase_v,
+        # ) #crashing at dike injection - phase_v the reason?
+        # # ------------------------------
 
         # Update buoyancy and viscosity -
         @copy thermal.Told thermal.T
@@ -670,7 +644,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
             ax4 = Axis(fig[3,2][1,1], aspect = ar, title = L"\rho [\mathrm{kgm}^{-3}]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
             # ax4 = Axis(fig[3,2][1,1], aspect = ar, title = L"\varepsilon_{\textrm{xy}}[\mathrm{s}^{-1}]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
             # ax5 = Axis(fig[4,1][1,1], aspect = ar, title = L"\phi", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
-            ax5 = Axis(fig[4,1][1,1], aspect = ar, title = L"\P", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
+            ax5 = Axis(fig[4,1][1,1], aspect = ar, title = L"P", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
             ax6 = Axis(fig[4,2][1,1], aspect = ar, title = L"\tau_{\textrm{II}} [MPa]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
             # ax6 = Axis(fig[4,2][1,1], aspect = ar, title = L"\tau_{\textrm{xx}} [MPa]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
             
@@ -821,7 +795,7 @@ end
 # figdir = "figs2D"
 # ni, xci, li, di, figdir ,thermal = DikeInjection_2D();
 function run()
-    figname = "toy_pressure_anomaly"
+    figname = "pverpressure_test"
     nx     = 128-3    #to include ghost nodes with optimal performance at a multiple of 32
     ny     = 128-3    #to include ghost nodes
     igg    = IGG(init_global_grid(nx, ny, 0)...) 
