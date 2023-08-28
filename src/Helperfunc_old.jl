@@ -1713,6 +1713,7 @@ function MTK_solve!(
     η,
     η_vep,
     phase_c,
+    P_Dirichlet,
     args,
     rheology::NTuple{N,MaterialParams},
     dt,
@@ -1756,6 +1757,7 @@ function MTK_solve!(
             @parallel (@idx ni) compute_P!(  
                 stokes.P, stokes.P0, stokes.R.RP, stokes.∇V, η, rheology, phase_c, dt, r, θ_dτ 
             )  
+            stokes.P[phase_c .== 2] .= P_Dirichlet
             # @parallel (@idx ni) compute_P!(  
             #     stokes.P, P_old, stokes.R.RP, stokes.∇V, η, rheology, phase_c, dt, r, θ_dτ 
             # )  
@@ -1816,7 +1818,7 @@ function MTK_solve!(
             @parallel (@idx ni) compute_Res!(
                 stokes.R.Rx, stokes.R.Ry, stokes.P, @stress(stokes)..., ρg..., _di...
             )
-            errs = maximum.((abs.(stokes.R.Rx), abs.(stokes.R.Ry), abs.(stokes.R.RP)))
+            errs = maximum.((abs.(stokes.R.Rx), abs.(stokes.R.Ry), abs.(stokes.R.RP[phase_c!=2])))
             push!(norm_Rx, errs[1])
             push!(norm_Ry, errs[2])
             push!(norm_∇V, errs[3])

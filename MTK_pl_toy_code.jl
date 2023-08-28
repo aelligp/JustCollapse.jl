@@ -61,7 +61,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     Nx,Ny,Nz                = 100,100,100   # 3D grid size (does not yet matter)
         arrow_steps         = 4;            # number of arrows in the quiver plot
 
-    nt                      = 50             # number of timesteps
+    nt                      = 500             # number of timesteps
     InjectionInterval       = 500yr        # number of timesteps between injections (if Inject_Dike=true). Increase this at higher resolution. 
     
     η_uppercrust            = 1e21          #viscosity of the upper crust
@@ -138,8 +138,8 @@ println("Done loading Model... starting Dike Injection 2D routine")
     #-------rheology parameters--------------------------------------------------------------
     # plasticity setup
     do_DP                   = false               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
-    η_reg                   =0.0Pas           # regularisation "viscosity"
-    # τ_y                     = 35MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    # η_reg                   =0.0Pas           # regularisation "viscosity"
+    τ_y                     = 35MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     # τ_y                     = 25MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     τ_y                     = 0.0MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     # τ_y                     = Inf              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
@@ -406,10 +406,10 @@ println("Done loading Model... starting Dike Injection 2D routine")
                     P_anomaly[i] = nondimensionalize(50MPa,CharDim)
                 end
             end
+            stokes.P .= stokes.P .+ P_anomaly
         end
-        stokes.P .= stokes.P .+ P_anomaly
     # ----------------------------------------------------  
-   
+    @views P_Dirichlet = stokes.P[phase_c .== 2] .+ nondimensionalize(5MPa,CharDim) # Dirichlet pressure for the magma
     # Time loop
     t, it       = 0.0, 0
     interval    = 1.0
@@ -421,7 +421,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     @parallel (@idx ni) update_G!(G, MatParam, phase_c);
     @copy stokes.P0 stokes.P;
     
-    # while it < nt    
+    while it < nt    
         # Update buoyancy and viscosity -
         # @copy thermal.Told thermal.T
         # @timeit "compute_melt_while" @parallel (@idx ni) compute_melt_fraction!(ϕ, MatParam, phase_c,  (T=thermal.Tc,))
@@ -454,12 +454,12 @@ println("Done loading Model... starting Dike Injection 2D routine")
                 ## MTK injectDike
                 Tracers, Tnew_cpu, Vol, dike_poly, Velo  =   MagmaThermoKinematics.InjectDike(Tracers, Tnew_cpu, xvi, dike, nTr_dike);   # Add dike, move hostrocks
                 
-                for i in CartesianIndices(Tnew_cpu)
-                    if Tnew_cpu[i] == dike.T
-                        P_dike[i] = nondimensionalize(100MPa,CharDim)
-                        # P_dike[i] = nondimensionalize((dike.ΔP)Pa,CharDim)
-                    end
-                end
+                # for i in CartesianIndices(Tnew_cpu)
+                #     if Tnew_cpu[i] == dike.T
+                #         P_dike[i] = nondimensionalize(100MPa,CharDim)
+                #         # P_dike[i] = nondimensionalize((dike.ΔP)Pa,CharDim)
+                #     end
+                # end
 
  
 
@@ -491,16 +491,17 @@ println("Done loading Model... starting Dike Injection 2D routine")
             interval += 1.0 
         end
 
-        if rem(it, 2) == 0
-            for i in CartesianIndices(phase_c)
-                if phase_c[i] == 2
-                    # stokes.P[i] .+= nondimensionalize(10MPa,CharDim)
-                    P_anomaly[i] += nondimensionalize(50MPa,CharDim)
-                end
-            end
-        end
-        stokes.P .= stokes.P .+ P_dike
-        stokes.P .= stokes.P .+ P_anomaly
+        # if rem(it, 2) == 0
+        #     for i in CartesianIndices(phase_c)
+        #         if phase_c[i] == 2
+        #             # stokes.P[i] .+= nondimensionalize(10MPa,CharDim)
+        #             P_anomaly[i] += nondimensionalize(50MPa,CharDim)
+        #         end
+        #     end
+        # end
+        # stokes.P .= stokes.P .+ P_dike
+        # stokes.P .= stokes.P .+ P_anomaly
+        # @copy stokes.P0 stokes.P;
         args = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s) 
         # Stokes solver ----------------
         iters = MTK_solve!(
@@ -512,12 +513,13 @@ println("Done loading Model... starting Dike Injection 2D routine")
             η, 
             η_vep,
             phase_c,
+            P_Dirichlet,
             args,
             MatParam, # do a few initial time-steps without plasticity to improve convergence
             dt,   # if no elasticity then Inf otherwise dt
             igg;
-            iterMax=250e3,  # 10e3 for testing
-            nout=1e3,
+            iterMax=50000,  # 10e3 for testing
+            nout=1000,
             b_width,
             verbose=true,
         )
