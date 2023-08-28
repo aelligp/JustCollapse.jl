@@ -1755,12 +1755,10 @@ function MTK_solve!(
             @parallel (@idx ni) compute_∇V!(stokes.∇V, @velocity(stokes)..., _di...)
             @parallel (@idx ni) compute_P!(  
                 stokes.P, stokes.P0, stokes.R.RP, stokes.∇V, η, rheology, phase_c, dt, r, θ_dτ 
-            )  # switched to stokes.P0 rather than a deepcopy of stokes.P
-            # display(heatmap(stokes.∇V, title="∇Vx $iter"))
-            # @parallel compute_P!(
-            #     stokes.P, stokes.P0, stokes.R.RP, stokes.∇V, η, Kb, dt, r, θ_dτ
-            # )
-            # display(heatmap(stokes.P, title="P $iter"))
+            )  
+            # @parallel (@idx ni) compute_P!(  
+            #     stokes.P, P_old, stokes.R.RP, stokes.∇V, η, rheology, phase_c, dt, r, θ_dτ 
+            # )  
             @parallel (@idx ni .+ 1) compute_strain_rate!(
                 @strain(stokes)..., stokes.∇V, @velocity(stokes)..., _di...
             )
@@ -1777,7 +1775,6 @@ function MTK_solve!(
             # )
             # JustRelax.compute_maxloc!(ητ, η)
             # update_halo!(ητ)
-            # # display(heatmap(η, title="η $iter"))
 
             @parallel (@idx ni) compute_τ_nonlinear!(
                 @tensor_center(stokes.τ)...,
