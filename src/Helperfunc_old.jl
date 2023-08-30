@@ -1017,7 +1017,6 @@ function compute_dτ_pl(
         dτ_r *
         (-(τij[i] - τij_p_o[i]) * ηij * _Gdt - τij[i] + 2.0 * ηij * (εij_p[i] - λdQdτ))
     end
-    F>0 && prinln("Im yielding")
     return dτ_pl, λ
 end
 
@@ -1040,11 +1039,10 @@ end
 
 @inline plastic_params(v) = plastic_params(v.CompositeRheology[1].elements)
 
-@generated function plastic_params(v::NTuple{N,Any}) where {N}
+@generated function plastic_params(v::NTuple{N, AbstractMaterialParamsStruct}, phase::Int) where N
     quote
         Base.@_inline_meta
-        Base.@nexprs $N i ->
-            isplastic(v[i]) && return true, v[i].C.val, v[i].sinϕ.val, v[i].η_vp.val
+        Base.@nexprs $N i -> i==phase && return plastic_params(v[i])
         (false, 0.0, 0.0, 0.0)
     end
 end
