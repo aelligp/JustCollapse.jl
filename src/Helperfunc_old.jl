@@ -673,6 +673,16 @@ end
     return nothing
 end
 
+@parallel_indices (i, j) function update_phase_v(phase, ϕ)
+
+    if i < size(phase, 1)-1
+        if !(phase[i+1, j] == 2) && ϕ[i, j] > 1e-2
+            phase[i+1, j] = 2
+        end
+    end
+    return nothing
+end
+
 @parallel_indices (i, j) function compute_ρg_phase!(ρg, phase, rheology, args)
 
     ρg[i, j] = 
@@ -994,7 +1004,8 @@ function compute_dτ_pl(
     # yield function
     F = τII_trial - τy
     # Plastic multiplier
-    ν = 0.9
+    # ν = 0.9
+    ν = 0.0
     λ = ν * λ0 + (1 - ν) * (F > 0.0) * F * inv(ηij + η_reg)
     λ_τII = λ * 0.5 * inv(τII_trial)
 
@@ -1006,6 +1017,7 @@ function compute_dτ_pl(
         dτ_r *
         (-(τij[i] - τij_p_o[i]) * ηij * _Gdt - τij[i] + 2.0 * ηij * (εij_p[i] - λdQdτ))
     end
+    F>0 && prinln("Im yielding")
     return dτ_pl, λ
 end
 
@@ -1757,21 +1769,19 @@ function MTK_solve!(
             @parallel (@idx ni) compute_P!(  
                 stokes.P, stokes.P0, stokes.R.RP, stokes.∇V, η, rheology, phase_c, dt, r, θ_dτ 
             )  
-            stokes.P[phase_c .== 2] .= P_Dirichlet
-            # @parallel (@idx ni) compute_P!(  
-            #     stokes.P, P_old, stokes.R.RP, stokes.∇V, η, rheology, phase_c, dt, r, θ_dτ 
-            # )  
+            
+            stokes.P[phase_c .== 2] .= P_Dirichlet[phase_c .== 2]
+            # stokes.P[args.ϕ .> 0.12] .= P_Dirichlet[args.ϕ .> 0.12]
+            
             @parallel (@idx ni .+ 1) compute_strain_rate!(
                 @strain(stokes)..., stokes.∇V, @velocity(stokes)..., _di...
             )
-            # display(heatmap(stokes.ε.xy, title="εxy $iter"))
+        
             # @parallel (@idx ni) compute_ρg2!(ρg[2], args.ϕ, rheology, (T=args.T, P=args.P))
-            @parallel (@idx ni) compute_ρg_phase!(ρg[2], phase_c, rheology, (T=args.T, P=args.P))
+            # @parallel (@idx ni) compute_ρg_phase!(ρg[2], phase_c, rheology, (T=args.T, P=args.P))
 
-            # # @parallel (@idx ni) JustRelax.compute_ρg!(ρg[2], rheology[i], (T=args.T, P=args.P))
-
-            @parallel (@idx ni) computeViscosity!(η, args.ϕ, args.S, args.mfac, args.η_f, args.η_s) # viscosity calculation 1. based on melt fraction AND then strain rate 
-            # ν = 0.05
+            # @parallel (@idx ni) computeViscosity!(η, args.ϕ, args.S, args.mfac, args.η_f, args.η_s) # viscosity calculation 1. based on melt fraction AND then strain rate 
+            # ν = 0.01
             # @parallel (@idx ni) compute_viscosity_MTK!(
             #     η, ν, @strain(stokes)..., args, tupleize(rheology), phase_c
             # )
@@ -1792,7 +1802,6 @@ function MTK_solve!(
                 dt,
                 θ_dτ,
             )
-            # display(heatmap(stokes.τ.xy, title="τxy $iter"))
             @parallel JustRelax.center2vertex!(stokes.τ.xy, stokes.τ.xy_c)
 
             @hide_communication b_width begin # communication/computation overlap
@@ -1807,9 +1816,7 @@ function MTK_solve!(
                 )
                 update_halo!(stokes.V.Vx, stokes.V.Vy)
             end
-            # display(heatmap(stokes.V.Vy, title="Vy $iter"))
-            # apply boundary conditions boundary conditions
-            # apply_free_slip!(freeslip, stokes.V.Vx, stokes.V.Vy)
+            
             flow_bcs!(stokes, flow_bcs, di)
         end
 
@@ -1818,7 +1825,7 @@ function MTK_solve!(
             @parallel (@idx ni) compute_Res!(
                 stokes.R.Rx, stokes.R.Ry, stokes.P, @stress(stokes)..., ρg..., _di...
             )
-            errs = maximum.((abs.(stokes.R.Rx), abs.(stokes.R.Ry), abs.(stokes.R.RP[phase_c!=2])))
+            errs = maximum.((abs.(stokes.R.Rx), abs.(stokes.R.Ry), abs.(stokes.R.RP[phase_c.!=2])))
             push!(norm_Rx, errs[1])
             push!(norm_Ry, errs[2])
             push!(norm_∇V, errs[3])
@@ -1898,7 +1905,7 @@ function circular_anomaly!(T, anomaly, phases, xc, yc, r, xvi)
 
 end
 
-function circular_anomaly_center!(phases, xc, yc, r, xvi)
+function circular_anomaly_center!(phases, xc, yc, r, xci)
 
     @parallel_indices (i, j) function _circular_anomaly_center!(phases, xc, yc, r, x, y)
         @inbounds if (((x[i].-xc ))^2 + ((y[j] .+ yc))^2) ≤ r^2
@@ -1908,7 +1915,7 @@ function circular_anomaly_center!(phases, xc, yc, r, xvi)
         return nothing
     end
 
-    @parallel _circular_anomaly_center!(phases, xc, yc, r, xvi...)
+    @parallel _circular_anomaly_center!(phases, xc, yc, r, xci...)
 
 end
 
