@@ -62,7 +62,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     Nx,Ny,Nz                = 100,100,100   # 3D grid size (does not yet matter)
         arrow_steps         = 4;            # number of arrows in the quiver plot
 
-    nt                      = 10             # number of timesteps
+    nt                      = 25             # number of timesteps
     InjectionInterval       = 500yr        # number of timesteps between injections (if Inject_Dike=true). Increase this at higher resolution. 
     
     η_uppercrust            = 1e21          #viscosity of the upper crust
@@ -139,10 +139,10 @@ println("Done loading Model... starting Dike Injection 2D routine")
     #-------rheology parameters--------------------------------------------------------------
     # plasticity setup
     do_DP                   = false               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
-    η_reg                   =1.0e18Pas           # regularisation "viscosity"
+    η_reg                   =1.0e16Pas           # regularisation "viscosity"
     # τ_y                     = 35MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     # τ_y                     = 25MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    τ_y                     = 5MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    τ_y                     = 10MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     # τ_y                     = Inf              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     ϕ                       = 30.0*do_DP
     # ϕ                       = 1.0*do_DP
@@ -150,14 +150,13 @@ println("Done loading Model... starting Dike Injection 2D routine")
     Gi                      = G0/(6.0-4.0*do_DP) # elastic shear modulus perturbation
     # Coh                     = 0.0        # cohesion
     Coh                     = τ_y/cosd(ϕ)        # cohesion
-    # Coh                     = Inf #τ_y/cosd(ϕ)        # cohesion
     # εbg                     = 1e-15/s             # background strain rate
     # εbg                     = nondimensionalize(εbg, CharDim) # background strain rate
     
     pl                      = DruckerPrager_regularised(C=Coh, ϕ=ϕ, η_vp=η_reg, Ψ=0)        # non-regularized plasticity
     el                      = SetConstantElasticity(; G=G0, ν=0.47)                            # elastic spring
-    # el_magma                = SetConstantElasticity(; G=Gi, ν=0.3)                            # elastic spring
-    el_magma                = SetConstantElasticity(; G=Gi, ν=0.5)                            # elastic spring
+    el_magma                = SetConstantElasticity(; G=Gi, ν=0.3)                            # elastic spring
+    # el_magma                = SetConstantElasticity(; G=Gi, ν=0.5)                            # elastic spring
     el_air                  = SetConstantElasticity(; ν=0.5, Kb = 0.101MPa)                            # elastic spring
 
     disl_creep              = DislocationCreep(A=10^-15.0 , n=2.0, E=476e3, V=0.0  ,  r=0.0, R=8.3145) #AdM    #(;E=187kJ/mol,) Kiss et al. 2023
@@ -289,22 +288,39 @@ println("Done loading Model... starting Dike Injection 2D routine")
     Vx_vertex               = PTArray(ones(ni.+1...));                                                  # initialise velocity for the vertices in x direction
     Vy_vertex               = PTArray(ones(ni.+1...));                                                  # initialise velocity for the vertices in y direction
 
-    Tc_viz                  = Array{Float64}(zeros(ni_viz...));                                   # Temp center with ni
+    # Arrays for visualisation
     Tc_viz                  = Array{Float64}(zeros(ni_viz...));                                   # Temp center with ni
     Vx_viz                  = Array{Float64}(zeros(ni_v_viz...));                                 # Velocity in x direction with ni_viz .-1
     Vy_viz                  = Array{Float64}(zeros(ni_v_viz...));                                 # Velocity in y direction with ni_viz .-1
-    ∇V_viz                  = Array{Float64}(zeros(ni_viz...));                                 # Velocity in y direction with ni_viz .-1
+    ∇V_viz                  = Array{Float64}(zeros(ni_viz...));                                   # Velocity in y direction with ni_viz .-1
     P_viz                   = Array{Float64}(zeros(ni_viz...));                                   # Pressure with ni_viz .-2
-    τxy_viz                 = Array{Float64}(zeros(ni_v_viz...));                                # Shear stress with ni_viz .-1
-    τII_viz                 = Array{Float64}(zeros(ni_viz...));                                  # 2nd invariant of the stress tensor with ni_viz .-2
-    εII_viz                 = Array{Float64}(zeros(ni_viz...));                                  # 2nd invariant of the strain tensor with ni_viz .-2
-    εxy_viz                 = Array{Float64}(zeros(ni_v_viz...));                                # Shear strain with ni_viz .-1
-    η_viz                   = Array{Float64}(zeros(ni_viz...));                                    # Viscosity with ni_viz .-2 
+    τxy_viz                 = Array{Float64}(zeros(ni_v_viz...));                                 # Shear stress with ni_viz .-1
+    τII_viz                 = Array{Float64}(zeros(ni_viz...));                                   # 2nd invariant of the stress tensor with ni_viz .-2
+    εII_viz                 = Array{Float64}(zeros(ni_viz...));                                   # 2nd invariant of the strain tensor with ni_viz .-2
+    εxy_viz                 = Array{Float64}(zeros(ni_v_viz...));                                 # Shear strain with ni_viz .-1
+    η_viz                   = Array{Float64}(zeros(ni_viz...));                                   # Viscosity with ni_viz .-2 
     η_vep_viz               = Array{Float64}(zeros(ni_viz...));                                   # Viscosity for the VEP with ni_viz .-2
-    ϕ_viz                   = Array{Float64}(zeros(ni_viz...));                                  # Melt fraction with ni_viz .-2
-    ρg_viz                  = Array{Float64}(zeros(ni_viz...));                                  # Buoyancy force with ni_viz .-2
-    phase_v_viz             = Array{Int64}(zeros(ni_v_viz...));                                    # Phase array with ni_viz .-1
-    phase_c_viz             = Array{Int64}(zeros(ni_viz...));                                    # Phase array with ni_viz .-2
+    ϕ_viz                   = Array{Float64}(zeros(ni_viz...));                                   # Melt fraction with ni_viz .-2
+    ρg_viz                  = Array{Float64}(zeros(ni_viz...));                                   # Buoyancy force with ni_viz .-2
+    phase_v_viz             = Array{Int64}(zeros(ni_v_viz...));                                   # Phase array with ni_viz .-1
+    phase_c_viz             = Array{Int64}(zeros(ni_viz...));                                     # Phase array with ni_viz .-2
+    # Arrays for gathering data from MPI blocks
+    T_inn                   = PTArray(zeros(ni_viz...))
+    Vx_inn                  = PTArray(zeros(ni_v_viz...))
+    Vy_inn                  = PTArray(zeros(ni_v_viz...))
+    ∇V_inn                  = PTArray(zeros(ni_viz...))
+    P_inn                   = PTArray(zeros(ni_viz...)) 
+    τxy_inn                 = PTArray(zeros(ni_v_viz...))
+    τII_inn                 = PTArray(zeros(ni_viz...))
+    εII_inn                 = PTArray(zeros(ni_viz...))
+    εxy_inn                 = PTArray(zeros(ni_v_viz...))
+    η_inn                   = PTArray(zeros(ni_viz...))
+    η_vep_inn               = PTArray(zeros(ni_viz...))
+    ϕ_inn                   = PTArray(zeros(ni_viz...))
+    ρg_inn                  = PTArray(zeros(ni_viz...))
+    phase_v_inn             = Int64.(PTArray(zeros(ni_v_viz...)))
+    phase_c_inn             = Int64.(PTArray(zeros(ni_viz...)))
+
 
     # Arguments for functions
     args                    = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s) # this is used for various functions, remember to update it within loops.
@@ -351,7 +367,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     @views thermal.T[:, end] .= nondimensionalize((0 .+1e-15)C, CharDim);
     @copy  thermal.Told thermal.T
     @copy  Tnew_cpu Array(thermal.T[2:end-1,:])
-
+    xc, yc      = 0.66*lx, 0.4*lz  # origin of thermal anomaly
     if toy == true
         if thermal_perturbation == :random
             δT          = 5.0              # thermal perturbation (in %)
@@ -359,19 +375,17 @@ println("Done loading Model... starting Dike Injection 2D routine")
             @show "random perturbation"
         elseif thermal_perturbation == :circular
             δT          = 10.0              # thermal perturbation (in %)
-            xc, yc      = 0.66*lx, 0.5*lz  # origin of thermal anomaly
             r           = nondimensionalize(5km, CharDim)         # radius of perturbation
             circular_perturbation!(thermal.T, δT, xc, yc, r, xvi)
             @show "circular perturbation"
         else thermal_perturbation == :circular_anomaly
             anomaly     = nondimensionalize(temp_anomaly,CharDim) # temperature anomaly
-            xc, yc      = 0.66*lx, 0.4*lz  # origin of thermal anomaly
             radius           = nondimensionalize(sphere, CharDim)         # radius of perturbation
             circular_anomaly!(thermal.T, anomaly, phase_v, xc, yc, radius, xvi)
             circular_anomaly_center!(phase_c, xc, yc, radius, xci)
             @show "circular anomaly"
             
-            ΔP = nondimensionalize(10MPa, CharDim)
+            ΔP = nondimensionalize(1MPa, CharDim)
             @views stokes.P[phase_c .== 2] .+= ΔP 
             @info "Pressure anomaly added with an overpressure of $(dimensionalize(ΔP,MPa, CharDim))"
         end
@@ -440,24 +454,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
                 @copy Tnew_cpu Array(@views thermal.T[2:end-1,:])
                 ## MTK injectDike
                 Tracers, Tnew_cpu, Vol, dike_poly, Velo  =   MagmaThermoKinematics.InjectDike(Tracers, Tnew_cpu, xvi, dike, nTr_dike);   # Add dike, move hostrocks
-                
-                # for i in CartesianIndices(Tnew_cpu)
-                #     if Tnew_cpu[i] == dike.T
-                #         P_dike[i] = nondimensionalize(100MPa,CharDim)
-                #         # P_dike[i] = nondimensionalize((dike.ΔP)Pa,CharDim)
-                #     end
-                # end
-
- 
-
-                # Vx_updated = stokes.V.Vx[:,1:end-1]  .+ PTArray(Velo[1])
-                # Vy_updated = stokes.V.Vy[1:end-1,:] .+ PTArray(Velo[2])
-                # # # @parallel assign!((stokes.V.Vx[:,1:end-1]), PTArray(Vx_updated))     
-                # # # @parallel assign!((stokes.V.Vy[1:end-1,:]), PTArray(Vy_updated))     
-                # @parallel (@idx size(stokes.V.Vx)) JustRelax.center2vertex!(stokes.V.Vx, Vx_updated)
-                # @parallel (@idx size(stokes.V.Vy)) JustRelax.center2vertex!(stokes.V.Vy, Vy_updated)
-
-                
+                                
                 @views thermal.Told[2:end-1,:] .= PTArray(Tnew_cpu)
                 @views thermal.T[2:end-1,:] .= PTArray(Tnew_cpu)
                 
@@ -483,8 +480,15 @@ println("Done loading Model... starting Dike Injection 2D routine")
 
         #dike setup
         # @views P_Dirichlet[ϕ .> 0.12] .= stokes.P[ϕ .> 0.12] .+ nondimensionalize(1MPa,CharDim)
-
-        @views P_Dirichlet[phase_c.==2] = stokes.P[phase_c .==2] .+ Qmask[phase_c.==2]
+        # if maximum(stokes.P.-Array(stokes.P0)) >= nondimensionalize(25MPa, CharDim)
+        #     Qmask .= 0.0.*Qmask
+        #     println("INJECTION STOPPED")
+        # end
+        if Inject_Dike == true
+            @views P_Dirichlet[ϕ .> 0.12] .= stokes.P[ϕ .> 0.12] .+ nondimensionalize(1MPa,CharDim)
+        else
+            @views P_Dirichlet[phase_c.==2] = stokes.P[phase_c .==2] .+ Qmask[phase_c.==2]
+        end
         # @views P_Dirichlet[phase_c .== 2] .= stokes.P[phase_c .== 2] 
         # stokes.P.+=P_Dirichlet
         @parallel (@idx ni) compute_ρg!(ρg[2], args.ϕ, MatParam,(T=thermal.Tc, P=stokes.P))
@@ -539,7 +543,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
         @parallel update_phase_v(phase_v, ϕ_v)
         # @parallel (@idx ni) compute_ρg!(ρg[2], args.ϕ, MatParam, (T=args.T, P=args.P))
         @parallel (@idx ni) compute_ρg_phase!(ρg[2], phase_c, MatParam, (T=args.T, P=args.P))
-        @parallel (@idx ni) computeViscosity!(η, ϕ, S, mfac, η_f, η_s)
+        # @parallel (@idx ni) computeViscosity!(η, ϕ, S, mfac, η_f, η_s)
         # @copy η_vep η
 
         @show it += 1
@@ -566,46 +570,45 @@ println("Done loading Model... starting Dike Injection 2D routine")
             x_c = ustrip.(dimensionalize(xci[1][2:end-1], km, CharDim))
             y_c = ustrip.(dimensionalize(xci[2][2:end-1], km, CharDim))
 
-            gather!(Array(thermal.Tc[2:end-1,2:end-1]), Tc_viz)
-            gather!(Array(Vx_vertex[2:end-1,2:end-1]), Vx_viz)
-            gather!(Array(Vy_vertex[2:end-1,2:end-1]), Vy_viz)
-            # @timeit "Vy gathering" gather!(Array(stokes.∇V[2:end-1,2:end-1]), ∇V_viz)
-            gather!(Array(stokes.P[2:end-1,2:end-1]), P_viz)
-            gather!(Array(stokes.τ.II[2:end-1,2:end-1]), τII_viz)
-            gather!(Array(stokes.τ.xy[2:end-1,2:end-1]), τxy_viz)
-            gather!(Array(stokes.ε.II[2:end-1,2:end-1]), εII_viz)
-            gather!(Array(stokes.ε.xy[2:end-1,2:end-1]), εxy_viz)
-            gather!(Array(η[2:end-1,2:end-1]), η_viz)
-            gather!(Array(η_vep[2:end-1,2:end-1]), η_vep_viz)
-            gather!(Array(ϕ[2:end-1,2:end-1]), ϕ_viz)
-            gather!(Array(ρg[2][2:end-1,2:end-1]), ρg_viz)
-            gather!(Array(phase_v[3:end-2,2:end-1]), phase_v_viz)
-            gather!(Array(phase_c[2:end-1,2:end-1]), phase_c_viz)
-            # reset_timer!()
-            # @timeit "thermal gathering" gather!(Array(thermal.Tc[2:end-1,2:end-1]), Tc_viz)
-            # @timeit "Vx gathering" gather!(Array(Vx_vertex[2:end-1,2:end-1]), Vx_viz)
-            # @timeit "Vy gathering" gather!(Array(Vy_vertex[2:end-1,2:end-1]), Vy_viz)
-            # # @timeit "Vy gathering" gather!(Array(stokes.∇V[2:end-1,2:end-1]), ∇V_viz)
-            # @timeit "P gathering" gather!(Array(stokes.P[2:end-1,2:end-1]), P_viz)
-            # @timeit "2nd inv tau gathering" gather!(Array(stokes.τ.II[2:end-1,2:end-1]), τII_viz)
-            # @timeit "shear stress gathering" gather!(Array(stokes.τ.xy[2:end-1,2:end-1]), τxy_viz)
-            # @timeit "strain II gathering" gather!(Array(stokes.ε.II[2:end-1,2:end-1]), εII_viz)
-            # @timeit "shear strain gathering" gather!(Array(stokes.ε.xy[2:end-1,2:end-1]), εxy_viz)
-            # @timeit "visc gathering" gather!(Array(η[2:end-1,2:end-1]), η_viz)
-            # @timeit "visc vep gathering" gather!(Array(η_vep[2:end-1,2:end-1]), η_vep_viz)
-            # @timeit "phi gathering" gather!(Array(ϕ[2:end-1,2:end-1]), ϕ_viz)
-            # @timeit "rhog[2] gathering" gather!(Array(ρg[2][2:end-1,2:end-1]), ρg_viz)
-            # @timeit "phase_v gathering" gather!(Array(phase_v[3:end-2,2:end-1]), phase_v_viz)
-            # @timeit "phase_c gathering" gather!(Array(phase_c[2:end-1,2:end-1]), phase_c_viz)
-            # print_timer()
+            T_inn .= Array(thermal.Tc[2:end-1,2:end-1]);
+            Vx_inn .= Array(Vx_vertex[2:end-1,2:end-1]);
+            Vy_inn .= Array(Vy_vertex[2:end-1,2:end-1]);
+            ∇V_inn .= Array(stokes.∇V[2:end-1,2:end-1]);
+            P_inn .= Array(stokes.P[2:end-1,2:end-1]);
+            τII_inn .= Array(stokes.τ.II[2:end-1,2:end-1]);
+            τxy_inn .= Array(stokes.τ.xy[2:end-1,2:end-1]);
+            εII_inn .= Array(stokes.ε.II[2:end-1,2:end-1]);
+            εxy_inn .= Array(stokes.ε.xy[2:end-1,2:end-1]);
+            η_inn .= Array(η[2:end-1,2:end-1]);
+            η_vep_inn .= Array(η_vep[2:end-1,2:end-1]);
+            ϕ_inn .= Array(ϕ[2:end-1,2:end-1]);
+            ρg_inn .= Array(ρg[2][2:end-1,2:end-1]);
+            phase_v_inn .= Array(phase_v[3:end-2,2:end-1]);
+            phase_c_inn .= Array(phase_c[2:end-1,2:end-1]);
 
-            # T_d = ustrip.(dimensionalize(Array(thermal.T[2:end-1,:]), C, CharDim))
+            gather!(T_inn, Tc_viz)
+            gather!(Vx_inn, Vx_viz)
+            gather!(Vy_inn, Vy_viz)
+            gather!(∇V_inn, ∇V_viz)
+            gather!(P_inn, P_viz)
+            gather!(τII_inn, τII_viz)
+            gather!(τxy_inn, τxy_viz)
+            gather!(εII_inn, εII_viz)
+            gather!(εxy_inn, εxy_viz)
+            gather!(η_inn, η_viz)
+            gather!(η_vep_inn, η_vep_viz)
+            gather!(ϕ_inn, ϕ_viz)
+            gather!(ρg_inn, ρg_viz)
+            gather!(phase_v_inn, phase_v_viz)
+            gather!(phase_c_inn, phase_c_viz)
+
+        
             T_d = ustrip.(dimensionalize(Array(Tc_viz), C, CharDim))
             η_d = ustrip.(dimensionalize(Array(η_viz), Pas, CharDim))
             η_vep_d = ustrip.(dimensionalize(Array(η_vep_viz), Pas, CharDim))
             Vy_d= ustrip.(dimensionalize(Array(Vy_viz),   cm/yr, CharDim));
             Vx_d= ustrip.(dimensionalize(Array(Vx_viz),   cm/yr, CharDim));
-            # ∇V_d= ustrip.(dimensionalize(Array(∇V_viz),   cm/yr, CharDim));
+            ∇V_d= ustrip.(dimensionalize(Array(∇V_viz),   cm/yr, CharDim));
             P_d = ustrip.(dimensionalize(Array(P_viz),   MPa, CharDim));
             # Velo_d= ustrip.(dimensionalize(Array(Vy_updated),   cm/yr, CharDim));
             ρg_d= ustrip.(dimensionalize(Array(ρg_viz),   kg/m^3*m/s^2, CharDim))
