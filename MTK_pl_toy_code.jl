@@ -1,6 +1,6 @@
 using JustRelax
 
-const USE_GPU=false;
+const USE_GPU=true;
 const GPU_ID = 1;
 
 model = if USE_GPU  
@@ -38,7 +38,7 @@ Topo                        = Convert2CartData(LonLat, proj);
 
 println("Done loading Model... starting Dike Injection 2D routine")
 #------------------------------------------------------------------------------------------
-# @views function DikeInjection_2D(igg; figname=figname,nx=nx, ny=ny); 
+@views function DikeInjection_2D(igg; figname=figname,nx=nx, ny=ny); 
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -52,7 +52,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     
     toy = true; #specify if you want to use the toy model or the Toba model
         thermal_perturbation = :circular_anomaly! ; #specify if you want a thermal perturbation in the center of the domain or random (:random)
-        sphere = 5km;                               #specify the radius of the circular anomaly
+        sphere = 2.5km;                               #specify the radius of the circular anomaly
         temp_anomaly = 900C;
 
     regime = ViscoElastoPlastic;                  #Rheology of the Stokes Solver: ViscoElastic, ViscoElastoPlastic
@@ -62,7 +62,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     Nx,Ny,Nz                = 100,100,100   # 3D grid size (does not yet matter)
         arrow_steps         = 4;            # number of arrows in the quiver plot
 
-    nt                      = 25             # number of timesteps
+    nt                      = 2             # number of timesteps
     InjectionInterval       = 500yr        # number of timesteps between injections (if Inject_Dike=true). Increase this at higher resolution. 
     
     η_uppercrust            = 1e21          #viscosity of the upper crust
@@ -275,9 +275,8 @@ println("Done loading Model... starting Dike Injection 2D routine")
 
     # Buoyancy force
     ρg                      = @zeros(ni...), @zeros(ni...)                      # ρg[1] is the buoyancy force in the x direction, ρg[2] is the buoyancy force in the y direction                                   
-    
-    #Hardcoded Pressure update based on dike.ΔP and location of new dike 
-    P_dike    = PTArray(zeros(ni...))
+     
+    P_init    = PTArray(zeros(ni...))
     Qmask     = PTArray(zeros(ni...))
     Qmass     = 0.5
     P_Dirichlet = @zeros(ni...);
@@ -367,7 +366,11 @@ println("Done loading Model... starting Dike Injection 2D routine")
     @views thermal.T[:, end] .= nondimensionalize((0 .+1e-15)C, CharDim);
     @copy  thermal.Told thermal.T
     @copy  Tnew_cpu Array(thermal.T[2:end-1,:])
-    xc, yc      = 0.66*lx, 0.4*lz  # origin of thermal anomaly
+    if Freesurface == true
+        xc, yc      = 0.66*lx, 0.4*lz  # origin of thermal anomaly
+    else 
+        xc, yc      = 0.66*lx, 0.5*lz  # origin of thermal anomaly
+    end
     if toy == true
         if thermal_perturbation == :random
             δT          = 5.0              # thermal perturbation (in %)
@@ -391,8 +394,8 @@ println("Done loading Model... starting Dike Injection 2D routine")
         end
     end
 
-    pxc = [x for x in xci[1], y in xci[2]]
-    pyc = [y for x in xci[1], y in xci[2]]
+    pxc = PTArray([x for x in xci[1], y in xci[2]])
+    pyc = PTArray([y for x in xci[1], y in xci[2]])
 
     #Pressure Gaussian 
     Qmask .= 0.15.* exp.(.-8.0((pxc.-xc).^2.0 + (pyc.+yc).^2.0))
@@ -434,6 +437,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     local iters             
     @parallel (@idx ni) update_G!(G, MatParam, phase_c);
     @copy stokes.P0 stokes.P;
+    P_init .= stokes.P;
     
     while it < nt   
      
@@ -480,10 +484,10 @@ println("Done loading Model... starting Dike Injection 2D routine")
 
         #dike setup
         # @views P_Dirichlet[ϕ .> 0.12] .= stokes.P[ϕ .> 0.12] .+ nondimensionalize(1MPa,CharDim)
-        # if maximum(stokes.P.-Array(stokes.P0)) >= nondimensionalize(25MPa, CharDim)
-        #     Qmask .= 0.0.*Qmask
-        #     println("INJECTION STOPPED")
-        # end
+        if maximum(stokes.P.-P_init) >= nondimensionalize(25MPa, CharDim)
+            Qmask .= 0.0.*Qmask
+            println("INJECTION STOPPED")
+        end
         if Inject_Dike == true
             @views P_Dirichlet[ϕ .> 0.12] .= stokes.P[ϕ .> 0.12] .+ nondimensionalize(1MPa,CharDim)
         else
@@ -492,6 +496,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
         # @views P_Dirichlet[phase_c .== 2] .= stokes.P[phase_c .== 2] 
         # stokes.P.+=P_Dirichlet
         @parallel (@idx ni) compute_ρg!(ρg[2], args.ϕ, MatParam,(T=thermal.Tc, P=stokes.P))
+        @copy stokes.P0 stokes.P;
         args = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s) 
         # Stokes solver ----------------
         iters = MTK_solve!(
@@ -508,7 +513,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
             MatParam, # do a few initial time-steps without plasticity to improve convergence
             dt,   # if no elasticity then Inf otherwise dt
             igg;
-            iterMax=100e3,  # 10e3 for testing
+            iterMax=250e3,  # 10e3 for testing
             nout=1000,
             b_width,
             verbose=true,
@@ -570,21 +575,21 @@ println("Done loading Model... starting Dike Injection 2D routine")
             x_c = ustrip.(dimensionalize(xci[1][2:end-1], km, CharDim))
             y_c = ustrip.(dimensionalize(xci[2][2:end-1], km, CharDim))
 
-            T_inn .= Array(thermal.Tc[2:end-1,2:end-1]);
-            Vx_inn .= Array(Vx_vertex[2:end-1,2:end-1]);
-            Vy_inn .= Array(Vy_vertex[2:end-1,2:end-1]);
-            ∇V_inn .= Array(stokes.∇V[2:end-1,2:end-1]);
-            P_inn .= Array(stokes.P[2:end-1,2:end-1]);
-            τII_inn .= Array(stokes.τ.II[2:end-1,2:end-1]);
-            τxy_inn .= Array(stokes.τ.xy[2:end-1,2:end-1]);
-            εII_inn .= Array(stokes.ε.II[2:end-1,2:end-1]);
-            εxy_inn .= Array(stokes.ε.xy[2:end-1,2:end-1]);
-            η_inn .= Array(η[2:end-1,2:end-1]);
-            η_vep_inn .= Array(η_vep[2:end-1,2:end-1]);
-            ϕ_inn .= Array(ϕ[2:end-1,2:end-1]);
-            ρg_inn .= Array(ρg[2][2:end-1,2:end-1]);
-            phase_v_inn .= Array(phase_v[3:end-2,2:end-1]);
-            phase_c_inn .= Array(phase_c[2:end-1,2:end-1]);
+            T_inn = Array(thermal.Tc[2:end-1,2:end-1]);
+            Vx_inn = Array(Vx_vertex[2:end-1,2:end-1]);
+            Vy_inn = Array(Vy_vertex[2:end-1,2:end-1]);
+            ∇V_inn = Array(stokes.∇V[2:end-1,2:end-1]);
+            P_inn = Array(stokes.P[2:end-1,2:end-1]);
+            τII_inn = Array(stokes.τ.II[2:end-1,2:end-1]);
+            τxy_inn = Array(stokes.τ.xy[2:end-1,2:end-1]);
+            εII_inn = Array(stokes.ε.II[2:end-1,2:end-1]);
+            εxy_inn = Array(stokes.ε.xy[2:end-1,2:end-1]);
+            η_inn = Array(η[2:end-1,2:end-1]);
+            η_vep_inn = Array(η_vep[2:end-1,2:end-1]);
+            ϕ_inn = Array(ϕ[2:end-1,2:end-1]);
+            ρg_inn = Array(ρg[2][2:end-1,2:end-1]);
+            phase_v_inn = Array(phase_v[3:end-2,2:end-1]);
+            phase_c_inn = Array(phase_c[2:end-1,2:end-1]);
 
             gather!(T_inn, Tc_viz)
             gather!(Vx_inn, Vx_viz)
@@ -807,7 +812,7 @@ end
 # figdir = "figs2D"
 # ni, xci, li, di, figdir ,thermal = DikeInjection_2D();
 function run()
-    figname = "debugging"
+    figname = "MPI_debugging"
     nx     = 128-3    #to include ghost nodes with optimal performance at a multiple of 32
     ny     = 128-3    #to include ghost nodes
     igg    = IGG(init_global_grid(nx, ny, 0)...) 
