@@ -1658,7 +1658,7 @@ function MTK_solve2!(
             end
             # apply boundary conditions boundary conditions
             # apply_free_slip!(freeslip, stokes.V.Vx, stokes.V.Vy)
-            flow_bcs!(stokes, flow_bcs, di)
+            flow_bcs!(stokes, flow_bcs)
         end
 
         iter += 1
@@ -1766,8 +1766,8 @@ function MTK_solve!(
             @parallel (@idx ni) compute_∇V!(stokes.∇V, @velocity(stokes)..., _di...)
             @parallel (@idx ni) compute_P!(  
                 stokes.P, stokes.P0, stokes.R.RP, stokes.∇V, η, rheology, phase_c, dt, r, θ_dτ 
-            )  
-            
+                )  
+                
             stokes.P[phase_c .== 2] .= P_Dirichlet[phase_c .== 2]
             # stokes.P[args.ϕ .> 0.12] .= P_Dirichlet[args.ϕ .> 0.12]
             
@@ -1778,7 +1778,7 @@ function MTK_solve!(
             # @parallel (@idx ni) compute_ρg2!(ρg[2], args.ϕ, rheology, (T=args.T, P=args.P))
             # @parallel (@idx ni) compute_ρg_phase!(ρg[2], phase_c, rheology, (T=args.T, P=args.P))
 
-            # @parallel (@idx ni) computeViscosity!(η, args.ϕ, args.S, args.mfac, args.η_f, args.η_s) # viscosity calculation 1. based on melt fraction AND then strain rate 
+            # # # @parallel (@idx ni) computeViscosity!(η, args.ϕ, args.S, args.mfac, args.η_f, args.η_s) # viscosity calculation 1. based on melt fraction AND then strain rate 
             # ν = 0.01
             # @parallel (@idx ni) compute_viscosity_MTK!(
             #     η, ν, @strain(stokes)..., args, tupleize(rheology), phase_c
@@ -1815,7 +1815,7 @@ function MTK_solve!(
                 update_halo!(stokes.V.Vx, stokes.V.Vy)
             end
             
-            flow_bcs!(stokes, flow_bcs, di)
+            flow_bcs!(stokes, flow_bcs)
         end
 
         iter += 1
@@ -1918,6 +1918,7 @@ function circular_anomaly_center!(phases, xc, yc, r, xci)
 end
 
 
+
 function ρg_solver!(
     stokes::StokesArrays{ViscoElastic,A,B,C,D,2},
     pt_stokes::PTStokesCoeffs,
@@ -2008,7 +2009,7 @@ function ρg_solver!(
                 update_halo!(stokes.V.Vx, stokes.V.Vy)
             end
             # apply boundary conditions boundary conditions
-            flow_bcs!(stokes, flow_bcs, di)
+            flow_bcs!(stokes, flow_bcs)
         end
 
         iter += 1
@@ -2148,7 +2149,7 @@ function MTK_solve3!(
                 update_halo!(stokes.V.Vx, stokes.V.Vy)
             end
             # apply boundary conditions boundary conditions
-            flow_bcs!(stokes, flow_bcs, di)
+            flow_bcs!(stokes, flow_bcs)
         end
 
         iter += 1
@@ -2245,3 +2246,55 @@ end
 # @parallel (@idx ni) compute_viscosity_MTK!(
 #     η, 0, @strain(stokes)..., args, tupleize(MatParam), phase_c
 # )
+
+
+function dirichlet_velocities_pureshear!(Vx, Vy, v_extension, xvi)
+    lx = abs(reduce(-, extrema(xvi[1])))
+    xv, yv = xvi
+    v_extension /= lx/2
+
+    @parallel_indices (i,j) function pure_shear_x!(Vx)
+        xi = xv[i] 
+        Vx[i, j+1] = v_extension * (xi - lx * 0.5) / 2 
+        return nothing
+    end
+
+    @parallel_indices (i,j) function pure_shear_y!(Vy)
+        yi = abs(yv[j])
+        Vy[i+1, j] = v_extension * yi 
+        return nothing
+    end
+
+    nx, ny = size(Vx)
+    @parallel (1:nx, 1:ny-2) pure_shear_x!(Vx)
+    nx, ny = size(Vy)
+    @parallel (1:nx-2, 1:ny) pure_shear_y!(Vy)
+
+    return nothing
+end
+
+
+#work around until newest commits are pulled from main after GeoMod
+@parallel_indices (i, j) function tensor_invariant!(II, xx, yy, xyv)
+    I = i, j
+
+    # convinience closure
+    @inline gather(A) = _gather(A, I...)
+
+    @inbounds begin
+        τ = xx[I...], yy[I...], gather(xyv)
+        II[I...] = GeoParams.second_invariant_staggered(τ...)
+    end
+
+    return nothing
+end
+
+
+@parallel_indices (i, j) function init_P_topography!(P, ρg, z,phase)
+    @inbounds if phase[i,j] != 3 
+        P[i, j] = (ρg[i, j] * abs(z[j]))
+    else
+        P[i, j] = 0.0
+    end
+    return nothing
+end
