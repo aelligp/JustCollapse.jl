@@ -48,10 +48,10 @@ Topo                        = Convert2CartData(LonLat, proj);
 println("Done loading Model... starting Dike Injection 2D routine")
 #------------------------------------------------------------------------------------------
 
-function init_phases!(phases, particles, phases_topo, xc, yc, r)
+function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r)
     ni = size(phases)
 
-    @parallel_indices (i, j) function init_phases!(phases, px, py, index, phases_topo, xc, yc, r)
+    @parallel_indices (i, j) function init_phases!(phases, px, py, index, phases_topo, xc, yc, a, b, r)
         @inbounds for ip in JustRelax.JustRelax.cellaxes(phases)
             # quick escape
             JustRelax.@cell(index[ip, i, j]) == 0 && continue
@@ -73,19 +73,19 @@ function init_phases!(phases, particles, phases_topo, xc, yc, r)
 
             end
 
-            # # plume - circular
+            # # plume - elliptical
            
-            if ((x-xc )^2 + (y + yc)^2 ≤ r^2)
+            if (((x-xc )^2 / ((a)^2)) + ((y + yc)^2 / ((b)^2)) ≤ r^2)
                     JustRelax.@cell phases[ip, i, j] = 2.0
-
             end
+
 
 
         end
         return nothing
     end
 
-    @parallel (JustRelax.@idx ni) init_phases!(phases, particles.coords..., particles.index,phases_topo, xc , yc, r)
+    @parallel (JustRelax.@idx ni) init_phases!(phases, particles.coords..., particles.index,phases_topo, xc , yc, a, b, r)
 end
 
 # This routine is working and the temp and pressure need to be initialized outside and possibly dimensionalized 
@@ -176,12 +176,66 @@ function circular_anomaly!(T, anomaly, xc, yc, r, xvi)
 
 end
 
-@parallel_indices (i, j) function compute_melt_fraction!(ϕ, rheology, phase_c, args)
-    ϕ[i, j] = compute_meltfraction(rheology, phase_c[i, j], ntuple_idx(args, i, j))
+function elliptical_anomaly!(T, anomaly, xc, yc, a, b, r, xvi)
+
+    @parallel_indices (i, j) function _elliptical_anomaly!(T, anomaly, xc, yc, a, b, r, x, y)
+        @inbounds if (((x[i]-xc )^2 / a^2) + ((y[j] + yc)^2 / b^2) ≤ r^2)
+            T[i, j] = anomaly
+            
+        end
+        return nothing
+    end
+
+    ni = length.(xvi)
+    @parallel (@idx ni) _elliptical_anomaly!(T, anomaly, xc, yc, a, b, r, xvi...)
+    return nothing
+
+end
+
+@parallel_indices (i, j) function compute_melt_fraction!(ϕ, rheology, args)
+    ϕ[i, j] = compute_meltfraction(rheology, ntuple_idx(args, i, j))
     return nothing
 end
 
-# function DikeInjection_2D(igg; figname=figname,nx=nx, ny=ny); 
+#Multiplies parameter with the fraction of a phase
+@generated function compute_param_times_frac(
+    fn::F, PhaseRatios::Union{NTuple{N,T}, SVector{N,T}}, MatParam::NTuple{N,AbstractMaterialParamsStruct}, argsi
+) where {F,N,T}
+    # # Unrolled dot product
+    quote
+        val = zero($T)
+        Base.Cartesian.@nexprs $N i -> val += @inbounds PhaseRatios[i] * fn(MatParam[i], argsi)
+        return val
+    end
+end
+
+
+compute_meltfraction_ratio(args::Vararg{Any, N}) where N = compute_param_times_frac(compute_meltfraction, args...)
+
+
+@parallel_indices (I...) function compute_melt_fraction!(ϕ, phase_ratios, rheology, args)
+    args_ijk = ntuple_idx(args, I...)
+    ϕ[I...] = compute_melt_frac(rheology, args_ijk, phase_ratios[I...])
+    return nothing
+end
+
+@inline function compute_melt_frac(rheology, args, phase_ratios)
+    return compute_meltfraction_ratio(phase_ratios, rheology, args)
+end
+
+
+@parallel (@idx ni) compute_melt_fraction!(ϕ, phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P))
+
+
+function copy_arrays_GPU2CPU!(T_CPU::AbstractArray,  ϕ_CPU::AbstractArray, T_GPU::AbstractArray, ϕ_GPU::AbstractArray)
+
+    T_CPU  .= Array(T_GPU)
+    ϕ_CPU  .= Array(ϕ_GPU)
+    
+    return nothing 
+end
+
+function DikeInjection_2D(igg; figname=figname,nx=nx, ny=ny); 
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -192,13 +246,13 @@ end
         dike_width = 2.5km; #specify the width of the dike
         dike_height = 1.0km; #specify the height of the dike
         dike_temp = 1000C; #specify the temperature of the dike  
-        InjectionInterval       = 15yr        # number of timesteps between injections (if Inject_Dike=true). Increase this at higher resolution. 
+        InjectionInterval       = 25yr        # number of timesteps between injections (if Inject_Dike=true). Increase this at higher resolution. 
         #now injecting every 2 it
     
     toy = true; #specify if you want to use the toy model or the Toba model
-        thermal_perturbation = :circular_anomaly ; #specify if you want a thermal perturbation in the center of the domain or random (:random)
-        # thermal_perturbation = :Toba_Inversion ; #specify if you want a thermal perturbation in the center of the domain or random (:random)
-        sphere = 1.5km;                               #specify the radius of the circular anomaly
+        thermal_perturbation = :elliptical_anomaly ; #specify if you want a thermal perturbation in the center of the domain or random 
+        # thermal_perturbation = :Toba_Inversion ; #specify if you want a thermal perturbation in the center of the domain or random 
+        sphere = 15km;                               #specify the radius of the circular anomaly
         temp_anomaly = 1000C;
     
     shear = false #specify if you want to use pure shear boundary conditions
@@ -208,8 +262,8 @@ end
     
     # nx, ny                  = (190,190).-2  # 2D grid size - should be a multitude of 32 for optimal GPU perfomance 
     Nx,Ny,Nz                = 100,100,100   # 3D grid size (does not yet matter)
-        arrow_steps_x_dir         = 7;            # number of arrows in the quiver plot
-        arrow_steps_y_dir         = 7;            # number of arrows in the quiver plot
+        arrow_steps_x_dir         = 5;            # number of arrows in the quiver plot
+        arrow_steps_y_dir         = 4;            # number of arrows in the quiver plot
 
     nt                      = 150             # number of timesteps
    
@@ -331,7 +385,7 @@ end
     el_air                  = SetConstantElasticity(; ν=0.5, Kb = 0.101MPa)                            # elastic spring
 
     # disl_creep              = DislocationCreep(A=10^-15.0 , n=2.0, E=476e3, V=0.0  ,  r=0.0, R=8.3145) #AdM    #(;E=187kJ/mol,) Kiss et al. 2023
-    disl_creep              = DislocationCreep(A=5.07e-18, n=2.3, E=154e3, V=6e-6,  r=0.0, R=8.3145)
+    disl_upper_crust            = DislocationCreep(A=5.07e-18, n=2.3, E=154e3, V=6e-6,  r=0.0, R=8.3145)
     # diff_creep              = DiffusionCreep()
     creep_rock              = LinearViscous(; η=η_uppercrust*Pa * s)
     creep_magma             = LinearViscous(; η=η_magma*Pa * s)
@@ -361,7 +415,7 @@ end
                HeatCapacity = ConstantHeatCapacity(cp=1050J/kg/K),
                Conductivity = ConstantConductivity(k=1.5Watt/K/m),       
                  LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
-          CompositeRheology = CompositeRheology((creep_rock, el, pl, )),
+          CompositeRheology = CompositeRheology((disl_upper_crust, el, pl, )),
         #   CompositeRheology = CompositeRheology((el, creep_rock, pl, )),
                     Melting = MeltingParam_Caricchi(),
                 #  Elasticity = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
@@ -429,13 +483,15 @@ end
 
     xc, yc      = 0.66*lx, 0.4*lz - abs(minimum((xvi[2])))  # origin of thermal anomaly
     radius           = nondimensionalize(sphere, CharDim)         # radius of perturbation
-    init_phases!(pPhases, particles, phases_topo_v, xc,yc, radius);
+    a = nondimensionalize(15km, CharDim)
+    b = nondimensionalize(5km, CharDim)
+    init_phases!(pPhases, particles, phases_topo_v, xc,yc, a, b, radius);
     phase_ratios     = PhaseRatio(ni, length(MatParam));
     @parallel (@idx ni) phase_ratios_center(phase_ratios.center, pPhases);
 
     #not yet nice
     p        = particles.coords;
-    pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+    pp = [argmax(p) for p in phase_ratios.center]; #if you want to plot it in a heatmap rather than scatter
 
 
     # Physical Parameters 
@@ -487,7 +543,7 @@ end
     # pt_thermal = PTThermalCoeffs(k, ρCp, dt, di, li; CFL=CFL_thermal)
     # pt_thermal = PTThermalCoeffs(k, ρCp, dt, di, li)
     pt_thermal       = PTThermalCoeffs(
-        MatParam, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=1e-3 / √3
+        MatParam, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=1e-1 / √2.1
     )
     # Boundary conditions of the flow
     if shear == true
@@ -506,7 +562,7 @@ end
     η_vep                   = deepcopy(η);                                       # initialise viscosity for the VEP
     G                       = @fill(MatParam[1].Elasticity[1].G.val, ni...);     # initialise shear modulus
     ϕ                       = similar(η);                                        # melt fraction center
-    ϕ_v                     = @zeros(ni.+1...);                                  # melt fraction vertices
+    # ϕ_v                     = @zeros(ni.+1...);                                  # melt fraction vertices
     S, mfac                 = 1.0, -2.8;                                         # factors for hexagons (remnants of the old code, but still used in functions) Deubelbeiss, Kaus, Connolly (2010) EPSL   
     # η_f                     = MatParam[2].CompositeRheology[1][1].η.val         # melt viscosity
     # # η_f                     = nondimensionalize(1e18Pas,CharDim )         # melt viscosity
@@ -617,7 +673,7 @@ end
         )
         η_vep            = copy(η)
         
-    @parallel (@idx ni) compute_melt_fraction!(args.ϕ, MatParam, phase_ratios.center,  (T=thermal.Tc,))
+    # @parallel (@idx ni) compute_melt_fraction!(args.ϕ, MatParam, phase_ratios.center,  (T=thermal.Tc,))
 
         if Freesurface == true
             xc, yc      = 0.66*lx, 0.4*lz #- abs(minimum((xvi[2])))  # origin of thermal anomaly
@@ -641,10 +697,20 @@ end
                 radius           = nondimensionalize(sphere, CharDim)         # radius of perturbation
                 circular_anomaly!(thermal.T, anomaly, xc, yc, radius, xvi)
                 @show "circular anomaly"
+                 # ΔP = nondimensionalize(1MPa, CharDim) 
+                # @views stokes.P[phase_ratios.center .== 2.0] .+= ΔP 
+                # @info "Pressure anomaly added with an overpressure of $(dimensionalize(ΔP,MPa, CharDim))"
+
+            elseif thermal_perturbation == :elliptical_anomaly
+                anomaly     = nondimensionalize(temp_anomaly,CharDim) # temperature anomaly
+                radius           = nondimensionalize(sphere, CharDim)         # radius of perturbation
+                # a and b are defined at the particles
+                elliptical_anomaly!(thermal.T, anomaly, xc, yc, a, b, radius, xvi)
+                @show "elliptical anomaly"
                 
-                ΔP = nondimensionalize(1MPa, CharDim) 
-                @views stokes.P[phase_ratios.center .== 2.0] .+= ΔP 
-                @info "Pressure anomaly added with an overpressure of $(dimensionalize(ΔP,MPa, CharDim))"
+                # ΔP = nondimensionalize(1MPa, CharDim) 
+                # @views stokes.P[phase_ratios.center .== 2.0] .+= ΔP 
+                # @info "Pressure anomaly added with an overpressure of $(dimensionalize(ΔP,MPa, CharDim))"
             # elseif thermal_perturbation == :Toba_Inversion
             #     # Toba Inversion
             #     @views phase_c[Phi_melt_data_ni.>0.12]  .=2
@@ -724,7 +790,7 @@ end
 
     
 
-    # while it < nt   
+    while it < nt   
      
         args = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf)#, S=S, mfac=mfac, η_f=η_f, η_s=η_s); 
 
@@ -758,7 +824,8 @@ end
                 UpdateTracers_T_ϕ!(Tracers, xvi, xci, Tnew_cpu, Phi_melt_cpu);      # Update info on tracers 
         
                 @parallel (@idx size(thermal.Tc)...) temperature2center!(thermal.Tc, thermal.T)
-                args = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s) 
+                JustPIC.grid2particle!(pT, xvi, thermal.T, particles.coords)
+                args = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf)
                     #   add flux to injection
                 InjectVol +=    Vol
                     # t_Myrs = dimensionalize(t, Myrs, CharDim)                                                              # Keep track of injected volume
@@ -842,7 +909,7 @@ end
             args,
             dt,
             igg;
-            iterMax=50e3,
+            iterMax=250e3,
             nout=1e3,
             b_width,
             viscosity_cutoff=cutoff_visc
@@ -870,7 +937,7 @@ end
             di;
             igg     = igg,
             phase   = phase_ratios,
-            iterMax = 10e3,
+            iterMax = 50e3,
             nout    = 1e2,
             verbose = true,
         )
@@ -899,8 +966,8 @@ end
 
         # Update buoyancy and viscosity -
         @copy thermal.Told thermal.T
-        @parallel (@idx ni) compute_melt_fraction!(ϕ, MatParam, phase_ratios.center,  (T=thermal.Tc,))
-        @parallel center2vertex!(ϕ_v,ϕ)
+        @parallel (@idx ni) compute_melt_fraction!(ϕ, phase_ratios.center, MatParam,  (T=thermal.Tc,P=stokes.P))
+        # @parallel center2vertex!(ϕ_v,ϕ)
         # @parallel update_phase(phase_c, ϕ)
         # @parallel update_phase_v(phase_v, ϕ_v)
         # @parallel (@idx ni) compute_ρg!(ρg[2], args.ϕ, MatParam, (T=args.T, P=args.P))
@@ -913,10 +980,10 @@ end
 
         @show it += 1
         t += dt
-        if it == 1 @show Ra end
+        # if it == 1 @show Ra end
 
         #  # # Plotting -------------------------------------------------------
-        # if it == 1 || rem(it, 1) == 0
+        if it == 1 || rem(it, 1) == 0
             checkpointing(figdir, stokes, thermal.T, η, t)
             # Arrow plotting routine
             Xc, Yc    = [x for x=xvi[1], y=xvi[2]], [y for x=xvi[1], y=xvi[2]]
@@ -925,7 +992,7 @@ end
             Xp, Yp    = Xc[1:st_x:end,1:st_y:end], Yc[1:st_x:end,1:st_y:end]
             Vxp       = Array(0.5*(stokes.V.Vx[1:st_x:end-1,1:st_y:end  ] + stokes.V.Vx[2:st_x:end,1:st_y:end]))
             Vyp       = Array(0.5*(stokes.V.Vy[1:st_x:end  ,1:st_y:end-1] + stokes.V.Vy[1:st_x:end,2:st_y:end]))
-            # Vscale    = 0.5/maximum(sqrt.(Vxp.^2 + Vyp.^2)) * di[1]*(st_x-1)
+            Vscale    = 0.5/maximum(sqrt.(Vxp.^2 + Vyp.^2)) * di[1]*(st_x-1)
 
             JustRelax.velocity2vertex!(Vx_vertex, Vy_vertex, stokes.V.Vx,stokes.V.Vy)
             Xp_d = Array(ustrip.(dimensionalize(Xp, km, CharDim)));
@@ -1029,8 +1096,8 @@ end
                 # ax4 = Axis(fig[3,2][1,1], aspect = ar, title = L"\rho [\mathrm{kgm}^{-3}]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 # ax4 = Axis(fig[3,2][1,1], aspect = ar, title = L"\varepsilon_{\textrm{xy}}[\mathrm{s}^{-1}]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 ax4 = Axis(fig[3,2][1,1], aspect = ar, title = L"\log_{10}(\varepsilon_{\textrm{II}}[\mathrm{s}^{-1}])", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
-                # ax5 = Axis(fig[4,1][1,1], aspect = ar, title = L"\phi", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
-                ax5 = Axis(fig[4,1][1,1], aspect = ar, title = L"P", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
+                ax5 = Axis(fig[4,1][1,1], aspect = ar, title = L"\phi", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
+                # ax5 = Axis(fig[4,1][1,1], aspect = ar, title = L"P", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 ax6 = Axis(fig[4,2][1,1], aspect = ar, title = L"\tau_{\textrm{II}} [MPa]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 # ax6 = Axis(fig[4,2][1,1], aspect = ar, title = L"\tau_{\textrm{xx}} [MPa]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 
@@ -1061,9 +1128,9 @@ end
                 # p4  = heatmap!(ax4, x_c, y_c, ρ_d, colormap=:jet, xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
                 p4  = heatmap!(ax4, x_v, y_v, log10.(εII_d), colormap=:jet)#, xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
                 # p4  = heatmap!(ax4, x_v, y_v, log10.(εxy_d), colormap=:jet)#, xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
-                    # arrows!(ax4, Xp_d[:], Yp_d[:], Vxp[:]*Vscale, Vyp[:]*Vscale, arrowsize = 10, lengthscale=30,arrowcolor=:white ,linecolor=:white)
-                # p5  = heatmap!(ax5, x_c, y_c, ϕ_d, colormap=:lajolla)
-                p5  = heatmap!(ax5, x_c, y_c, P_d, colormap=:lajolla,xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
+                    arrows!(ax4, Xp_d[:], Yp_d[:], Vxp[:]*Vscale, Vyp[:]*Vscale, arrowsize = 10, lengthscale=30,arrowcolor=:white ,linecolor=:white)
+                p5  = heatmap!(ax5, x_c, y_c, ϕ_d, colormap=:lajolla)
+                # p5  = heatmap!(ax5, x_c, y_c, P_d, colormap=:lajolla,xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
                 p6  = heatmap!(ax6, x_v, y_v, τII_d, colormap=:batlow)
                 # p6  = heatmap!(ax6, x_c, y_c, τxy_d, colormap=:romaO, label="\tau_{\textrm{xy}}")
                 # p6  = heatmap!(ax6, x_c, y_c, τxx_d, colormap=:romaO, label="\tau_{\textrm{xy}}")
@@ -1097,114 +1164,47 @@ end
             #test plotting
             # Make particles plottable
             p        = particles.coords
-            pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+            # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
             ppx, ppy = p
             pxv      = ustrip.(dimensionalize(ppx.data[:],km,CharDim))
             pyv      = ustrip.(dimensionalize(ppy.data[:],km,CharDim))
             clr      = pPhases.data[:]
             idxv     = particles.index.data[:];
 
-            x_v = ustrip.(dimensionalize(xvi[1], km, CharDim))  #not sure about this with MPI and the size (intuition says should be fine)
-            y_v = ustrip.(dimensionalize(xvi[2], km, CharDim))
-            x_c = ustrip.(dimensionalize(xci[1], km, CharDim))
-            y_c = ustrip.(dimensionalize(xci[2], km, CharDim))
+            # f , ax, h = heatmap(x_v, y_v, Array(thermal.T[2:end-1,:]) , colormap=:batlow)
+            f , ax, h = heatmap(x_v, y_v, Array(ϕ_d), colormap=:lajolla)
+            scatter!(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]))
+            f
 
-            # Make Makie figure
-            fig = Figure(resolution = (900, 900), title = "t = $t")
-            ax1 = Axis(fig[1,1], aspect = lx/lz, title = "T [K]  (t=$(t/(1e6 * 3600 * 24 *365.25)) Myrs)")
-            ax2 = Axis(fig[2,1], aspect = lx/lz, title = "Vy [m/s]")
-            ax3 = Axis(fig[1,3], aspect = lx/lz, title = "log10(εII)")
-            ax4 = Axis(fig[2,3], aspect = lx/lz, title = "log10(η)")
-            # Plot temperature
-            h1  = heatmap!(ax1, x_v, y_v, Array(thermal.T[2:end-1,:]) , colormap=:batlow)
-            # Plot particles phase
-            h2  = scatter!(ax2, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]))
-                
-            #  # Find the y-coordinates of the topography
-            #     topo_y = findall(x -> x == 1, Phase)
+            # x_v = ustrip.(dimensionalize(xvi[1], km, CharDim))  #not sure about this with MPI and the size (intuition says should be fine)
+            # y_v = ustrip.(dimensionalize(xvi[2], km, CharDim))
+            # x_c = ustrip.(dimensionalize(xci[1], km, CharDim))
+            # y_c = ustrip.(dimensionalize(xci[2], km, CharDim))
 
-            #  #Find the y-coordinates of the air
-            #     air_y = findall(x -> x == 3, Phase)
-            #     # Add a line over the scatter plot
-            #     line_x = [minimum(pxv[idxv]), maximum(pxv[idxv])]
-            #     line_y = [y_v[topo_y[1]], y_v[topo_y[end]]] # y-coordinates of the line
-            #     lines!(ax2, line_x, line_y, color=:black, linewidth=2)
-            # Plot 2nd invariant of strain rate
+            # # Make Makie figure
+            # fig = Figure(resolution = (900, 900), title = "t = $t")
+            # ax1 = Axis(fig[1,1], aspect = lx/lz, title = "T [K]  (t=$(t/(1e6 * 3600 * 24 *365.25)) Myrs)")
+            # ax2 = Axis(fig[2,1], aspect = lx/lz, title = "Vy [m/s]")
+            # ax3 = Axis(fig[1,3], aspect = lx/lz, title = "log10(εII)")
+            # ax4 = Axis(fig[2,3], aspect = lx/lz, title = "log10(η)")
+            # # Plot temperature
+            # h1  = heatmap!(ax1, x_v, y_v, Array(thermal.T[2:end-1,:]) , colormap=:batlow)
+            # # Plot particles phase
+            # h2  = scatter!(ax2, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]))
+            # # Plot 2nd invariant of strain rate
             # h3  = heatmap!(ax3, x_c, y_c, Array(log10.(stokes.ε.II)) , colormap=:batlow) 
-            # Plot effective viscosity
+            # # Plot effective viscosity
             # h4  = heatmap!(ax4, x_c, y_c, Array(log10.(η_vep)) , colormap=:batlow)
-            hidexdecorations!(ax1)
-            hidexdecorations!(ax2)
-            # hidexdecorations!(ax3)
-            Colorbar(fig[1,2], h1)
-            Colorbar(fig[2,2], h2)
-            # Colorbar(fig[1,4], h3)
-            # Colorbar(fig[2,4], h4)
-            linkaxes!(ax1, ax2)#, ax3, ax4)
-            save(joinpath(figdir, "$(it).png"), fig)
-            fig
-              # Plot initial T and η profiles
-            # if (maximum(Array(stokes.P.-P_init))) <= nondimensionalize(24MPa, CharDim) 
-            #     Y =  [y for x in xci[1][2:end-1], y in xci[2][2:end-1]][:]
-            #     Y = ustrip.(dimensionalize(Y, km, CharDim))
-            #     fig0 = let
-            #         fig = Figure(resolution = (1200, 900))
-            #         # ax1 = Axis(fig[1,1], aspect = 2/3, title = "T")
-            #         ax1 = Axis(fig[1,1], aspect = 2/3, title = "Pressure")
-            #         # ax2 = Axis(fig[1,2], aspect = 2/3, title = "log10(η)")
-            #         ax2 = Axis(fig[1,2], aspect = 2/3, title = "Density")
-            #         lines!(ax1, Array(P_d[:,:][:]), Y)
-            #         lines!(ax2, Array(ρ_d[:,:][:]), Y)
-            #         ylims!(ax1, minimum(y_c), 0)
-            #         ylims!(ax2, minimum(y_c), 0)
-            #         hideydecorations!(ax2)
-            #         save( joinpath(figdir, "pre_eruptive_profile.png"), fig)
-            #         fig
-            #     end
-            # end
-
-            # if (maximum(Array(stokes.P.-P_init)) >= nondimensionalize(25MPa, CharDim))
-            #     Y =  [y for x in xci[1][2:end-1], y in xci[2][2:end-1]][:]
-            #     Y = ustrip.(dimensionalize(Y, km, CharDim))
-            #     fig0 = let
-            #         fig = Figure(resolution = (1200, 900))
-            #         # ax1 = Axis(fig[1,1], aspect = 2/3, title = "T")
-            #         ax1 = Axis(fig[1,1], aspect = 2/3, title = "Pressure")
-            #         # ax2 = Axis(fig[1,2], aspect = 2/3, title = "log10(η)")
-            #         ax2 = Axis(fig[1,2], aspect = 2/3, title = "Density")
-            #         lines!(ax1, Array(P_d[:,:][:]), Y)
-            #         lines!(ax2, Array(ρ_d[:,:][:]), Y)
-            #         ylims!(ax1, minimum(y_c), 0)
-            #         ylims!(ax2, minimum(y_c), 0)
-            #         hideydecorations!(ax2)
-            #         save( joinpath(figdir, "eruptive_profile.png"), fig)
-            #         fig
-            #     end
-            # end
-            
-                    
-                    
-        #         #   if center[end] < ustrip(nondimensionalize(-25km, CharDim))
-        #         #     Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth             
-        #         #   else
-        #         #     Angle_rand = [rand(-10.0:0.1:10.0)] # Orientation: near-vertical @ shallower depth     
-        #         #   end
-        #         dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, Phase = 2); 
-        #         @copy Tnew_cpu Array(@views thermal.T[2:end-1,:])
-        #         ## MTK injectDike
-        #         Tracers, Tnew_cpu, Vol, dike_poly, Velo  =   MagmaThermoKinematics.InjectDike(Tracers, Tnew_cpu, xvi, dike, nTr_dike);   # Add dike, move hostrocks
-
-        #         #   if center[end] < ustrip(nondimensionalize(-25km, CharDim))
-        #         #     Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth             
-        #         #   else
-        #         #     Angle_rand = [rand(-10.0:0.1:10.0)] # Orientation: near-vertical @ shallower depth     
-        #         #   end
-        #         dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, Phase = 2); 
-        #         @copy Tnew_cpu Array(@views thermal.T[2:end-1,:])
-        #         ## MTK injectDike
-        #         Tracers, Tnew_cpu, Vol, dike_poly, Velo  =   MagmaThermoKinematics.InjectDike(Tracers, Tnew_cpu, xvi, dike, nTr_dike);   # Add dike, move hostrocks
-
-
+            # hidexdecorations!(ax1)
+            # hidexdecorations!(ax2)
+            # # hidexdecorations!(ax3)
+            # Colorbar(fig[1,2], h1)
+            # Colorbar(fig[2,2], h2)
+            # # Colorbar(fig[1,4], h3)
+            # # Colorbar(fig[2,4], h4)
+            # linkaxes!(ax1, ax2)#, ax3, ax4)
+            # save(joinpath(figdir, "$(it).png"), fig)
+            # fig
 
             # vtkfile = vtk_grid("$loadpath"*"_$(Int32(it+1e4))", xvi[1],xvi[2]) # 2-D VTK file
             # vtkfile["Temperature"] = Array(T_d); vtkfile["MeltFraction"] = Array(ϕ); 
