@@ -15,7 +15,7 @@ function init_particles_cellarrays(nxcell, max_xcell, min_xcell, x, y, dx, dy, n
     inject = @fill(false, nx, ny, eltype=Bool)
     index  = @fill(false, ni..., celldims=(max_xcell,), eltype=Bool) 
     
-    @parallel_indices (i, j) function fill_coords_index(px, py, index)    
+    @parallel_indices (i, j) function fill_coords_index(px, py, index, x, y,nxcell,dx,dy)
         # lower-left corner of the cell
         x0, y0 = x[i], y[j]
         # fill index array
@@ -27,11 +27,12 @@ function init_particles_cellarrays(nxcell, max_xcell, min_xcell, x, y, dx, dy, n
         return nothing
     end
 
-    @parallel (1:nx, 1:ny) fill_coords_index(px, py, index)    
+    @parallel (1:nx, 1:ny) fill_coords_index(px, py, index, x, y, nxcell,dx,dy)    
 
     return Particles(
         (px, py), index, inject, nxcell, max_xcell, min_xcell, np, (nx, ny)
     )
+
 end
 
 # Velocity helper grids for the particle advection
