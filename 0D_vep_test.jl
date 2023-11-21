@@ -419,6 +419,7 @@ function open_conduit!(phases, particles, xc_conduit, yc_conduit, r_conduit)
 end
 
 solution(ε, t, G, η) = 2 * ε * η * (1 - exp(-G * t / η))
+solution_η_vep(τII, εII) = 0.5 .* τII ./ εII
 
 function pureshear!(stokes, εbg, xvi)
     stokes.V.Vx .= PTArray([ x*εbg for x in xvi[1], _ in 1:ny+2])
@@ -622,35 +623,39 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
 
     #-------rheology parameters--------------------------------------------------------------
     # plasticity setup
-    do_DP                   = false               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
-    η_reg                   =1.0e10Pas           # regularisation "viscosity"
-    # τ_y                     = 35MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    τ_y                     = 5MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    ϕ                       = 30.0*do_DP
-    G0                      = 1e10Pa             # elastic shear modulus
-    Gi                      = G0/(6.0-4.0*do_DP) # elastic shear modulus perturbation
-    Coh                     = 10MPa
-    # Coh                     = τ_y/cosd(ϕ)        # cohesion
-    εbg                     = 1e-15/s             # background strain rate
-    εbg                     = nondimensionalize(εbg, CharDim) # background strain rate
-    
-    # pl                      = DruckerPrager(C=Coh, ϕ=ϕ, Ψ=0)        # plasticity
-    pl                      = DruckerPrager_regularised(C=Coh, ϕ=ϕ, η_vp=η_reg, Ψ=0)        # plasticity
-    el                      = SetConstantElasticity(; G=G0, ν=0.5)                            # elastic spring
-    el_magma                = SetConstantElasticity(; G=Gi, ν=0.5)                            # elastic spring
-    # el                      = SetConstantElasticity(; G=G0, ν=0.47)                            # elastic spring
-    # el_magma                = SetConstantElasticity(; G=Gi, ν=0.3)                            # elastic spring
-    el_air                  = SetConstantElasticity(; ν=0.5, Kb = 0.101MPa)                            # elastic spring
+    do_DP = false               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
+    η_reg = 1.0e14Pas           # regularisation "viscosity" for Drucker-Prager
+    τ_y = 15MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    ϕ = 15.0 * do_DP         # friction angle
+    G0 = 25e9Pa        # elastic shear modulus
+    # G0 = 1e10Pa             # elastic shear modulus
+    # Gi = G0 / (6.0 - 4.0 * do_DP) # elastic shear modulus perturbation
+    G_magma = 5e10Pa # elastic shear modulus perturbation
+    # G_magma = 5e3MPa # elastic shear modulus perturbation
+    # Coh = τ_y / cosd(ϕ)        # cohesion
+    Coh = τ_y         # cohesion
+    εbg = 1e-15 / s             # background strain rate
+    εbg = nondimensionalize(εbg, CharDim) # background strain rate
+
+    pl = DruckerPrager_regularised(; C=Coh, ϕ=ϕ, η_vp=η_reg, Ψ=0)        # plasticity
+    el = SetConstantElasticity(; G=G0, ν=0.5)                            # elastic spring
+    el_magma = SetConstantElasticity(; G=G_magma, ν=0.3)                            # elastic spring
+    el_air = SetConstantElasticity(; ν=0.5, Kb=0.101MPa)                            # elastic spring
 
     # disl_creep              = DislocationCreep(A=10^-15.0 , n=2.0, E=476e3, V=0.0  ,  r=0.0, R=8.3145) #AdM    #(;E=187kJ/mol,) Kiss et al. 2023
-    # disl_creep              = DislocationCreep(A=5.07e-18, n=2.3, E=154e3, V=6e-6,  r=0.0, R=8.3145)
+    disl_upper_crust = DislocationCreep(;
+        A=5.07e-18, n=2.3, E=154e3, V=6e-6, r=0.0, R=8.3145
+    )
     # diff_creep              = DiffusionCreep()
-    creep_rock              = LinearViscous(; η=η_uppercrust*Pa * s)
-    creep_magma             = LinearViscous(; η=η_magma*Pa * s)
-    creep_air               = LinearViscous(; η=η_air*Pa * s)
-    β_rock                  = inv(get_Kb(el))
-    β_magma                 = inv(get_Kb(el_magma))
-    Kb                      = get_Kb(el)
+    creep_rock = LinearViscous(; η=η_uppercrust * Pa * s)
+    creep_magma = LinearViscous(; η=η_magma * Pa * s)
+    creep_air = LinearViscous(; η=η_air * Pa * s)
+    cutoff_visc = (
+        nondimensionalize(1e14Pa * s, CharDim), nondimensionalize(1e24Pa * s, CharDim)
+    )
+    β_rock = inv(get_Kb(el))
+    β_magma = inv(get_Kb(el_magma))
+    Kb = get_Kb(el)
 
     #-------JustRelax parameters-------------------------------------------------------------
     # Domain setup for JustRelax 
@@ -675,7 +680,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             HeatCapacity = ConstantHeatCapacity(cp=1050J/kg/K),
             Conductivity = ConstantConductivity(k=3.0Watt/K/m),       
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
-            CompositeRheology = CompositeRheology((creep_rock,el,)),
+            CompositeRheology = CompositeRheology((creep_rock,el,pl)),
             #   CompositeRheology = CompositeRheology((el, creep_rock, pl, )),
             Melting = MeltingParam_Caricchi(),
             #  Elasticity = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
@@ -719,6 +724,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
 
        
     xc, yc = 0.5 * lx, 0.5 * -lz #- abs(minimum((xvi[2]))) # origin of thermal anomaly
+    x_anomaly, y_anomaly = lx * 0.66, -lz * 0.5  # Randomly vary center of dike
     radius = nondimensionalize(ellipse, CharDim)         # radius of perturbation
     a = nondimensionalize(15km, CharDim)
     b = nondimensionalize(5km, CharDim)
@@ -757,8 +763,8 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     dt = dt_diff = 0.5 * min(di...)^2 / κ / 2.01           # diffusive CFL timestep limiter
 
     v_extension = nondimensionalize(0.50cm / yr, CharDim)   # extension velocity for pure shear boundary conditions
-    relaxation_time =
-        nondimensionalize(η_magma * Pas, CharDim) / nondimensionalize(G_magma, CharDim) # η_magma/Gi
+    # relaxation_time =
+        # nondimensionalize(η_magma * Pas, CharDim) / nondimensionalize(G_magma, CharDim) # η_magma/Gi
     # Initialize arrays for PT thermal solver
     k = @fill(nondimensionalize(1.5Watt / K / m, CharDim), ni...)
     ρCp = @fill(ρ0 .* Cp0, ni...)
@@ -805,9 +811,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     )
     # Boundary conditions of the flow
     # if shear == true
-        # dirichlet_velocities_pureshear!(@velocity(stokes)..., v_extension, xvi)
+        dirichlet_velocities_pureshear!(@velocity(stokes)..., v_extension, xvi)
         # pureshear_bc!(stokes, xci, xvi, εbg)
-        pureshear!(stokes, εbg, xvi)
+        # pureshear!(stokes, εbg, xvi)
     # end
     flow_bcs = FlowBoundaryConditions(;
         free_slip=(left=true, right=true, top=true, bot=true)
@@ -906,7 +912,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     evo_t = Float64[]
     evo_InjVol = Float64[]
     evo_τxx = Float64[]
+    evo_η_vep = Float64[]
     sol = Float64[]
+    sol_vep = Float64[]
     local iters
 
     T_buffer = @zeros(ni .+ 1)
@@ -1091,11 +1099,16 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         push!(evo_t, ustrip(dimensionalize(t, yr, CharDim)))
         push!(evo_τxx, ustrip(dimensionalize(maximum(stokes.τ.xx), MPa, CharDim)))
         push!(sol, solution(ustrip(dimensionalize(εbg,s^-1.0,CharDim)), ustrip(dimensionalize(t,yr,CharDim)), ustrip(G0), ustrip(1e22Pa*s)))
+        push!(evo_η_vep, (ustrip(dimensionalize(maximum(η_vep), Pa*s, CharDim))))
+        push!(sol_vep, maximum(solution_η_vep(ustrip(dimensionalize(maximum(stokes.τ.II), MPa, CharDim)), (ustrip(dimensionalize(maximum(stokes.ε.II), s^-1.0, CharDim))))))
 
         fig2 = Figure(resolution = (2000, 2000), createmissing = true, fontsize = 40.0)
-        ax10 = Axis(fig2[1,1], xlabel="Time [Myrs]", ylabel="Stress", title="0D_PLot")
+        ax10 = Axis(fig2[1,1], xlabel="Time [Myrs]", ylabel="Stress", title="0D_Plot")
+        ax20 = Axis(fig2[2,1], xlabel="Time [Myrs]", ylabel="Viscosity", title="0D_Plot")
         lines!(ax10, evo_t, evo_τxx,color=:black)
         lines!(ax10, evo_t, sol, color=:red)
+        lines!(ax20, evo_t, evo_η_vep, color=:black)
+        lines!(ax20, evo_t, sol_vep, color=:red)
         save(joinpath(figdir, "0D_plot.png"), fig2)
         display(fig2)
         # end
@@ -1376,9 +1389,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
                 Colorbar(
                     fig[4, 1][1, 2], p5; height=Relative(0.7), ticklabelsize=25, ticksize=15
                 )
-                Colorbar(
-                    fig[4, 2][1, 2], p6; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                )
+                # Colorbar(
+                #     fig[4, 2][1, 2], p6; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                # )
                 #   limits!(ax1, 20.0, 55.0, minimum(y_v), maximum(y_v))
                 #   limits!(ax2, 20.0, 55.0, minimum(y_v), maximum(y_v))
                 #   limits!(ax3, 20.0, 55.0, minimum(y_v), maximum(y_v))
@@ -1458,7 +1471,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         end       
     end
     # finalize_global_grid(; finalize_MPI=true)
-    finalize_global_grid()
+    # finalize_global_grid()
 
     # print_timer() 
     return thermal, stokes
@@ -1467,13 +1480,13 @@ end
 # figdir = "figs2D"
 # ni, xci, li, di, figdir ,thermal = DikeInjection_2D();
 function run()
-    figname = "0D_test_new_pureshear_VE_VM"
+    figname = "0D_test_pureshear_LV"
     ar = 1 # aspect ratio
     n = 32
     nx = n * ar - 2
     ny = n - 2
     nz = n - 2
-    igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
+   global igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
         IGG(init_global_grid(nx, ny, 0; init_MPI=true)...)
         # IGG(init_global_grid(nx, ny, nz; init_MPI= true)...)
     else
