@@ -445,7 +445,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     nt = 500                        # number of timesteps
 
     η_uppercrust = 1e21             #viscosity of the upper crust
-    η_magma = 1e14                  #viscosity of the magma
+    η_magma = 1e16                  #viscosity of the magma
     η_air = 1e16                    #viscosity of the air
 
     #-----------------------------------------------------
@@ -670,7 +670,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         #Name="Sticky Air"
         SetMaterialParams(;  
             Phase   = 4, 
-            Density   = ConstantDensity(ρ=1000kg/m^3,),                     
+            Density   = ConstantDensity(ρ=1000/m^3,),                     
             HeatCapacity = ConstantHeatCapacity(cp=1000J/kg/K),
             Conductivity = ConstantConductivity(k=15Watt/K/m),       
             LatentHeat = ConstantLatentHeat(Q_L=0.0J/kg),
@@ -737,6 +737,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     # Physical Parameters 
     geotherm = GeoUnit(30K / km) 
     geotherm_nd = ustrip(Value(nondimensionalize(geotherm, CharDim)))
+    ΔT = geotherm_nd * (lz - nondimensionalize(sticky_air,CharDim)) # temperature difference between top and bottom of the domain
     tempoffset = nondimensionalize(0C, CharDim)
     η = MatParam[2].CompositeRheology[1][1].η.val       # viscosity for the Rayleigh number
     Cp0 = MatParam[2].HeatCapacity[1].cp.val              # heat capacity     
@@ -825,19 +826,19 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     Vy_vertex = PTArray(ones(ni .+ 1...))                                                  # initialise velocity for the vertices in y direction
 
     # Arrays for visualisation
-    Tc_viz = Array{Float64}(zeros(ni_viz...))                                   # Temp center with ni
-    Vx_viz = Array{Float64}(zeros(ni_v_viz...))                                 # Velocity in x direction with ni_viz .-1
-    Vy_viz = Array{Float64}(zeros(ni_v_viz...))                                 # Velocity in y direction with ni_viz .-1
-    ∇V_viz = Array{Float64}(zeros(ni_viz...))                                   # Velocity in y direction with ni_viz .-1
-    P_viz = Array{Float64}(zeros(ni_viz...))                                   # Pressure with ni_viz .-2
-    τxy_viz = Array{Float64}(zeros(ni_v_viz...))                                 # Shear stress with ni_viz .-1
-    τII_viz = Array{Float64}(zeros(ni_viz...))                                   # 2nd invariant of the stress tensor with ni_viz .-2
-    εII_viz = Array{Float64}(zeros(ni_viz...))                                   # 2nd invariant of the strain tensor with ni_viz .-2
-    εxy_viz = Array{Float64}(zeros(ni_v_viz...))                                 # Shear strain with ni_viz .-1
-    η_viz = Array{Float64}(zeros(ni_viz...))                                   # Viscosity with ni_viz .-2 
-    η_vep_viz = Array{Float64}(zeros(ni_viz...))                                   # Viscosity for the VEP with ni_viz .-2
-    ϕ_viz = Array{Float64}(zeros(ni_viz...))                                   # Melt fraction with ni_viz .-2
-    ρg_viz = Array{Float64}(zeros(ni_viz...))                                   # Buoyancy force with ni_viz .-2
+    Tc_viz = Array{Float64}(undef,ni_viz...)                                   # Temp center with ni
+    Vx_viz = Array{Float64}(undef,ni_v_viz...)                                 # Velocity in x direction with ni_viz .-1
+    Vy_viz = Array{Float64}(undef,ni_v_viz...)                                 # Velocity in y direction with ni_viz .-1
+    ∇V_viz = Array{Float64}(undef,ni_viz...)                                   # Velocity in y direction with ni_viz .-1
+    P_viz = Array{Float64}(undef,ni_viz...)                                   # Pressure with ni_viz .-2
+    τxy_viz = Array{Float64}(undef,ni_v_viz...)                                 # Shear stress with ni_viz .-1
+    τII_viz = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the stress tensor with ni_viz .-2
+    εII_viz = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the strain tensor with ni_viz .-2
+    εxy_viz = Array{Float64}(undef,ni_v_viz...)                                 # Shear strain with ni_viz .-1
+    η_viz = Array{Float64}(undef,ni_viz...)                                   # Viscosity with ni_viz .-2 
+    η_vep_viz = Array{Float64}(undef,ni_viz...)                                   # Viscosity for the VEP with ni_viz .-2
+    ϕ_viz = Array{Float64}(undef,ni_viz...)                                   # Melt fraction with ni_viz .-2
+    ρg_viz = Array{Float64}(undef,ni_viz...)                                   # Buoyancy force with ni_viz .-2
 
     # Arguments for functions
     args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt)
@@ -914,7 +915,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     JustPIC.grid2particle!(pT, xvi, T_buffer, particles.coords)
     p = particles.coords
     pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
-    mask_sticky_air = zeros(ni.+1...)
+    mask_sticky_air = @zeros(ni.+1...)
     @parallel center2vertex!(mask_sticky_air, pp)
     mask_sticky_air = PTArray(mask_sticky_air)
     @copy stokes.P0 stokes.P
@@ -942,7 +943,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         fig
     end
 
-    while it < 30 #nt
+    while it < 5 #nt
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top,sticky_air=mask_sticky_air)
     
         #open the conduit
@@ -962,10 +963,6 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         @parallel (@idx ni) compute_viscosity!(
             η, 1.0, phase_ratios.center, @strain(stokes)..., args, MatParam, cutoff_visc
         )
-        @parallel (JustRelax.@idx ni) compute_ρg!(
-            ρg[2], phase_ratios.center, MatParam, args
-        )
-
         @parallel (@idx ni) compute_ρg!(
             ρg[2], phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
         )
@@ -1256,28 +1253,28 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
                 )
                 p6 = heatmap!(ax6, x_v, y_v, τII_d; colormap=:batlow)
          
-                Colorbar(
-                    fig[2, 1][1, 2], p1; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                )
-                Colorbar(
-                    fig[2, 2][1, 2], p2; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                )
-                Colorbar(
-                    fig[3, 1][1, 2], p3; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                )
-                Colorbar(
-                    fig[3, 2][1, 2], p4; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                )
-                Colorbar(
-                    fig[4, 1][1, 2], p5; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                )
-                Colorbar(
-                    fig[4, 2][1, 2], p6; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                )
-                rowgap!(fig.layout, 1)
-                colgap!(fig.layout, 1)
-                colgap!(fig.layout, 1)
-                colgap!(fig.layout, 1)
+                # Colorbar(
+                #     fig[2, 1][1, 2], p1; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                # )
+                # Colorbar(
+                #     fig[2, 2][1, 2], p2; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                # )
+                # Colorbar(
+                #     fig[3, 1][1, 2], p3; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                # )
+                # Colorbar(
+                #     fig[3, 2][1, 2], p4; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                # )
+                # Colorbar(
+                #     fig[4, 1][1, 2], p5; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                # )
+                # Colorbar(
+                #     fig[4, 2][1, 2], p6; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                # )
+                # rowgap!(fig.layout, 1)
+                # colgap!(fig.layout, 1)
+                # colgap!(fig.layout, 1)
+                # colgap!(fig.layout, 1)
                 fig
                 figsave = joinpath(figdir, @sprintf("%06d.png", it))
                 save(figsave, fig)
@@ -1315,7 +1312,7 @@ end
 function run()
     figname = "test"
     ar = 1 # aspect ratio
-    n = 32
+    n = 128
     nx = n * ar - 2
     ny = n - 2
     nz = n - 2
