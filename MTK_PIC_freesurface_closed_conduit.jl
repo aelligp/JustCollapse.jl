@@ -360,8 +360,8 @@ function phase_change!(phases, particles)
 
             x = JustRelax.@cell px[ip,I...]
             y = (JustRelax.@cell py[ip,I...])
-            phase_ij = @cell phases[ip, I...]
-            if y > 0.0 && (phase_ij  == 2.0 || phase_ij  == 3.0)
+
+            if y > 0.0 
                 @cell phases[ip, I...] = 4.0
             end
         end
