@@ -8,7 +8,7 @@ import JustRelax.@cell
 # set_backend("Threads_Float64_2D")
 # set_backend("CUDA_Float64_2D")
 
-const USE_GPU = false;
+const USE_GPU = true;
 const GPU_ID = 1;
 
 model = if USE_GPU
@@ -59,29 +59,13 @@ function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r, xc_anomal
 
             x = JustRelax.@cell px[ip, i, j]
             y = -(JustRelax.@cell py[ip, i, j])
-            Phase = (phases_topo[i, j])
-            
-            # # topography
-            if Phase == 1
-                @cell phases[ip, i, j] = 1.0
-                
-            elseif Phase == 2
-                @cell phases[ip, i, j] = 2.0
-                
-            elseif Phase == 3
-                @cell phases[ip, i, j] = 3.0
-            end
+            @cell phases[ip, i, j] = 1.0 # crust
 
             if ((x - xc_conduit)^2 ≤ r_conduit^2) && (0.25*(y - yc_conduit)^2 ≤ r_conduit^2)
                 JustRelax.@cell phases[ip, i, j] = 1.0
             end
-
-            if Phase == 4
-                @cell phases[ip, i, j] = 4.0
-            end
             
             # # chamber - elliptical
-
             if (((x - xc)^2 / ((a)^2)) + ((y + yc)^2 / ((b)^2)) ≤ r^2)
                 JustRelax.@cell phases[ip, i, j] = 2.0
             end
@@ -90,6 +74,11 @@ function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r, xc_anomal
             if ((x - xc_anomaly)^2 + (y + yc_anomaly)^2 ≤ r_anomaly^2)
                 JustRelax.@cell phases[ip, i, j] = 3.0
             end            
+
+            if y < 0.0 
+                @cell phases[ip, i, j] = 4.0
+            end
+
         end
         return nothing
     end
@@ -592,19 +581,20 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
 
     #-------rheology parameters--------------------------------------------------------------
     # plasticity setup
-    do_DP = false               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
-    η_reg = 1.0e14Pas           # regularisation "viscosity" for Drucker-Prager
-    τ_y = 15MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    ϕ = 15.0 * do_DP         # friction angle
-    G0 = 25e9Pa        # elastic shear modulus
-    G_magma = 5e10Pa # elastic shear modulus perturbation
-    Coh = τ_y         # cohesion
-    εbg = 1e-15 / s             # background strain rate
-    εbg = nondimensionalize(εbg, CharDim) # background strain rate
-    pl = DruckerPrager_regularised(; C=Coh, ϕ=ϕ, η_vp=η_reg, Ψ=0)        # plasticity
-    el = SetConstantElasticity(; G=G0, ν=0.5)                            # elastic spring
+    do_DP   = true               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
+    η_reg   = 1.0e16Pas           # regularisation "viscosity" for Drucker-Prager
+    Coh     = 15MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    ϕ       = 15.0 * do_DP         # friction angle
+    G0      = 25e9Pa        # elastic shear modulus
+    G_magma = 25e9Pa # elastic shear modulus perturbation
+    εbg     = 1e-15 / s             # background strain rate
+    εbg     = nondimensionalize(εbg, CharDim) # background strain rate
+    
+    pl          = DruckerPrager_regularised(; C=Coh, ϕ=ϕ, η_vp=η_reg, Ψ=0)        # plasticity
+
+    el       = SetConstantElasticity(; G=G0, ν=0.5)                            # elastic spring
     el_magma = SetConstantElasticity(; G=G_magma, ν=0.3)                            # elastic spring
-    el_air = SetConstantElasticity(; ν=0.5, Kb=0.101MPa)                            # elastic spring
+    el_air   = SetConstantElasticity(; ν=0.5, Kb=0.101MPa)                            # elastic spring
     disl_upper_crust = DislocationCreep(;
         A=5.07e-18, n=2.3, E=154e3, V=0.0, r=0.0, R=8.3145
     ) #(;E=187kJ/mol,) Kiss et al. 2023
@@ -625,7 +615,8 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     b_width = (4, 4, 0) #boundary width
     origin = Grid2D.min[1], Grid2D.min[2]
     igg = igg
-    di = @. li / (nx_g(), ny_g()) # grid step in x- and y-direction
+    di = @. li / ni # grid step in x- and y-direction
+    # di = @. li / (nx_g(), ny_g()) # grid step in x- and y-direction
     xci, xvi = lazy_grid(di, li, ni; origin=origin) #non-dim nodes at the center and the vertices of the cell (staggered grid)
     #---------------------------------------------------------------------------------------
 
@@ -670,12 +661,12 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         #Name="Sticky Air"
         SetMaterialParams(;  
             Phase   = 4, 
-            Density   = ConstantDensity(ρ=1000/m^3,),                     
+            Density   = ConstantDensity(ρ=1000kg/m^3,),                     
             HeatCapacity = ConstantHeatCapacity(cp=1000J/kg/K),
             Conductivity = ConstantConductivity(k=15Watt/K/m),       
             LatentHeat = ConstantLatentHeat(Q_L=0.0J/kg),
             CompositeRheology = CompositeRheology((creep_air,)),
-            Elasticity = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
+            # Elasticity = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
             CharDim = CharDim),
             )  
 
@@ -786,7 +777,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     Phi_melt_cpu = Array{Float64}(undef, ni...)                    # Melt fraction for the CPU
 
     stokes = StokesArrays(ni, ViscoElastic)                         # initialise stokes arrays with the defined regime
-    pt_stokes = PTStokesCoeffs(li, di; ϵ=1e-5, CFL=0.8 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes = PTStokesCoeffs(li, di; ϵ=1e-5, CFL=0.99 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
 
     args = (; T=thermal.Tc, P=stokes.P, dt=Inf)
 
@@ -820,33 +811,30 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     SH = @zeros(ni...) #shear heating to be Updated
 
     # Preparation for Visualisation
-    ni_v_viz = nx_v_viz, ny_v_viz = (ni[1] - 1) * igg.dims[1], (ni[2] - 1) * igg.dims[2]      # size of the visualisation grid on the vertices according to MPI dims
-    ni_viz = nx_viz, ny_viz = (ni[1] - 2) * igg.dims[1], (ni[2] - 2) * igg.dims[2]            # size of the visualisation grid on the vertices according to MPI dims
+    ni_v_viz  = nx_v_viz, ny_v_viz = (ni[1] - 1) * igg.dims[1], (ni[2] - 1) * igg.dims[2]      # size of the visualisation grid on the vertices according to MPI dims
+    ni_viz    = nx_viz, ny_viz = (ni[1] - 2) * igg.dims[1], (ni[2] - 2) * igg.dims[2]            # size of the visualisation grid on the vertices according to MPI dims
     Vx_vertex = PTArray(ones(ni .+ 1...))                                                  # initialise velocity for the vertices in x direction
     Vy_vertex = PTArray(ones(ni .+ 1...))                                                  # initialise velocity for the vertices in y direction
 
     # Arrays for visualisation
-    Tc_viz = Array{Float64}(undef,ni_viz...)                                   # Temp center with ni
-    Vx_viz = Array{Float64}(undef,ni_v_viz...)                                 # Velocity in x direction with ni_viz .-1
-    Vy_viz = Array{Float64}(undef,ni_v_viz...)                                 # Velocity in y direction with ni_viz .-1
-    ∇V_viz = Array{Float64}(undef,ni_viz...)                                   # Velocity in y direction with ni_viz .-1
-    P_viz = Array{Float64}(undef,ni_viz...)                                   # Pressure with ni_viz .-2
-    τxy_viz = Array{Float64}(undef,ni_v_viz...)                                 # Shear stress with ni_viz .-1
-    τII_viz = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the stress tensor with ni_viz .-2
-    εII_viz = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the strain tensor with ni_viz .-2
-    εxy_viz = Array{Float64}(undef,ni_v_viz...)                                 # Shear strain with ni_viz .-1
-    η_viz = Array{Float64}(undef,ni_viz...)                                   # Viscosity with ni_viz .-2 
+    Tc_viz    = Array{Float64}(undef,ni_viz...)                                   # Temp center with ni
+    Vx_viz    = Array{Float64}(undef,ni_v_viz...)                                 # Velocity in x direction with ni_viz .-1
+    Vy_viz    = Array{Float64}(undef,ni_v_viz...)                                 # Velocity in y direction with ni_viz .-1
+    ∇V_viz    = Array{Float64}(undef,ni_viz...)                                   # Velocity in y direction with ni_viz .-1
+    P_viz     = Array{Float64}(undef,ni_viz...)                                   # Pressure with ni_viz .-2
+    τxy_viz   = Array{Float64}(undef,ni_v_viz...)                                 # Shear stress with ni_viz .-1
+    τII_viz   = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the stress tensor with ni_viz .-2
+    εII_viz   = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the strain tensor with ni_viz .-2
+    εxy_viz   = Array{Float64}(undef,ni_v_viz...)                                 # Shear strain with ni_viz .-1
+    η_viz     = Array{Float64}(undef,ni_viz...)                                   # Viscosity with ni_viz .-2 
     η_vep_viz = Array{Float64}(undef,ni_viz...)                                   # Viscosity for the VEP with ni_viz .-2
-    ϕ_viz = Array{Float64}(undef,ni_viz...)                                   # Melt fraction with ni_viz .-2
-    ρg_viz = Array{Float64}(undef,ni_viz...)                                   # Buoyancy force with ni_viz .-2
+    ϕ_viz     = Array{Float64}(undef,ni_viz...)                                   # Melt fraction with ni_viz .-2
+    ρg_viz    = Array{Float64}(undef,ni_viz...)                                   # Buoyancy force with ni_viz .-2
 
     # Arguments for functions
     args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt)
-
     @copy thermal.Told thermal.T
     @copy Tnew_cpu Array(thermal.T[2:(end - 1), :])
-
-    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt)
 
     for _ in 1:2
         @parallel (JustRelax.@idx ni) compute_ρg!(
@@ -869,19 +857,19 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             )
         elseif thermal_perturbation == :circular
             δT = 10.0              # thermal perturbation (in %)
-            r = nondimensionalize(5km, CharDim)         # radius of perturbation
+            r  = nondimensionalize(5km, CharDim)         # radius of perturbation
             circular_perturbation!(thermal.T, δT, xc, yc, r, xvi)
 
         elseif thermal_perturbation == :circular_anomaly
             anomaly = nondimensionalize(temp_anomaly, CharDim) # temperature anomaly
-            radius = nondimensionalize(sphere, CharDim)         # radius of perturbation
+            radius  = nondimensionalize(sphere, CharDim)         # radius of perturbation
             circular_anomaly!(thermal.T, anomaly, xc, yc, radius, xvi)
         
         elseif thermal_perturbation == :elliptical_anomaly
             anomaly = nondimensionalize(temp_anomaly, CharDim) # temperature anomaly
-            radius = nondimensionalize(ellipse, CharDim)         # radius of perturbation
-            offset = nondimensionalize(150C, CharDim)
-            δT     = 20.0              # thermal perturbation (in %)
+            radius  = nondimensionalize(ellipse, CharDim)         # radius of perturbation
+            offset  = nondimensionalize(150C, CharDim)
+            δT      = 20.0              # thermal perturbation (in %)
             elliptical_anomaly_gradient!(
                     thermal.T, offset, xc, yc, a, b, radius, xvi
                     )
@@ -899,27 +887,25 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     )
 
     # Time loop
-    t, it = 0.0, 0
-    interval = 1.0
-    InjectVol = 0.0
-    evo_t = Float64[]
+    t, it      = 0.0, 0
+    interval   = 1.0
+    InjectVol  = 0.0
+    evo_t      = Float64[]
     evo_InjVol = Float64[]
     local iters
 
-    T_buffer = @zeros(ni .+ 1)
+    T_buffer    = @zeros(ni .+ 1)
     Told_buffer = similar(T_buffer)
     for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
         copyinn_x!(dst, src)
     end
 
-    JustPIC.grid2particle!(pT, xvi, T_buffer, particles.coords)
+    grid2particle!(pT, xvi, T_buffer, particles.coords)
     p = particles.coords
-    pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+    pp = PTArray([argmax(p) for p in phase_ratios.center]) #if you want to plot it in a heatmap rather than scatter
     mask_sticky_air = @zeros(ni.+1...)
     @parallel center2vertex!(mask_sticky_air, pp)
-    mask_sticky_air = PTArray(mask_sticky_air)
     @copy stokes.P0 stokes.P
-
 
     # Plot initial T and η profiles
     let
@@ -943,7 +929,8 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         fig
     end
 
-    while it < 5 #nt
+    dt *= 0.1
+    while it < 6 #nt
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top,sticky_air=mask_sticky_air)
     
         #open the conduit
@@ -980,10 +967,10 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             phase_ratios,
             MatParam,
             args,
-            dt,
+            dt * 1e-1,
             igg;
-            iterMax=100e3,
-            nout=1e3,
+            iterMax = 175e3,
+            nout = 1e3,
             b_width,
             viscosity_cutoff=cutoff_visc,
         )
@@ -992,18 +979,22 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         @parallel (@idx ni) multi_copy!(
             @tensor_center(stokes.τ_o), @tensor_center(stokes.τ)
         )
-        dt = compute_dt(stokes, di, dt_diff, igg)*0.8
+        dt = compute_dt(stokes, di, dt_diff, igg) * 0.1
+        if it < 5
+            dt *= 0.1
+        else
+            dt *= 1e-2
+        end
         # ------------------------------
         @show dt
         @show extrema(stokes.V.Vy)
         @show extrema(stokes.V.Vx)
         particle2grid!(T_buffer, pT, xvi, particles.coords)
         @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
-        @views T_buffer[args.sticky_air.==4.0] .= nondimensionalize(0.0C, CharDim)
+        # @views T_buffer[args.sticky_air.==4.0] .= nondimensionalize(0.0C, CharDim)
         # @views T_buffer[:, 1] .= maximum(thermal.T)
         @views thermal.T[2:end-1, :] .= T_buffer
         temperature2center!(thermal)
-
 
         # Thermal solver ---------------
         heatdiffusion_PT!(
@@ -1017,9 +1008,10 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             igg=igg,
             phase=phase_ratios,
             iterMax=50e3,
-            nout=1e2,
+            nout=1e3,
             verbose=true,
         )
+
         for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
             copyinn_x!(dst, src)
         end
@@ -1029,7 +1021,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         advection_RK!(particles, @velocity(stokes), grid_vx, grid_vy, dt, 2 / 3)
         # advect particles in memory
         shuffle_particles!(particles, xvi, particle_args)   
-        JustPIC.clean_particles!(particles, xvi, particle_args)
+        # JustPIC.clean_particles!(particles, xvi, particle_args)
         grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles.coords)
         println("Check 1, after grid2particle_flip: ", extrema((pT.data[:])[particles.index.data[:]]))
         # check if we need to inject particles
@@ -1210,7 +1202,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
                     titlesize=40,
                     yticklabelsize=25,
                     xticklabelsize=25,
-                    xlabelsize=25,
+                    xlabelsize=25,    
                 )
                 ax6 = Axis(
                     fig[4, 2][1, 1];
@@ -1234,7 +1226,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
 
                 p1 = heatmap!(ax1, x_c, y_c, T_d; colormap=:batlow)
                 contour!(ax1, x_c, y_c, T_d, ; color=:white, levels=600:100:900)
-                p2 = heatmap!(ax2, x_c, y_c, log10.(η_vep_d); Colormap=:roma)   
+                p2 = heatmap!(ax2, x_c, y_c, log10.(η_vep_d); colormap=:roma)   
                 p3 = heatmap!(ax3, x_v, y_v, Vy_d; colormap=:vik)
                 p4 = heatmap!(ax4, x_v, y_v, log10.(εII_d); colormap=:jet)
                 p5 = scatter!(
@@ -1248,33 +1240,33 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
                     Vyp[:] * Vscale;
                     arrowsize=10,
                     lengthscale=70,
-                    arrowcolor=:white,
-                    linecolor=:white,
+                    arrowcolor=:red,
+                    linecolor=:red,
                 )
                 p6 = heatmap!(ax6, x_v, y_v, τII_d; colormap=:batlow)
          
-                # Colorbar(
-                #     fig[2, 1][1, 2], p1; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                # )
-                # Colorbar(
-                #     fig[2, 2][1, 2], p2; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                # )
-                # Colorbar(
-                #     fig[3, 1][1, 2], p3; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                # )
-                # Colorbar(
-                #     fig[3, 2][1, 2], p4; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                # )
-                # Colorbar(
-                #     fig[4, 1][1, 2], p5; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                # )
-                # Colorbar(
-                #     fig[4, 2][1, 2], p6; height=Relative(0.7), ticklabelsize=25, ticksize=15
-                # )
-                # rowgap!(fig.layout, 1)
-                # colgap!(fig.layout, 1)
-                # colgap!(fig.layout, 1)
-                # colgap!(fig.layout, 1)
+                Colorbar(
+                    fig[2, 1][1, 2], p1; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                )
+                Colorbar(
+                    fig[2, 2][1, 2], p2; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                )
+                Colorbar(
+                    fig[3, 1][1, 2], p3; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                )
+                Colorbar(
+                    fig[3, 2][1, 2], p4; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                )
+                Colorbar(
+                    fig[4, 1][1, 2], p5; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                )
+                Colorbar(
+                    fig[4, 2][1, 2], p6; height=Relative(0.7), ticklabelsize=25, ticksize=15
+                )
+                rowgap!(fig.layout, 1)
+                colgap!(fig.layout, 1)
+                colgap!(fig.layout, 1)
+                colgap!(fig.layout, 1)
                 fig
                 figsave = joinpath(figdir, @sprintf("%06d.png", it))
                 save(figsave, fig)
@@ -1304,27 +1296,44 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             end
         end
     end
-    finalize_global_grid()
+    # finalize_global_grid()
 
 end
 
 
-function run()
+# function run()
     figname = "test"
+    # mkdir(figname)
     ar = 1 # aspect ratio
     n = 128
     nx = n * ar - 2
     ny = n - 2
     nz = n - 2
-    global igg = if !(JustRelax.MPI.Initialized())
+    igg = if !(JustRelax.MPI.Initialized())
         IGG(init_global_grid(nx, ny, 0; init_MPI=true)...)
     else
         igg
     end
     DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
 
-    return figname, nx, ny, igg
-end
+#     return figname, nx, ny, igg
+# end
 
-# @time 
-run()
+# # @time 
+# run()
+
+function plot_particles(particles, pPhases)
+    p = particles.coords
+    # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+    ppx, ppy = p
+    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
+    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
+    pxv = ppx.data[:]
+    pyv = ppy.data[:]
+    clr = pPhases.data[:]
+    # clrT = pT.data[:]
+    idxv = particles.index.data[:]
+    f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma)
+    Colorbar(f[1,2], h)
+    f
+end
