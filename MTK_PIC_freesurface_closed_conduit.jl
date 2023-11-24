@@ -583,10 +583,10 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     # plasticity setup
     do_DP   = true               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
     η_reg   = 1.0e16Pas           # regularisation "viscosity" for Drucker-Prager
-    Coh     = 15MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    ϕ       = 15.0 * do_DP         # friction angle
+    Coh     = 3MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    ϕ       = 5.0 * do_DP         # friction angle
     G0      = 25e9Pa        # elastic shear modulus
-    G_magma = 25e9Pa # elastic shear modulus perturbation
+    G_magma = 10e9Pa        # elastic shear modulus perturbation
     εbg     = 1e-15 / s             # background strain rate
     εbg     = nondimensionalize(εbg, CharDim) # background strain rate
     
@@ -641,9 +641,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             HeatCapacity = ConstantHeatCapacity(cp=1050J/kg/K),
             Conductivity = ConstantConductivity(k=1.5Watt/K/m),       
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
-            CompositeRheology = CompositeRheology((creep_magma, el_magma)),
+            CompositeRheology = CompositeRheology((creep_magma, )),
             Melting = MeltingParam_Caricchi(),
-            Elasticity = el_magma,
+            # Elasticity = el_magma,
             CharDim  = CharDim,),  
 
         #Name="Thermal Anomaly" 
@@ -777,7 +777,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     Phi_melt_cpu = Array{Float64}(undef, ni...)                    # Melt fraction for the CPU
 
     stokes = StokesArrays(ni, ViscoElastic)                         # initialise stokes arrays with the defined regime
-    pt_stokes = PTStokesCoeffs(li, di; ϵ=1e-5, CFL=0.99 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes = PTStokesCoeffs(li, di; ϵ=1e-4, CFL=0.99 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
 
     args = (; T=thermal.Tc, P=stokes.P, dt=Inf)
 
@@ -929,16 +929,24 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         fig
     end
 
-    dt *= 0.1
-    while it < 6 #nt
+    dt *= 0.2
+    while it < 250 #nt
+
+        particle2grid!(T_buffer, pT, xvi, particles.coords)
+        @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
+        # @views T_buffer[args.sticky_air.==4.0] .= nondimensionalize(0.0C, CharDim)
+        # @views T_buffer[:, 1] .= maximum(thermal.T)
+        @views thermal.T[2:end-1, :] .= T_buffer
+        temperature2center!(thermal)
+
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top,sticky_air=mask_sticky_air)
     
         #open the conduit
-        if it == 5
-            conduit_gradient_TBuffer!(T_buffer, offset, xc_conduit, -yc_conduit, r_conduit, xvi)
-            open_conduit!(pPhases, particles, xc_conduit, yc_conduit, r_conduit)
-            grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles.coords)
-        end
+        # if it == 5
+        #     conduit_gradient_TBuffer!(T_buffer, offset, xc_conduit, -yc_conduit, r_conduit, xvi)
+        #     open_conduit!(pPhases, particles, xc_conduit, yc_conduit, r_conduit)
+        #     grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles.coords)
+        # end
         
         @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
         @views T_buffer[args.sticky_air.==4.0] .= nondimensionalize(0.0C, CharDim)
@@ -979,22 +987,16 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         @parallel (@idx ni) multi_copy!(
             @tensor_center(stokes.τ_o), @tensor_center(stokes.τ)
         )
-        dt = compute_dt(stokes, di, dt_diff, igg) * 0.1
-        if it < 5
-            dt *= 0.1
-        else
-            dt *= 1e-2
-        end
+        dt = compute_dt(stokes, di, dt_diff, igg) * 0.2
+        # if it < 5
+        #     dt *= 0.1
+        # else
+        #     dt *= 1e-2
+        # end
         # ------------------------------
         @show dt
-        @show extrema(stokes.V.Vy)
-        @show extrema(stokes.V.Vx)
-        particle2grid!(T_buffer, pT, xvi, particles.coords)
-        @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
-        # @views T_buffer[args.sticky_air.==4.0] .= nondimensionalize(0.0C, CharDim)
-        # @views T_buffer[:, 1] .= maximum(thermal.T)
-        @views thermal.T[2:end-1, :] .= T_buffer
-        temperature2center!(thermal)
+        # @show extrema(stokes.V.Vy)
+        # @show extrema(stokes.V.Vx)
 
         # Thermal solver ---------------
         heatdiffusion_PT!(
