@@ -582,9 +582,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     #-------rheology parameters--------------------------------------------------------------
     # plasticity setup
     do_DP   = true               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
-    η_reg   = 1.0e16Pas           # regularisation "viscosity" for Drucker-Prager
-    Coh     = 3MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    ϕ       = 5.0 * do_DP         # friction angle
+    η_reg   = 1.0e14Pas           # regularisation "viscosity" for Drucker-Prager
+    Coh     = 10MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    ϕ       = 30.0 * do_DP         # friction angle
     G0      = 25e9Pa        # elastic shear modulus
     G_magma = 10e9Pa        # elastic shear modulus perturbation
     εbg     = 1e-15 / s             # background strain rate
@@ -641,7 +641,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             HeatCapacity = ConstantHeatCapacity(cp=1050J/kg/K),
             Conductivity = ConstantConductivity(k=1.5Watt/K/m),
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
-            CompositeRheology = CompositeRheology((creep_magma, )),
+            CompositeRheology = CompositeRheology((creep_magma, el_magma)),
             Melting = MeltingParam_Caricchi(),
             # Elasticity = el_magma,
             CharDim  = CharDim,),
@@ -653,9 +653,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             HeatCapacity = ConstantHeatCapacity(cp=1050J/kg/K),
             Conductivity = ConstantConductivity(k=1.5Watt/K/m),
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
-            CompositeRheology = CompositeRheology((creep_magma, el_magma)),
+            CompositeRheology = CompositeRheology((creep_magma,el_magma)),
             Melting = MeltingParam_Caricchi(),
-            Elasticity = el_magma,
+            # Elasticity = el_magma,
             CharDim  = CharDim,),
 
         #Name="Sticky Air"
@@ -930,7 +930,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     end
 
     dt *= 0.2
-    while it < 500 #nt
+    while it < 15 #nt
 
         particle2grid!(T_buffer, pT, xvi, particles.coords)
         @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
@@ -1009,7 +1009,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             di;
             igg=igg,
             phase=phase_ratios,
-            iterMax=50e3,
+            iterMax=150e3,
             nout=1e3,
             verbose=true,
         )
@@ -1228,9 +1228,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
 
                 p1 = heatmap!(ax1, x_c, y_c, T_d; colormap=:batlow)
                 contour!(ax1, x_c, y_c, T_d, ; color=:white, levels=600:100:900)
-                p2 = heatmap!(ax2, x_c, y_c, log10.(η_vep_d); colormap=:roma)
+                p2 = heatmap!(ax2, x_c, y_c, log10.(η_vep_d); colormap=:glasgow) #, colorrange= (log10(minimum(η_vep_d)), log10(1e20)))
                 p3 = heatmap!(ax3, x_v, y_v, Vy_d; colormap=:vik)
-                p4 = heatmap!(ax4, x_v, y_v, log10.(εII_d); colormap=:jet)
+                p4 = heatmap!(ax4, x_v, y_v, log10.(εII_d); colormap=:glasgow)
                 p5 = scatter!(
                     ax5, Array(pxv[idxv]), Array(pyv[idxv]); color=Array(clr[idxv])
                 )
@@ -1304,10 +1304,10 @@ end
 
 
 # function run()
-    figname = "DP_5deg_2cm_extension_test"
+    figname = "temp_debugging"
     # mkdir(figname)
     ar = 1 # aspect ratio
-    n = 320
+    n = 128
     nx = n * ar - 2
     ny = n - 2
     nz = n - 2
