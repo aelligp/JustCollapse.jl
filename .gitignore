@@ -1,0 +1,23 @@
+Manifest.toml
+
+# VSCode
+/.vscode
+
+# Jupyter
+*.ipynb_checkpoints
+
+# OS X
+.DS_Store
+
+# Vim
+.*.sw[omp]
+
+*/*.png
+*/*.vti
+*/*.vtm
+*/*.h5
+
+*.png
+*.vti
+*.vtm
+*.h5
