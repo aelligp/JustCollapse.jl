@@ -1,6 +1,6 @@
 using CUDA
-# CUDA.allowscalar(false) # for safety
-CUDA.allowscalar(true) # for safety
+CUDA.allowscalar(false) # for safety
+# CUDA.allowscalar(true) # for safety
 using JustRelax, JustRelax.DataIO, JustPIC
 import JustRelax.@cell
 
@@ -8,7 +8,7 @@ import JustRelax.@cell
 # set_backend("Threads_Float64_2D")
 # set_backend("CUDA_Float64_2D")
 
-const USE_GPU = true;
+const USE_GPU = false;
 const GPU_ID = 1;
 
 model = if USE_GPU
@@ -19,18 +19,18 @@ else
 end
 environment!(model)
 
-using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, SpecialFunctions, CellArrays
-using ParallelStencil.FiniteDifferences2D   #specify Dimension
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
+using StaticArrays
+# using ParallelStencil.FiniteDifferences2D   #specify Dimension
 using ImplicitGlobalGrid
-using MPI: MPI
-using GeophysicalModelGenerator, StaticArrays
-# using Plots
+# using MPI: MPI
+using GeophysicalModelGenerator#, StaticArrays
 using WriteVTK
 
-using MagmaThermoKinematics
-using BenchmarkTools
-using TimerOutputs
-using JLD2
+using MagmaThermoKinematics: Dike, UpdateTracers_T_ϕ!, InjectDike
+# using BenchmarkTools
+# using TimerOutputs
+# using JLD2
 
 # -----------------------------------------------------------------------------------------
 # Viscosity calculation functions stored in this script
@@ -75,7 +75,7 @@ function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r, xc_anomal
                 JustRelax.@cell phases[ip, i, j] = 3.0
             end
 
-            if y < 0.0
+            if y < 0.0 && phases_topo[i, j] > 1.0
                 @cell phases[ip, i, j] = 4.0
             end
 
@@ -311,25 +311,25 @@ end
 return nothing
 end
 
-#Multiplies parameter with the fraction of a phase
-@generated function compute_param_times_frac(
-    fn::F,
-    PhaseRatios::Union{NTuple{N,T},SVector{N,T}},
-    MatParam::NTuple{N,AbstractMaterialParamsStruct},
-    argsi,
-    ) where {F,N,T}
-    # # Unrolled dot product
-    quote
-        val = zero($T)
-        Base.Cartesian.@nexprs $N i ->
-        val += @inbounds PhaseRatios[i] * fn(MatParam[i], argsi)
-        return val
-    end
-end
+# #Multiplies parameter with the fraction of a phase
+# @generated function compute_param_times_frac(
+#     fn::F,
+#     PhaseRatios::Union{NTuple{N,T},SVector{N,T}},
+#     MatParam::NTuple{N,AbstractMaterialParamsStruct},
+#     argsi,
+#     ) where {F,N,T}
+#     # # Unrolled dot product
+#     quote
+#         val = zero($T)
+#         Base.Cartesian.@nexprs $N i ->
+#         val += @inbounds PhaseRatios[i] * fn(MatParam[i], argsi)
+#         return val
+#     end
+# end
 
-function compute_meltfraction_ratio(args::Vararg{Any,N}) where {N}
-    return compute_param_times_frac(compute_meltfraction, args...)
-end
+# function compute_meltfraction_ratio(args::Vararg{Any,N}) where {N}
+#     return GeoParams.compute_param_times_frac(compute_meltfraction, args...)
+# end
 
 @parallel_indices (I...) function compute_melt_fraction!(ϕ, phase_ratios, rheology, args)
 args_ijk = ntuple_idx(args, I...)
@@ -338,7 +338,7 @@ return nothing
 end
 
 @inline function compute_melt_frac(rheology, args, phase_ratios)
-    return compute_meltfraction_ratio(phase_ratios, rheology, args)
+    return GeoParams.compute_meltfraction_ratio(phase_ratios, rheology, args)
 end
 
 function copy_arrays_GPU2CPU!(
@@ -401,13 +401,26 @@ function pureshear!(stokes, εbg, xvi)
     return nothing
 end
 
+@parallel_indices (i, j) function air_temperature!(Tc, phases, index, args)
+    @inbounds for ip in JustRelax.cellaxes(phases)
+        # quick escape
+        JustRelax.@cell(index[ip, i, j]) == 0 && continue
+
+        if @cell phases[ip, i, j] = 4.0
+            Tc = args.temp_sticky_air
+        end
+
+    end
+    return nothing
+end
+
 
 function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
 
     #-----------------------------------------------------
     # USER INPUTS
     #-----------------------------------------------------
-    Topography= false; #specify if you want topography plotted in the figures
+    Topography= true; #specify if you want topography plotted in the figures
     Freesurface = true #specify if you want to use freesurface
         sticky_air = 5km #specify the thickness of the sticky air layer
     Inject_Dike = false #specify if you want to inject a dike
@@ -442,7 +455,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     # IO ------------------------------------------------
     figdir = "./fig2D/$figname/"
     # gifname = "$figname";
-    pvd = paraview_collection("./Paraview/$figname")
+    # pvd = paraview_collection("./Paraview/$figname")
     !isdir(figdir) && mkpath(figdir)
     # anim = Animation(figdir, String[]);
     # Preparation of VTK/Paraview output
@@ -643,7 +656,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
             CompositeRheology = CompositeRheology((creep_magma, el_magma)),
             Melting = MeltingParam_Caricchi(),
-            # Elasticity = el_magma,
+            Elasticity = el_magma,
             CharDim  = CharDim,),
 
         #Name="Thermal Anomaly"
@@ -655,7 +668,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
             CompositeRheology = CompositeRheology((creep_magma,el_magma)),
             Melting = MeltingParam_Caricchi(),
-            # Elasticity = el_magma,
+            Elasticity = el_magma,
             CharDim  = CharDim,),
 
         #Name="Sticky Air"
@@ -665,7 +678,8 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             HeatCapacity = ConstantHeatCapacity(cp=1000J/kg/K),
             Conductivity = ConstantConductivity(k=15Watt/K/m),
             LatentHeat = ConstantLatentHeat(Q_L=0.0J/kg),
-            CompositeRheology = CompositeRheology((creep_air,)),
+            CompositeRheology = CompositeRheology((creep_air,el_air)),
+            Elasticity = el_air,
             # Elasticity = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
             CharDim = CharDim),
             )
@@ -691,7 +705,8 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     @parallel vertex2center!(phases_topo_c, phases_topo_v)
     @parallel vertex2center!(depth_corrected_c, depth_corrected_v)
     @views phases_topo_c = round.(phases_topo_c)
-    @views phases_topo_c[phases_topo_c .== 2.0] .= 3.0
+    @views phases_topo_c[phases_topo_c .== 2.0] .= 4.0
+    @views phases_topo_c[phases_topo_c .== 3.0] .= 4.0
 
     # Initialize particles -------------------------------
     nxcell, max_xcell, min_xcell = 20, 40, 5 # nxcell = initial number of particles per cell; max_cell = maximum particles accepted in a cell; min_xcell = minimum number of particles in a cell
@@ -782,15 +797,16 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     args = (; T=thermal.Tc, P=stokes.P, dt=Inf)
 
     pt_thermal = PTThermalCoeffs(
-        MatParam, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=1e-3 / √2.1
+        MatParam, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=5e-2 / √2.1
     )
     # Boundary conditions of the flow
     if shear == true
         dirichlet_velocities_pureshear!(@velocity(stokes)..., v_extension, xvi)
         # pureshear_bc!(stokes, xci, xvi, εbg)
     end
-    flow_bcs = FlowBoundaryConditions(;
-        free_slip=(left=true, right=true, top=true, bot=true)
+    flow_bcs         = FlowBoundaryConditions(;
+        free_slip    = (left = true, right=true, top=true, bot=true),
+        periodicity  = (left = false, right = false, top = false, bot = false),
     )
     flow_bcs!(stokes, flow_bcs)
 
@@ -808,7 +824,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     Qmask = @zeros(ni...)
     Qmass = 0.15
     P_Dirichlet = @zeros(ni...)
-    SH = @zeros(ni...) #shear heating to be Updated
+
 
     # Preparation for Visualisation
     ni_v_viz  = nx_v_viz, ny_v_viz = (ni[1] - 1) * igg.dims[1], (ni[2] - 1) * igg.dims[2]      # size of the visualisation grid on the vertices according to MPI dims
@@ -849,6 +865,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     η_vep = copy(η)
 
     pressure_top = nondimensionalize(0.0MPa,CharDim)
+    temp_sticky_air = nondimensionalize(0.0C,CharDim)
     if toy == true
         if thermal_perturbation == :random
             δT = 5.0              # thermal perturbation (in %)
@@ -868,7 +885,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         elseif thermal_perturbation == :elliptical_anomaly
             anomaly = nondimensionalize(temp_anomaly, CharDim) # temperature anomaly
             radius  = nondimensionalize(ellipse, CharDim)         # radius of perturbation
-            offset  = nondimensionalize(150C, CharDim)
+            offset  = nondimensionalize(250C, CharDim)
             δT      = 20.0              # thermal perturbation (in %)
             elliptical_anomaly_gradient!(
                     thermal.T, offset, xc, yc, a, b, radius, xvi
@@ -901,17 +918,17 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     end
 
     grid2particle!(pT, xvi, T_buffer, particles.coords)
-    p = particles.coords
-    pp = PTArray([argmax(p) for p in phase_ratios.center]) #if you want to plot it in a heatmap rather than scatter
-    mask_sticky_air = @zeros(ni.+1...)
-    @parallel center2vertex!(mask_sticky_air, pp)
+    # p = particles.coords
+    # pp = PTArray([argmax(p) for p in phase_ratios.center]) #if you want to plot it in a heatmap rather than scatter
+    # mask_sticky_air = @zeros(ni.+1...)
+    # @parallel center2vertex!(mask_sticky_air, pp)
     @copy stokes.P0 stokes.P
 
     # Plot initial T and η profiles
     let
         Yv = [y for x in xvi[1], y in xvi[2]][:]
         Y = [y for x in xci[1], y in xci[2]][:]
-        fig = Figure(; resolution=(1200, 900))
+        fig = Figure(; size=(1200, 900))
         ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
         ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Pressure")
         scatter!(
@@ -929,8 +946,8 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         fig
     end
 
-    dt *= 0.2
-    while it < 15 #nt
+    # dt *= 0.2
+    while it < 10 #nt
 
         particle2grid!(T_buffer, pT, xvi, particles.coords)
         @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
@@ -939,22 +956,56 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         @views thermal.T[2:end-1, :] .= T_buffer
         temperature2center!(thermal)
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top,sticky_air=mask_sticky_air)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top,temp_sticky_air=temp_sticky_air)
 
-        #open the conduit
-        # if it == 5
+        if Inject_Dike == true
+            if rem(it, 2) == 0
+          # if  ustrip(dimensionalize(t,yr,CharDim)) >= (ustrip(InjectionInterval)*interval) #Inject every time the physical time exceeds the injection interval
+            #   ID             =     rand(ind_melt)
+            #   cen            = [x1[ID],z1[ID]]  # Randomly vary center of dike
+              cen              = ((xvi[1].stop, xvi[2].stop).+(xvi[1].start,xvi[2].start))./2.0 .+ rand(-0.5:1e-3:0.5, 2).*[W_ran;H_ran];
+              #   Dike injection based on Toba seismic inversion
+              if cen[end] < ustrip(nondimensionalize(-5km, CharDim))
+                  Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth
+              else
+                  Angle_rand = [rand(-10.0:0.1:10.0)] # Orientation: near-vertical @ shallower depth
+              end
+
+              dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, #=ΔP=10e6,=#Phase = 2);
+              @copy Tnew_cpu Array(@views thermal.T[2:end-1,:])
+              ## MTK injectDike
+              Tracers, Tnew_cpu, Vol, dike_poly, Velo  =   MagmaThermoKinematics.InjectDike(Tracers, Tnew_cpu, xvi, dike, nTr_dike);   # Add dike, move hostrocks
+
+              @views thermal.Told[2:end-1,:] .= PTArray(Tnew_cpu)
+              @views thermal.T[2:end-1,:] .= PTArray(Tnew_cpu)
+
+              copy_arrays_GPU2CPU!(Tnew_cpu, Phi_melt_cpu, thermal.T[2:end-1,:], ϕ)     # Copy arrays to CPU to update properties
+              UpdateTracers_T_ϕ!(Tracers, xvi, xci, Tnew_cpu, Phi_melt_cpu);      # Update info on tracers
+
+              @parallel (@idx size(thermal.Tc)...) temperature2center!(thermal.Tc, thermal.T)
+              args = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s)
+                  #   add flux to injection
+              InjectVol +=    Vol
+                  # t_Myrs = dimensionalize(t, Myrs, CharDim)                                                              # Keep track of injected volume
+                  # println("Added new dike; total injected magma volume = $(round(InjectVol/km³,digits=2)) km³; rate Q=$(round(InjectVol/(t_Myrs),digits=2)) m³/s")
+              println("injected dike; total injected magma volume = $(dimensionalize(InjectVol,km^3,CharDim)); Recharge rate: $(dimensionalize(Vol,km^3,CharDim)/(dimensionalize(dt,yr,CharDim)*InjectionInterval))")
+
+          end
+      end
+        # #open the conduit
+        # if it == 114
         #     conduit_gradient_TBuffer!(T_buffer, offset, xc_conduit, -yc_conduit, r_conduit, xvi)
         #     open_conduit!(pPhases, particles, xc_conduit, yc_conduit, r_conduit)
         #     grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles.coords)
         # end
 
-        @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
-        @views T_buffer[args.sticky_air.==4.0] .= nondimensionalize(0.0C, CharDim)
-        # @views T_buffer[:, 1] .= maximum(thermal.T)
-        @views thermal.T[2:end-1, :] .= T_buffer
+        # @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
+        # @views T_buffer[args.sticky_air.==4.0] .= nondimensionalize(0.0C, CharDim)
+        # # @views T_buffer[:, 1] .= maximum(thermal.T)
+        # @views thermal.T[2:end-1, :] .= T_buffer
+        # temperature2center!(thermal)
 
-        temperature2center!(thermal)
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top,sticky_air=mask_sticky_air)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top,temp_sticky_air=temp_sticky_air)
         @parallel (@idx ni) compute_viscosity!(
             η, 1.0, phase_ratios.center, @strain(stokes)..., args, MatParam, cutoff_visc
         )
@@ -962,7 +1013,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             ρg[2], phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
         )
         @copy stokes.P0 stokes.P
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top, sticky_air=mask_sticky_air)#, S=S, mfac=mfac, η_f=η_f, η_s=η_s)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top, temp_sticky_air=temp_sticky_air)#, S=S, mfac=mfac, η_f=η_f, η_s=η_s)
         # Stokes solver -----------------
         solve!(
             stokes,
@@ -987,17 +1038,19 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         @parallel (@idx ni) multi_copy!(
             @tensor_center(stokes.τ_o), @tensor_center(stokes.τ)
         )
-        dt = compute_dt(stokes, di, dt_diff, igg) * 0.2
-        # if it < 5
-        #     dt *= 0.1
-        # else
-        #     dt *= 1e-2
-        # end
+        dt = compute_dt(stokes, di, dt_diff, igg)
         # ------------------------------
         @show dt
-        # @show extrema(stokes.V.Vy)
-        # @show extrema(stokes.V.Vx)
 
+        @parallel (@idx ni) compute_shear_heating!(
+            thermal.shear_heating,
+            @tensor_center(stokes.τ),
+            @tensor_center(stokes.τ_o),
+            @strain(stokes),
+            phase_ratios.center,
+            MatParam, # needs to be a tuple
+            dt,
+        )
         # Thermal solver ---------------
         heatdiffusion_PT!(
             thermal,
@@ -1128,7 +1181,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             idxv = particles.index.data[:]
 
             if igg.me == 0
-                fig = Figure(; resolution=(2000, 2000), createmissing=true)
+                fig = Figure(; size=(2000, 2000), createmissing=true)
                 ar = li[1] / li[2]
                 # ar = DataAspect()
 
@@ -1276,7 +1329,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
                 let
                     Yv = [y for x in xvi[1], y in xvi[2]][:]
                     Y = [y for x in xci[1], y in xci[2]][:]
-                    fig = Figure(; resolution=(1200, 900))
+                    fig = Figure(; size=(1200, 900))
                     ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
                     ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Pressure")
 
@@ -1304,15 +1357,15 @@ end
 
 
 # function run()
-    figname = "temp_debugging"
+    figname = "Dikes_injection_PIC"
     # mkdir(figname)
     ar = 1 # aspect ratio
-    n = 128
+    n = 64
     nx = n * ar - 2
     ny = n - 2
     nz = n - 2
     igg = if !(JustRelax.MPI.Initialized())
-        IGG(init_global_grid(nx, ny, 0; init_MPI=true)...)
+        IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
     else
         igg
     end
