@@ -8,7 +8,7 @@ import JustRelax.@cell
 # set_backend("Threads_Float64_2D")
 # set_backend("CUDA_Float64_2D")
 
-const USE_GPU = true;
+const USE_GPU = false;
 const GPU_ID = 1;
 
 model = if USE_GPU
@@ -1090,7 +1090,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             phase_ratios,
             MatParam,
             args,
-            dt #=* 1e-1=#,
+            dt * 1e-1,
             igg;
             iterMax = 300e3,
             nout = 5e3,
@@ -1432,10 +1432,10 @@ end
 
 # function run()
     # figname = "High_res_ni_640_2500it_Lugano_2_5e-14_extension"
-    figname = "0111824_High_res_ni_640_1000it_2_5e-14_extension"
+    figname = "012524_testing_flat_topo"
     # mkdir(figname)
     ar = 1 # aspect ratio
-    n = 640
+    n = 128
     nx = n - 2
     ny = n * ar - 2
     nz = n - 2
