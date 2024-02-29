@@ -1,14 +1,15 @@
-
+using Parameters
 using ParallelStencil
-@init_parallel_stencil(Threads, Float64, 2) #or (CUDA, Float64, 2) or (AMDGPU, Float64, 2)using Parameters
+@init_parallel_stencil(Threads, Float64, 3) #or (CUDA, Float64, 2) or (AMDGPU, Float64, 2)using Parameters
 using JustPIC
+using JustPIC._3D
 using JustRelax
 using Printf, Statistics, LinearAlgebra, GeoParams, GLMakie, CellArrays
 using StaticArrays
-using ImplicitGlobalGrid, MPI: MPI
+using ImplicitGlobalGrid#, MPI: MPI
 const backend = CPUBackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 
-PS_Setup(:Threads, Float64, 2)            # initialize parallel stencil in 2D
+model = PS_Setup(:Threads, Float64, 3)            # initialize parallel stencil in 2D
 environment!(model)
 
 ## function from MTK
@@ -93,74 +94,6 @@ function DisplacementAroundPennyShapedDike(dike::Dike, CartesianPoint::SVector, 
     return Displacement, B, p
 end
 
-
-#to be renamed
-#should calculate the displacement per particle
-function move_particles!(particles, x, y)
-    (; coords, index) = particles
-    px, py = coords
-    ni     = size(px)
-
-    @parallel_indices (I...) function move_particles!(px, py, index, x, y)
-
-        for ip in JustRelax.cellaxes(px)
-            !(JustRelax.@cell(index[ip, I...])) && continue
-            px_ip = JustRelax.@cell   px[ip, I...]
-            py_ip = JustRelax.@cell   py[ip, I...]
-
-            displacement, Bmax = DisplacementAroundPennyShapedDike(dike, SA[px_ip,  py_ip],2)
-            displacement .= displacement/Bmax
-
-            JustRelax.@cell   px[ip, I...] = px_ip  + displacement[1]
-            JustRelax.@cell   py[ip, I...] = py_ip  + displacement[2]
-        end
-        return nothing
-    end
-
-    @parallel (@idx ni) move_particles!(coords..., index, x, y)
-
-end
-
-#get rid of @simd
-function  RotatePoints_2D!(Xrot,Zrot, X,Z, RotMat)
-    @simd for i in eachindex(X) # linear indexing
-        pt_rot      =   RotMat*SA[X[i], Z[i]];
-        Xrot[i]     =   pt_rot[1]
-        Zrot[i]     =   pt_rot[2]
-    end
-end
-
-
-function Inject_Dike_particles(xvi, dike::Dike, particles)
-    dim = length(xvi)
-
-    if dim ==2
-        x = [x for x in xvi[1], y in xvi[2]]
-        y = [y for x in xvi[1], y in xvi[2]]
-
-        (;Angle, Type, Center, H, W) = dike
-        α = Angle[1]
-
-        RotMat = SA[cos(α) -sin(α); sin(α) cos(α)]
-        x = x.-Center[1]
-        y = y.-Center[2]
-        RotatePoints_2D!(x,y, x,y, RotMat)
-        move_particles!(particles, x, y)
-        inject = check_injection(particles)
-        # inject && inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer,), xvi)
-
-        # RotatePoints_2D!(Vx, Vy, Vx_rot, Vy_rot, RotMat')
-        RotatePoints_2D!(x,y, x,y, RotMat')
-        x = x.+Center[1]
-        y = y.+Center[2]
-
-        # move_particles!(particles, Displacement)
-        println("I'm groot")
-    end
-    return x, y
-
-end
-
 ## for plotting the particles
 function plot_particles(particles, pPhases)
     p = particles.coords
@@ -179,50 +112,103 @@ function plot_particles(particles, pPhases)
 end
 
 
-## not working function based only on particles
-# function Inject_Dike_particles_new(dike::Dike, particles)
-#     (; coords, index) = particles
-#     px, py = coords
-#     ni     = size(px)
-#     # dim = length(ni)
-#     if length(ni) == 2
-#         @parallel_indices (I...) function Inject_Dike_particles_new(px, py, index, dike)
-#             for ip in JustRelax.cellaxes(px)
-#                 !(JustRelax.@cell(index[ip, I...])) && continue
-#                 px_ip = JustRelax.@cell   px[ip, I...]
-#                 py_ip = JustRelax.@cell   py[ip, I...]
+# not working function based only on particles
+function Inject_dike_particles!(particles::Particles, dike::Dike)
+    (; coords, index) = particles
+    px, py = coords
+    ni     = size(px)
+    @parallel_indices (I...) function Inject_dike_particles!(px, py, index, dike)
+        for ip in JustRelax.cellaxes(px)
+            !(JustRelax.@cell(index[ip, I...])) && continue
+            px_ip = JustRelax.@cell   px[ip, I...]
+            py_ip = JustRelax.@cell   py[ip, I...]
 
-#                 (;Angle, Type, Center, H, W) = dike
-#                 α = Angle[1]
-#                 Δ = H
+            (;Angle, Type, Center, H, W) = dike
+            α = Angle[1]
+            Δ = H
 
-#                 RotMat = SA[cos(α) -sin(α); sin(α) cos(α)]
-#                 px_ip = px_ip.-Center[1]
-#                 py_ip = py_ip.-Center[2]
-#                 # x = x.-Center[1]
-#                 # y = y.-Center[2]
-#                 # RotatePoints_2D!(x,y, x,y, RotMat)
-#                 RotatePoints_2D!(px_ip,py_ip, px_ip,py_ip, RotMat)
-#                 displacement, Bmax = DisplacementAroundPennyShapedDike(dike, SA[px_ip,  py_ip],2)
-#                 displacement .= displacement/Bmax
+            RotMat = SA[cos(α) -sin(α); sin(α) cos(α)]
+            px_rot = px_ip.-Center[1]
+            py_rot = py_ip.-Center[2]
 
-#                 RotatePoints_2D!(px_ip,py_ip, px_ip,py_ip, RotMat')
-#                 px_ip = px_ip.+Center[1]
-#                 py_ip = py_ip.+Center[2]
-#             end
-#             # RotatePoints_2D!(x,y, x,y, RotMat')
-#             # x = x.+Center[1]
-#             # y = y.+Center[2]
+            pt_rot = RotMat*SA[px_rot,py_rot]
+            px_rot = pt_rot[1]
+            py_rot = pt_rot[2]
 
-#             # move_particles!(particles, Displacement)
-#             # println("I'm groot")
+            displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
+            # displacement .= displacement/Bmax   # not necessary anymore
 
-#             return nothing
-#         end
-#         @parallel (@idx ni) Inject_Dike_particles_new(particles.coords..., particles.index, dike)
-#     end
+            px_ip = px_rot + displacement[1]
+            py_ip = py_rot + displacement[2]
 
-# end
+            # RotatePoint_2D_new!(px,py, SA[px_rot,py_rot], RotMat')
+            pt_rot = RotMat'*SA[px_ip,py_ip]
+            px_ip = pt_rot[1] .+ Center[1]
+            py_ip = pt_rot[2] .+ Center[2]
+
+            JustRelax.@cell px[ip, I...] = px_ip
+            JustRelax.@cell py[ip, I...] = py_ip
+
+        end
+
+        return nothing
+    end
+    @parallel (@idx ni) Inject_dike_particles!(particles.coords..., particles.index, dike)
+end
+
+function Inject_dike_particles!(particles::Particles, dike::Dike)
+    (; coords, index) = particles
+    px, py = coords
+    ni     = size(px)
+    @parallel_indices (I...) function Inject_dike_particles!(px, py, pz, index, dike)
+        for ip in JustRelax.cellaxes(px)
+            !(JustRelax.@cell(index[ip, I...])) && continue
+            px_ip = JustRelax.@cell   px[ip, I...]
+            py_ip = JustRelax.@cell   py[ip, I...]
+            pz_ip = JustRelax.@cell   pz[ip, I...]
+
+            (;Angle, Type, Center, H, W) = dike
+            Δ = H
+            α,β             =   Angle[1], Angle[end];
+            RotMat_y        =   SA[cosd(α) 0.0 -sind(α); 0.0 1.0 0.0; sind(α) 0.0 cosd(α)  ];                      # perpendicular to y axis
+            RotMat_z        =   SA[cosd(β) -sind(β) 0.0; sind(β) cosd(β) 0.0; 0.0 0.0 1.0  ];                      # perpendicular to z axis
+            RotMat          =   RotMat_y*RotMat_z;
+
+            # RotMat = SA[cos(α) -sin(α); sin(α) cos(α)]
+            px_rot = px_ip .- Center[1]
+            py_rot = py_ip .- Center[2]
+            pz_rot = pz_ip .- Center[3]
+
+            pt_rot = RotMat*SA[px_rot,py_rot, pz_rot]
+            px_rot = pt_rot[1]
+            py_rot = pt_rot[2]
+            pz_rot = pt_rot[3]
+
+            displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot,pz_rot],3)
+            # displacement .= displacement/Bmax   # not necessary anymore
+
+            px_ip = px_rot + displacement[1]
+            py_ip = py_rot + displacement[2]
+            pz_ip = pz_rot + displacement[3]
+
+            # RotatePoint_2D_new!(px,py, SA[px_rot,py_rot], RotMat')
+            pt_rot = RotMat'*SA[px_ip,py_ip, pz_ip]
+            px_ip = pt_rot[1] .+ Center[1]
+            py_ip = pt_rot[2] .+ Center[2]
+            pz_ip = pt_rot[3] .+ Center[3]
+
+            JustRelax.@cell px[ip, I...] = px_ip
+            JustRelax.@cell py[ip, I...] = py_ip
+            JustRelax.@cell pz[ip, I...] = pz_ip
+
+        end
+
+        return nothing
+    end
+    @parallel (@idx ni) Inject_dike_particles!(particles.coords..., particles.index, dike)
+
+end
+
 
 ###################################
 #MWE
@@ -235,46 +221,55 @@ nx = n * ar - 2
 ny = n - 2
 nz = n - 2
 igg = if !(JustRelax.MPI.Initialized())
-    IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
+    IGG(init_global_grid(nx, ny, nz; init_MPI=true)...)
 else
     igg
 end
 
 # Domain setup for JustRelax
-lx, lz          = 10e3, 10e3 # nondim if CharDim=CharDim
-li              = lx, lz
-b_width         = (4, 4, 0) #boundary width
-origin          = 0.0, -lz
+lx, ly, lz          = 10e3, 10e3, 10e3 # nondim if CharDim=CharDim
+li              = lx, ly, lz
+ni              = nx, ny, nz
+b_width         = (4, 4, 1) #boundary width
+origin          = 0.0, 0.0,-lz
 igg             = igg
 di              = @. li / ni # grid step in x- and y-direction
 # di = @. li / (nx_g(), ny_g()) # grid step in x- and y-direction
 grid            = Geometry(ni, li; origin = origin)
 (; xci, xvi)    = grid # nodes at the center and vertices of the cells
 #----------------------------------------------------------------------
-nxcell, max_xcell, min_xcell = 20, 40, 5 # nxcell = initial number of particles per cell; max_cell = maximum particles accepted in a cell; min_xcell = minimum number of particles in a cell
+# Initialize particles -------------------------------
+nxcell, max_xcell, min_xcell = 20, 40, 1
 particles = init_particles(
     backend, nxcell, max_xcell, min_xcell, xvi..., di..., ni...
 )
-# velocity grids
-grid_vx, grid_vy = velocity_grids(xci, xvi, di)
 # temperature
 pT, pPhases      = init_cell_arrays(particles, Val(3))
+_, dike_phase      = init_cell_arrays(particles, Val(3))
 particle_args = (pT, pPhases)
-
-W_in, H_in              = 5e3,1e3; # Width and thickness of dike
+# init_dike_phase(dike_Phase,particles)
+W_in, H_in              = 1e3,1e2; # Width and thickness of dike
 T_in                    = 1000
 H_ran, W_ran            = (xvi[1].stop, xvi[2].start).* [0.2;0.3];                          # Size of domain in which we randomly place dikes and range of angles
 Dike_Type               = "ElasticDike"
 # Tracers                 = StructArray{Tracer}(undef, 1);
 nTr_dike                = 300;
 cen              = ((xvi[1].stop, xvi[2].stop).+(xvi[1].start,xvi[2].start))./2.0 .+ rand(-0.5:1e-3:0.5, 2).*[W_ran;H_ran];
-#   Dike injection based on Toba seismic inversion
-if cen[end] < ustrip(nondimensionalize(-5km, CharDim))
+cen3D              = ((xvi[1].stop, xvi[2].stop,xvi[3].stop).+(xvi[1].start,xvi[2].start,xvi[3].start))./2.0 .+ rand(-0.5:1e-3:0.5, 3).*[W_ran;W_ran;H_ran];
+
+if cen[end] < -5e3
     Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth
 else
     Angle_rand = [rand(-10.0:0.1:10.0)] # Orientation: near-vertical @ shallower depth
 end
+if cen3D[end] < -5e3
+    Angle_rand = [rand(80.0:0.1:100.0); rand(0:360)] # Orientation: near-vertical @ depth
+else
+    Angle_rand = [rand(-10.0:0.1:10.0); rand(0:360)] # Orientation: near-vertical @ shallower depth
+end
 
-dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, #=ΔP=10e6,=#Phase =2 );
+# dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, #=ΔP=10e6,=#Phase =2 );
+dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen3D, #=ΔP=10e6,=#Phase =2 );
 
-x,y = Inject_Dike_particles(xvi,dike, particles)
+Inject_dike_particles!(particles, dike)
+plot_particles(particles, pPhases)
