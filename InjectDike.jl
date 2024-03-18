@@ -1,15 +1,15 @@
 using Parameters
 using ParallelStencil
-@init_parallel_stencil(Threads, Float64, 3) #or (CUDA, Float64, 2) or (AMDGPU, Float64, 2)using Parameters
+@init_parallel_stencil(Threads, Float64, 2) #or (CUDA, Float64, 2) or (AMDGPU, Float64, 2)using Parameters
 using JustPIC
-using JustPIC._3D
+using JustPIC._2D
 using JustRelax
 using Printf, Statistics, LinearAlgebra, GeoParams, GLMakie, CellArrays
 using StaticArrays
 using ImplicitGlobalGrid#, MPI: MPI
 const backend = CPUBackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 
-model = PS_Setup(:Threads, Float64, 3)            # initialize parallel stencil in 2D
+model = PS_Setup(:Threads, Float64, 2)            # initialize parallel stencil in 2D
 environment!(model)
 
 ## function from MTK
@@ -99,8 +99,6 @@ function plot_particles(particles, pPhases)
     p = particles.coords
     # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
     ppx, ppy = p
-    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
     pxv = ppx.data[:]
     pyv = ppy.data[:]
     clr = pPhases.data[:]
@@ -112,18 +110,17 @@ function plot_particles(particles, pPhases)
 end
 
 
-# not working function based only on particles
-function Inject_dike_particles!(particles::Particles, dike::Dike)
+function Inject_dike_particles2D!(phases, particles::Particles, dike::Dike)
     (; coords, index) = particles
     px, py = coords
     ni     = size(px)
-    @parallel_indices (I...) function Inject_dike_particles!(px, py, index, dike)
+    @parallel_indices (I...) function Inject_dike_particles!(phases, px, py, index, dike)
         for ip in JustRelax.cellaxes(px)
             !(JustRelax.@cell(index[ip, I...])) && continue
             px_ip = JustRelax.@cell   px[ip, I...]
             py_ip = JustRelax.@cell   py[ip, I...]
 
-            (;Angle, Type, Center, H, W) = dike
+            (;Angle, Center, H, W, Phase) = dike
             α = Angle[1]
             Δ = H
 
@@ -135,11 +132,22 @@ function Inject_dike_particles!(particles::Particles, dike::Dike)
             px_rot = pt_rot[1]
             py_rot = pt_rot[2]
 
-            displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
-            # displacement .= displacement/Bmax   # not necessary anymore
+            # # not ideal as it plots the phase and then actually displaces everything
+            in, on = isinside_dike(pt_rot, W, H);
+            # Define displacement before the if blocks
+            displacement = [0.0, 0.0]
+            if on
+                JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
+                displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
+                displacement .= displacement/Bmax   # not necessary anymore
+            end
+            if in
+                JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
+            end
 
             px_ip = px_rot + displacement[1]
             py_ip = py_rot + displacement[2]
+
 
             # RotatePoint_2D_new!(px,py, SA[px_rot,py_rot], RotMat')
             pt_rot = RotMat'*SA[px_ip,py_ip]
@@ -148,26 +156,27 @@ function Inject_dike_particles!(particles::Particles, dike::Dike)
 
             JustRelax.@cell px[ip, I...] = px_ip
             JustRelax.@cell py[ip, I...] = py_ip
-
         end
 
         return nothing
     end
-    @parallel (@idx ni) Inject_dike_particles!(particles.coords..., particles.index, dike)
+    @parallel (@idx ni) Inject_dike_particles!(phases, coords..., index, dike)
 end
 
-function Inject_dike_particles!(particles::Particles, dike::Dike)
+
+
+function Inject_dike_particles3D!(phases, particles::Particles, dike::Dike)
     (; coords, index) = particles
     px, py = coords
     ni     = size(px)
-    @parallel_indices (I...) function Inject_dike_particles!(px, py, pz, index, dike)
+    @parallel_indices (I...) function Inject_dike_particles!(phases, px, py, pz, index, dike)
         for ip in JustRelax.cellaxes(px)
             !(JustRelax.@cell(index[ip, I...])) && continue
             px_ip = JustRelax.@cell   px[ip, I...]
             py_ip = JustRelax.@cell   py[ip, I...]
             pz_ip = JustRelax.@cell   pz[ip, I...]
 
-            (;Angle, Type, Center, H, W) = dike
+            (;Angle, Type, Center, H, W, Phase) = dike
             Δ = H
             α,β             =   Angle[1], Angle[end];
             RotMat_y        =   SA[cosd(α) 0.0 -sind(α); 0.0 1.0 0.0; sind(α) 0.0 cosd(α)  ];                      # perpendicular to y axis
@@ -184,8 +193,18 @@ function Inject_dike_particles!(particles::Particles, dike::Dike)
             py_rot = pt_rot[2]
             pz_rot = pt_rot[3]
 
-            displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot,pz_rot],3)
-            # displacement .= displacement/Bmax   # not necessary anymore
+            # # not ideal as it plots the phase and then actually displaces everything
+            in, on = isinside_dike(pt_rot, W, H);
+            # Define displacement before the if blocks
+            displacement = [0.0, 0.0, 0.0]
+            if on
+                JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
+                displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
+                displacement .= displacement/Bmax   # not necessary anymore
+            end
+            if in
+                JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
+            end
 
             px_ip = px_rot + displacement[1]
             py_ip = py_rot + displacement[2]
@@ -205,10 +224,34 @@ function Inject_dike_particles!(particles::Particles, dike::Dike)
 
         return nothing
     end
-    @parallel (@idx ni) Inject_dike_particles!(particles.coords..., particles.index, dike)
+    @parallel (@idx ni) Inject_dike_particles!(phases, coords..., index, dike)
 
 end
 
+function isinside_dike(pt, W, H)
+    dim =   length(pt)
+    in  =   false;
+    on  =   false;
+    eq_ellipse = 100.0;
+    tolerance = 0.9e-1;  # Define a tolerance for the comparison
+
+    if dim==2
+      eq_ellipse = (pt[1]^2.0)/((W/2.0)^2.0) + (pt[2]^2.0)/((H/2.0)^2.0); # ellipse
+    elseif dim==3
+        # radius = sqrt(*)x^2+y^2)
+        eq_ellipse = (pt[1]^2.0 + pt[2]^2.0)/((W/2.0)^2.0) + (pt[3]^2.0)/((H/2.0)^2.0); # ellipsoid
+    else
+        error("Unknown # of dimensions: $dim")
+    end
+
+    if eq_ellipse <= 1.0
+        in = true;
+    end
+    if abs(eq_ellipse - 1.0) < tolerance  # Check if eq_ellipse is close to 1.0 within the tolerance
+        on = true;
+    end
+    return in, on
+end
 
 ###################################
 #MWE
@@ -221,17 +264,18 @@ nx = n * ar - 2
 ny = n - 2
 nz = n - 2
 igg = if !(JustRelax.MPI.Initialized())
-    IGG(init_global_grid(nx, ny, nz; init_MPI=true)...)
+    IGG(init_global_grid(nx, ny,1; init_MPI=true)...)
 else
     igg
 end
 
 # Domain setup for JustRelax
 lx, ly, lz          = 10e3, 10e3, 10e3 # nondim if CharDim=CharDim
-li              = lx, ly, lz
-ni              = nx, ny, nz
+li              = lx, lz
+ni              = nx, ny
+# ni              = nx, ny, nz
 b_width         = (4, 4, 1) #boundary width
-origin          = 0.0, 0.0,-lz
+origin          = 0.0, -lz
 igg             = igg
 di              = @. li / ni # grid step in x- and y-direction
 # di = @. li / (nx_g(), ny_g()) # grid step in x- and y-direction
@@ -245,31 +289,133 @@ particles = init_particles(
 )
 # temperature
 pT, pPhases      = init_cell_arrays(particles, Val(3))
-_, dike_phase      = init_cell_arrays(particles, Val(3))
 particle_args = (pT, pPhases)
 # init_dike_phase(dike_Phase,particles)
-W_in, H_in              = 1e3,1e2; # Width and thickness of dike
+W_in, H_in              = 5e3,1e3; # Width and thickness of dike
 T_in                    = 1000
 H_ran, W_ran            = (xvi[1].stop, xvi[2].start).* [0.2;0.3];                          # Size of domain in which we randomly place dikes and range of angles
 Dike_Type               = "ElasticDike"
 # Tracers                 = StructArray{Tracer}(undef, 1);
 nTr_dike                = 300;
 cen              = ((xvi[1].stop, xvi[2].stop).+(xvi[1].start,xvi[2].start))./2.0 .+ rand(-0.5:1e-3:0.5, 2).*[W_ran;H_ran];
-cen3D              = ((xvi[1].stop, xvi[2].stop,xvi[3].stop).+(xvi[1].start,xvi[2].start,xvi[3].start))./2.0 .+ rand(-0.5:1e-3:0.5, 3).*[W_ran;W_ran;H_ran];
-
+# cen3D              = ((xvi[1].stop, xvi[2].stop,xvi[3].stop).+(xvi[1].start,xvi[2].start,xvi[3].start))./2.0 .+ rand(-0.5:1e-3:0.5, 3).*[W_ran;W_ran;H_ran];
+T_buffer    = @zeros(ni .+ 1)
+Told_buffer = similar(T_buffer)
 if cen[end] < -5e3
     Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth
 else
     Angle_rand = [rand(-10.0:0.1:10.0)] # Orientation: near-vertical @ shallower depth
 end
-if cen3D[end] < -5e3
-    Angle_rand = [rand(80.0:0.1:100.0); rand(0:360)] # Orientation: near-vertical @ depth
-else
-    Angle_rand = [rand(-10.0:0.1:10.0); rand(0:360)] # Orientation: near-vertical @ shallower depth
-end
+# if cen3D[end] < -5e3
+#     Angle_rand = [rand(80.0:0.1:100.0); rand(0:360)] # Orientation: near-vertical @ depth
+# else
+#     Angle_rand = [rand(-10.0:0.1:10.0); rand(0:360)] # Orientation: near-vertical @ shallower depth
+# end
 
 # dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, #=ΔP=10e6,=#Phase =2 );
-dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen3D, #=ΔP=10e6,=#Phase =2 );
+dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, #=ΔP=10e6,=#Phase =2 );
 
-Inject_dike_particles!(particles, dike)
+@btime Inject_dike_particles2D!($pPhases,$particles, $dike)
 plot_particles(particles, pPhases)
+
+# this will be a problem - no particles have escaped and therefore it does not inject
+# if we force inect it will probably destroy the code
+inject = check_injection(particles)
+inject && inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer,), xvi)
+plot_particles(particles, pPhases)
+
+
+function init_dike_phase!(phases, particles)
+    ni = size(phases)
+
+    @parallel_indices (I...) function init_dike_phase(phases, px, py, index)
+    @inbounds for ip in JustRelax.JustRelax.cellaxes(phases)
+        # quick escape
+        # JustRelax.@cell(index[ip, i, j]) == 0 && continue
+
+        x = JustRelax.@cell px[ip, i, j]
+        y = -(JustRelax.@cell py[ip, i, j])
+        JustRelax.@cell phases[ip, i, j] = 2.0 # magma
+        end
+        return nothing
+    end
+
+    @parallel (@idx ni) init_dike_phase(phases, particles.coords..., particles.index)
+end
+
+
+
+
+"""
+    T, Tracers, dike_poly = AddDike(T,Tracers, Grid, dike,nTr_dike)
+
+Adds a dike, described by the dike polygon dike_poly, to the temperature field T (defined at points Grid).
+Also adds nTr_dike new tracers randomly distributed within the dike, to the
+tracers array Tracers.
+
+"""
+function AddDike(Tfield, Grid,dike)
+
+    dim         =   length(Grid);
+    (;Angle,Center,W,H,T, Phase) = dike;
+    PhaseDike = Phase;
+
+    if dim==2
+        α           =    Angle[1];
+        RotMat      =    SA[cosd(α) -sind(α); sind(α) cosd(α)];
+    elseif dim==3
+        α,β             =   Angle[1], Angle[end];
+        RotMat_y        =   SA[cosd(α) 0.0  -sind(α); 0.0 1.0 0.0; sind(α) 0.0 cosd(α)  ];                      # perpendicular to y axis
+        RotMat_z        =   SA[cosd(β) -sind(β) 0.0; sind(β) cosd(β) 0.0; 0.0 0.0 1.0   ];                      # perpendicular to z axis
+        RotMat          =   RotMat_y*RotMat_z;
+    end
+
+    # Add dike to temperature field
+    if dim==2
+        x,z = Grid[1], Grid[2];
+        for i in eachindex(x)
+            for j in eachindex(z)
+                pt      =  SA[x[i];z[j]] - Center;
+                pt_rot  =   RotMat*pt;                      # rotate
+                in      =   isinside_dike(pt_rot, dike);
+                if in
+                    Tfield[i,j] = T;
+                end
+            end
+        end
+
+    elseif dim==3
+        x,y,z = Grid[1], Grid[2], Grid[3]
+        for ix=1:length(x)
+            for iy=1:length(y)
+                for iz=1:length(z)
+                    pt      = SA[(x[ix], y[iy], z[iz])] - Center;
+                    pt_rot  = RotMat*pt;          # rotate and shift
+                    in      = isinside_dike(pt_rot, dike);
+                    if in
+                        Tfield[ix,iy,iz] = T;
+                    end
+                end
+            end
+        end
+
+    end
+
+    return Tfield#, Tr;
+
+end
+
+
+T_buffer    = @zeros(ni .+ 1)
+Told_buffer = similar(T_buffer)
+# Tracers, Tnew_cpu, Vol, dike_poly, Velo  =   InjectDike(Tracers, Tnew_cpu, xvi, dike, nTr_dike);   # Add dike, move hostrocks )
+AddDike(T_buffer, xvi, dike)
+
+
+dp = 2*pi/nump
+p = 0.0:.01:2*pi;
+a_ellipse = dike.W/2.0;
+b_ellipse = dike.H/2.0;
+x =  cos.(p)*a_ellipse
+z = -sin.(p)*b_ellipse .+ dike.Center[2];
+poly = [x,z];
