@@ -21,3 +21,5 @@ Manifest.toml
 *.vti
 *.vtm
 *.h5
+*.txt
+*.out
