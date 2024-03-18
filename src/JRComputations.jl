@@ -37,7 +37,6 @@ end
     return nothing
 end
 
-
 function update_τ_o!(stokes::StokesArrays{ViscoElastic,A,B,C,D,2}) where {A,B,C,D}
     τxx, τyy, τxy, τxy_c = stokes.τ.xx, stokes.τ.yy, stokes.τ.xy, stokes.τ.xy_c
     τxx_o, τyy_o, τxy_o, τxy_o_c = stokes.τ_o.xx,
