@@ -108,6 +108,7 @@ function update_depth!(depth_corrected, phases, topo_interp, x, y)
         depth_corrected[i, j] = abs(depth - y_topo)
         if depth > y_topo
             phases[i, j] = 4.0
+            depth_corrected[i, j] = -depth_corrected[i, j]
             # phases[i,j] = Int64(3)
         else
             # phases[i,j] = Int64(1)
@@ -149,6 +150,30 @@ end
     end
     return nothing
 end
+
+function BC_topography(Vx,Vy, εbg, depth_corrected, xvi, lx,ly)
+    xv, yv = xvi
+
+    @parallel_indices (i, j) function pure_shear_x!(Vx)
+        xi = xv[i]
+        Vx[i, j + 1] = εbg * (xi - lx * 0.5) / (lx/2)/2
+        return nothing
+    end
+
+    @parallel_indices (i, j) function pure_shear_y!(Vy)
+        yi = max(depth_corrected[i,j],0.0)
+        Vy[i + 1, j] = abs(yi) * εbg / ly
+        return nothing
+    end
+
+    nx, ny = size(Vx)
+    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx)
+    nx, ny = size(Vy)
+    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy)
+
+    return nothing
+end
+
 
 function dirichlet_velocities_pureshear!(Vx, Vy, v_extension, xvi)
     lx = abs(reduce(-, extrema(xvi[1])))
@@ -445,7 +470,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     #-----------------------------------------------------
     # USER INPUTS
     #-----------------------------------------------------
-    Topography= true; #specify if you want topography plotted in the figures
+    Topography= false; #specify if you want topography plotted in the figures
     Freesurface = true #specify if you want to use freesurface
         sticky_air = 5km #specify the thickness of the sticky air layer
     Inject_Dike = false #specify if you want to inject a dike
@@ -634,8 +659,8 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     soft_C      =  soft_C  = NonLinearSoftening(;ξ₀ = ustrip.(Coh), Δ=ustrip.(Coh)/2)
     pl          = DruckerPrager_regularised(; C=Coh, ϕ=ϕ, η_vp=η_reg, Ψ=0.0, softening_C = soft_C)        # plasticity
 
-    el       = SetConstantElasticity(; G=G0, ν=0.46)                            # elastic spring
-    # el       = SetConstantElasticity(; G=G0, ν=0.5)                            # elastic spring
+    # el       = SetConstantElasticity(; G=G0, ν=0.46)                            # elastic spring
+    el       = SetConstantElasticity(; G=G0, ν=0.5)                            # elastic spring
     el_magma = SetConstantElasticity(; G=G_magma, ν=0.3)                            # elastic spring
     # el_air   = SetConstantElasticity(; ν=0.5, Kb=0.101MPa)                            # elastic spring
     el_air   = SetConstantElasticity(; G=G0, ν=0.5)                            # elastic spring
@@ -769,7 +794,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         # x_anomaly, y_anomaly = lx * 0.5, -(lz-nondimensionalize(sticky_air,CharDim)) * 0.6 # Randomly vary center of dike
     else
         xc, yc = 0.5 * lx, 0.5 * -lz # origin of thermal anomaly
-        x_anomaly, y_anomaly = lx * 0.5, -lz * 0.6 # Randomly vary center of dike
+        x_anomaly, y_anomaly = lx * 0.5, -lz * 0.5 # Randomly vary center of dike
     end
 
     radius = nondimensionalize(ellipse, CharDim)         # radius of perturbation
@@ -845,10 +870,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     )
     # Boundary conditions of the flow
     if shear == true
-        # dirichlet_velocities_pureshear!(@velocity(stokes)..., v_extension, xvi)
-        # pureshear_bc!(stokes, xci, xvi, εbg)
-        stokes.V.Vx .= PTArray([(x - lx / 2) * εbg for x in xvi[1], _ in 1:(ny + 2)])
-        stokes.V.Vy .= PTArray([-(lz - abs(y)) * εbg for _ in 1:(nx + 2), y in xvi[2]])
+        BC_topography(@velocity(stokes)..., εbg, depth_corrected_v,xvi,lx,lz)
     end
     flow_bcs         = FlowBoundaryConditions(;
         free_slip    = (left = true, right=true, top=true, bot=true),
@@ -1087,6 +1109,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             ρg[2], phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
         )
         @copy stokes.P0 stokes.P
+        stokes.P .= stokes.P
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top, temp_sticky_air=temp_sticky_air)#, S=S, mfac=mfac, η_f=η_f, η_s=η_s)
         # Stokes solver -----------------
         solve!(
@@ -1443,7 +1466,7 @@ end
 
 
 # function run()
-    figname = "freesurface_test_pressure_shift_with_topo"
+    figname = "test_pressure_shift"
     # mkdir(figname)
     ar = 1 # aspect ratio
     n = 64
