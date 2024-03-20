@@ -807,7 +807,8 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
 
     init_phases!(pPhases, particles, phases_topo_v, xc, yc, a, b, radius, x_anomaly, y_anomaly, r_anomaly, xc_conduit, yc_conduit, r_conduit)
     phase_ratios = PhaseRatio(ni, length(MatParam))
-    @parallel (@idx ni) phase_ratios_center(phase_ratios.center, pPhases)
+    # @parallel (@idx ni) phase_ratios_center(phase_ratios.center, pPhases)
+    @parallel (@idx ni) phase_ratios_center(phase_ratios.center, particles.coords, xci, di, pPhases)
 
     # Physical Parameters
     geotherm = GeoUnit(30K / km)
@@ -996,10 +997,6 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
     end
 
     grid2particle!(pT, xvi, T_buffer, particles)
-    # p = particles.coords
-    # pp = PTArray([argmax(p) for p in phase_ratios.center]) #if you want to plot it in a heatmap rather than scatter
-    # mask_sticky_air = @zeros(ni.+1...)
-    # @parallel center2vertex!(mask_sticky_air, pp)
     @copy stokes.P0 stokes.P
 
     # Plot initial T and η profiles
@@ -1102,9 +1099,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         # temperature2center!(thermal)
 
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top,temp_sticky_air=temp_sticky_air)
-        @parallel (@idx ni) compute_viscosity!(
-            η, 1.0, phase_ratios.center, @strain(stokes)..., args, MatParam, cutoff_visc
-        )
+        # @parallel (@idx ni) compute_viscosity!(
+        #     η, 1.0, phase_ratios.center, @strain(stokes)..., args, MatParam, cutoff_visc
+        # )
         @parallel (@idx ni) compute_ρg!(
             ρg[2], phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
         )
@@ -1112,6 +1109,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         stokes.P .= stokes.P
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, pressure_top=pressure_top, temp_sticky_air=temp_sticky_air)#, S=S, mfac=mfac, η_f=η_f, η_s=η_s)
         # Stokes solver -----------------
+        η .= mean(η)
         solve!(
             stokes,
             pt_stokes,
@@ -1123,7 +1121,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
             phase_ratios,
             MatParam,
             args,
-            dt * 1e-1,
+            dt,
             igg;
             iterMax = 200e3,
             nout = 1e3,
@@ -1183,7 +1181,8 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
         #phase change for particles
         phase_change!(pPhases, particles)
         # update phase ratios
-        @parallel (@idx ni) phase_ratios_center(phase_ratios.center, pPhases)
+        # @parallel (@idx ni) phase_ratios_center(phase_ratios.center, pPhases)
+        @parallel (@idx ni) phase_ratios_center(phase_ratios.center, particles.coords, xci, di, pPhases)
         @parallel (@idx ni) compute_melt_fraction!(
             ϕ, phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
         )
@@ -1193,8 +1192,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny)
 
         #  # # Plotting -------------------------------------------------------
         if it == 1 || rem(it, 1) == 0
-            checkpointing(figdir, stokes, thermal.T, η, t)
-            histroydir = "History"
+            # checkpointing_jld2(figdir, stokes, thermal, η, particles, pPhases, t; igg=igg)
 
             # save_hdf5(figdir,"history",η)#, stokes, η, η_vep, ϕ, ρg)
             # Arrow plotting routine
@@ -1466,10 +1464,10 @@ end
 
 
 # function run()
-    figname = "test_pressure_shift"
+    figname = "flat_topohigh_res_240320"
     # mkdir(figname)
     ar = 1 # aspect ratio
-    n = 64
+    n = 128
     nx = n * ar - 2
     ny = n - 2
     nz = n - 2
