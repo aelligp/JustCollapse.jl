@@ -110,17 +110,17 @@ function plot_particles(particles, pPhases)
 end
 
 
-function Inject_dike_particles2D!(phases, particles::Particles, dike::Dike)
+function Inject_dike_particles2D!(phases, pT, particles::Particles, dike::Dike)
     (; coords, index) = particles
     px, py = coords
     ni     = size(px)
-    @parallel_indices (I...) function Inject_dike_particles!(phases, px, py, index, dike)
+    @parallel_indices (I...) function Inject_dike_particles!(phases, pT, px, py, index, dike)
         for ip in JustRelax.cellaxes(px)
             !(JustRelax.@cell(index[ip, I...])) && continue
             px_ip = JustRelax.@cell   px[ip, I...]
             py_ip = JustRelax.@cell   py[ip, I...]
 
-            (;Angle, Center, H, W, Phase) = dike
+            (;Angle, Center, H, W, Phase, T) = dike
             α = Angle[1]
             Δ = H
 
@@ -138,11 +138,13 @@ function Inject_dike_particles2D!(phases, particles::Particles, dike::Dike)
             displacement = [0.0, 0.0]
             if on
                 JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
+                JustRelax.@cell pT[ip, I...] = T
                 displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
-                displacement .= displacement/Bmax   # not necessary anymore
+                displacement .= displacement*H
             end
             if in
                 JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
+                JustRelax.@cell pT[ip, I...] = T
             end
 
             px_ip = px_rot + displacement[1]
@@ -160,23 +162,23 @@ function Inject_dike_particles2D!(phases, particles::Particles, dike::Dike)
 
         return nothing
     end
-    @parallel (@idx ni) Inject_dike_particles!(phases, coords..., index, dike)
+    @parallel (@idx ni) Inject_dike_particles!(phases, pT, coords..., index, dike)
 end
 
 
 
-function Inject_dike_particles3D!(phases, particles::Particles, dike::Dike)
+function Inject_dike_particles3D!(phases, pT, particles::Particles, dike::Dike)
     (; coords, index) = particles
     px, py = coords
     ni     = size(px)
-    @parallel_indices (I...) function Inject_dike_particles!(phases, px, py, pz, index, dike)
+    @parallel_indices (I...) function Inject_dike_particles!(phases, pT, px, py, pz, index, dike)
         for ip in JustRelax.cellaxes(px)
             !(JustRelax.@cell(index[ip, I...])) && continue
             px_ip = JustRelax.@cell   px[ip, I...]
             py_ip = JustRelax.@cell   py[ip, I...]
             pz_ip = JustRelax.@cell   pz[ip, I...]
 
-            (;Angle, Type, Center, H, W, Phase) = dike
+            (;Angle, Type, Center, H, W, Phase, T) = dike
             Δ = H
             α,β             =   Angle[1], Angle[end];
             RotMat_y        =   SA[cosd(α) 0.0 -sind(α); 0.0 1.0 0.0; sind(α) 0.0 cosd(α)  ];                      # perpendicular to y axis
@@ -199,11 +201,13 @@ function Inject_dike_particles3D!(phases, particles::Particles, dike::Dike)
             displacement = [0.0, 0.0, 0.0]
             if on
                 JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
+                JustRelax.@cell pT[ip, I...] = T
                 displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
-                displacement .= displacement/Bmax   # not necessary anymore
+                displacement .= displacement*Bmax   # not necessary anymore
             end
             if in
                 JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
+                JustRelax.@cell pT[ip, I...] = T
             end
 
             px_ip = px_rot + displacement[1]
@@ -224,7 +228,7 @@ function Inject_dike_particles3D!(phases, particles::Particles, dike::Dike)
 
         return nothing
     end
-    @parallel (@idx ni) Inject_dike_particles!(phases, coords..., index, dike)
+    @parallel (@idx ni) Inject_dike_particles!(phases, pT, coords..., index, dike)
 
 end
 
@@ -259,7 +263,7 @@ end
 #-------JustRelax parameters-------------------------------------------------------------
 
 ar = 1 # aspect ratio
-n = 64
+n = 96
 nx = n * ar - 2
 ny = n - 2
 nz = n - 2
@@ -283,7 +287,7 @@ grid            = Geometry(ni, li; origin = origin)
 (; xci, xvi)    = grid # nodes at the center and vertices of the cells
 #----------------------------------------------------------------------
 # Initialize particles -------------------------------
-nxcell, max_xcell, min_xcell = 20, 40, 1
+nxcell, max_xcell, min_xcell = 20, 40, 15
 particles = init_particles(
     backend, nxcell, max_xcell, min_xcell, xvi..., di..., ni...
 )
@@ -291,7 +295,7 @@ particles = init_particles(
 pT, pPhases      = init_cell_arrays(particles, Val(3))
 particle_args = (pT, pPhases)
 # init_dike_phase(dike_Phase,particles)
-W_in, H_in              = 5e3,1e3; # Width and thickness of dike
+W_in, H_in              = 1e3,0.5e3; # Width and thickness of dike
 T_in                    = 1000
 H_ran, W_ran            = (xvi[1].stop, xvi[2].start).* [0.2;0.3];                          # Size of domain in which we randomly place dikes and range of angles
 Dike_Type               = "ElasticDike"
@@ -315,7 +319,7 @@ end
 # dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, #=ΔP=10e6,=#Phase =2 );
 dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, #=ΔP=10e6,=#Phase =2 );
 
-@btime Inject_dike_particles2D!($pPhases,$particles, $dike)
+Inject_dike_particles2D!(pPhases,pT,particles, dike)
 plot_particles(particles, pPhases)
 
 # this will be a problem - no particles have escaped and therefore it does not inject
