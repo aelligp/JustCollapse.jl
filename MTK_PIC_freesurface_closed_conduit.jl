@@ -774,6 +774,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     particles = init_particles(
         backend, nxcell, max_xcell, min_xcell, xvi..., di..., ni...
     )
+
+    subgrid_arrays   = SubgridDiffusionCellArrays(particles)
+
     # velocity grids
     grid_vx, grid_vy = velocity_grids(xci, xvi, di)
     # temperature
@@ -872,9 +875,9 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     if shear == true
         BC_topography(@velocity(stokes)..., εbg, depth_corrected_v,xvi,lx,lz)
     end
-    flow_bcs         = FlowBoundaryConditions(;
-        free_slip    = (left = true, right=true, top=true, bot=true),
-        periodicity  = (left = false, right = false, top = false, bot = false),
+    flow_bcs = FlowBoundaryConditions(;
+        free_slip=(left=true, right=true, top=true, bot=true),
+        free_surface =true,
     )
     flow_bcs!(stokes, flow_bcs)
 
@@ -994,12 +997,12 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         Vy_v = @zeros(ni.+1...)
     end
 
-    T_buffer    = @zeros(ni .+ 1)
+    T_buffer    = @zeros(ni.+1)
     Told_buffer = similar(T_buffer)
+    dt₀         = similar(stokes.P)
     for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
         copyinn_x!(dst, src)
     end
-
     grid2particle!(pT, xvi, T_buffer, particles)
     @copy stokes.P0 stokes.P
 
@@ -1159,19 +1162,23 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
             copyinn_x!(dst, src)
         end
+        subgrid_characteristic_time!(
+            subgrid_arrays, particles, dt₀, phase_ratios, rheology, thermal, stokes, xci, di
+        )
+        centroid2particle!(subgrid_arrays.dt₀, xci, dt₀, particles)
+        subgrid_diffusion!(
+            pT, T_buffer, thermal.ΔT[2:end-1, :], subgrid_arrays, particles, xvi,  di, dt
+        )
+        # ------------------------------
 
         # Advection --------------------
         # advect particles in space
         advection_RK!(particles, @velocity(stokes), grid_vx, grid_vy, dt, 2 / 3)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
-        # JustPIC.clean_particles!(particles, xvi, particle_args)
-        grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
-        println("Check 1, after grid2particle_flip: ", extrema((pT.data[:])[particles.index.data[:]]))
         # check if we need to inject particles
         inject = check_injection(particles)
         inject && inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer,), xvi)
-
         #phase change for particles
         phase_change!(pPhases, particles)
         # update phase ratios
@@ -1180,9 +1187,15 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         @parallel (@idx ni) compute_melt_fraction!(
             ϕ, phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
         )
-        # channel testing
-        @views η[stokes.EII_pl .> 0.01] .= nondimensionalize(η_magma*Pas, CharDim)
-        @views η_vep[stokes.EII_pl .> 0.01] .= nondimensionalize(η_magma*Pas, CharDim)
+
+        particle2grid!(T_buffer, pT, xvi, particles)
+        @views T_buffer[:, end] .= Tsurf
+        @views T_buffer[:, 1] .= Tbot
+        @views thermal.T[2:end - 1, :] .= T_buffer
+        thermal_bcs!(thermal.T, thermal_bc)
+        temperature2center!(thermal)
+        thermal.ΔT .= thermal.T .- thermal.Told
+        @parallel (@idx size(thermal.ΔTc)...) temperature2center!(thermal.ΔTc, thermal.ΔT)
 
         @show it += 1
         t += dt
@@ -1286,7 +1299,7 @@ function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 )
                 data_c = (;
                     P   = Array(P_d),
-                    τxx = Array(τII_d),
+                    τII = Array(τII_d),
                     η   = Array(η_d),
                     ϕ   = Array(ϕ_d),
                     ρ  = Array(ρ_d),
