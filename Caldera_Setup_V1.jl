@@ -427,7 +427,7 @@ function new_thermal_anomaly(phases, particles, xc_anomaly, yc_anomaly, r_anomal
     @parallel (@idx ni) new_anomlay_particles(phases, particles.coords..., particles.index, xc_anomaly, yc_anomaly, r_anomaly)
 end
 
-function DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
+function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -1449,7 +1449,7 @@ end
     else
         igg
     end
-    DikeInjection_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=do_vtk)
+    Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=do_vtk)
 
 #     return figname, nx, ny, igg
 # end
