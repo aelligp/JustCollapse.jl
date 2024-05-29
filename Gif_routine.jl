@@ -1,9 +1,10 @@
 # Gif - routine
+# Attention: plots needs %06d.png format
 using Plots, Printf, FileIO
 
-figdir = "./fig2D/shear_test"
-gifname = "dike_toy_model";
-nt = 25  #define
+figdir = "./fig2D/GIF_Lugano/"
+gifname = "GIF_Lugano_Plots";
+nt = 43  #define
 
 
 file_names = String[]
@@ -19,4 +20,4 @@ for i = 1:nt
 end
 anim = Animation(figdir, file_names)
 
-gif(anim, "$gifname"*".gif", fps = 15)
+gif(anim, "$gifname"*".gif", fps = 5)
