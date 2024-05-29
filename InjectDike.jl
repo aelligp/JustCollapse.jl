@@ -1,36 +1,57 @@
-using Parameters
+using CUDA
+# using Parameters
+using Adapt
 using ParallelStencil
-@init_parallel_stencil(Threads, Float64, 2) #or (CUDA, Float64, 2) or (AMDGPU, Float64, 2)using Parameters
+# @init_parallel_stencil(CUDA, Float64, 2) #or (CUDA, Float64, 2) or (AMDGPU, Float64, 2)using Parameters
+@init_parallel_stencil(Threads, Float64, 3) #or (CUDA, Float64, 2) or (AMDGPU, Float64, 2)using Parameters
+
 using JustPIC
 using JustPIC._2D
+# using JustPIC._3D
 using JustRelax
-using Printf, Statistics, LinearAlgebra, GeoParams, GLMakie, CellArrays
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
 using StaticArrays
 using ImplicitGlobalGrid#, MPI: MPI
 const backend = CPUBackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
+# const backend = CUDABackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 
-model = PS_Setup(:Threads, Float64, 2)            # initialize parallel stencil in 2D
+# model = PS_Setup(:CUDA, Float64, 2)            # initialize parallel stencil in 2D
+model = PS_Setup(:Threads, Float64, 3)            # initialize parallel stencil in 2D
 environment!(model)
 
 ## function from MTK
-@with_kw struct Dike    # stores info about dike
-    # Note: since we utilize the "Parameters.jl" package, we can add more keywords here w/out breaking the rest of the code
-    #
-    # We can also define only a few parameters here (like Q and ΔP) and compute Width/Thickness from that
-    # Or we can define thickness
-    Angle       ::  Vector{Float64} =   [0.]                                  # Strike/Dip angle of dike
-    Type        ::  String          =   "SquareDike"                          # Type of dike
-    T           ::  Float64         =   950.0                                 # Temperature of dike
-    E           ::  Float64         =   1.5e10                                # Youngs modulus (only required for elastic dikes)
-    ν           ::  Float64         =   0.3                                   # Poison ratio of host rocks
-    ΔP          ::  Float64         =   1e6;                                  # Overpressure of elastic dike
-    Q           ::  Float64         =   1000;                                 # Volume of elastic dike
-    W           ::  Float64         =   (3*E*Q/(16*(1-ν^2)*ΔP))^(1.0/3.0);    # Width of dike/sill
-    H           ::  Float64         =   8*(1-ν^2)*ΔP*W/(π*E);                 # (maximum) Thickness of dike/sill
-    Center      ::  Vector{Float64} =   [20e3 ; -10e3]                        # Center
-    Phase       ::  Int64           =   2;                                    # Phase of newly injected magma
-end
+# @kwdef struct Dike    # stores info about dike
+#     # Note: since we utilize the "Parameters.jl" package, we can add more keywords here w/out breaking the rest of the code
+#     #
+#     # We can also define only a few parameters here (like Q and ΔP) and compute Width/Thickness from that
+#     # Or we can define thickness
+#     Angle       ::  Array{Float64} =   [0.]                                  # Strike/Dip angle of dike
+#     Type        ::  String          =   "ElasticDike"                          # Type of dike
+#     T           ::  Float64         =   950.0                                 # Temperature of dike
+#     E           ::  Float64         =   1.5e10                                # Youngs modulus (only required for elastic dikes)
+#     ν           ::  Float64         =   0.3                                   # Poison ratio of host rocks
+#     ΔP          ::  Float64         =   1e6;                                  # Overpressure of elastic dike
+#     Q           ::  Float64         =   1000;                                 # Volume of elastic dike
+#     W           ::  Float64         =   (3*E*Q/(16*(1-ν^2)*ΔP))^(1.0/3.0);    # Width of dike/sill
+#     H           ::  Float64         =   8*(1-ν^2)*ΔP*W/(π*E);                 # (maximum) Thickness of dike/sill
+#     Center      ::  Array{Float64}  =   [20e3 ; -10e3]                        # Center
+#     Phase       ::  Int64           =   2;                                    # Phase of newly injected magma
+# end
 
+@kwdef struct Dike{_T,N}
+    Angle       ::  NTuple{N, _T} =   ntuple(i -> 0.0, N)
+    Type        ::  Symbol =   :ElasticDike
+    T           ::  _T =   950.0
+    E           ::  _T =   1.5e10
+    ν           ::  _T =   0.3
+    ΔP          ::  _T =   1e6
+    Q           ::  _T =   1000
+    W           ::  _T =   (3*E*Q/(16*(1-ν^2)*ΔP))^(1.0/3.0)
+    H           ::  _T =   8*(1-ν^2)*ΔP*W/(π*E)
+    Center      ::  NTuple{N, _T} =   ntuple(i -> 20e3, N)
+    Phase       ::  Int64 =   2
+end
+Adapt.@adapt_structure Dike
 
 ## function from MTK
 function DisplacementAroundPennyShapedDike(dike::Dike, CartesianPoint::SVector, dim)
@@ -145,6 +166,8 @@ function Inject_dike_particles2D!(phases, pT, particles::Particles, dike::Dike)
             if in
                 JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
                 JustRelax.@cell pT[ip, I...] = T
+                displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
+                displacement .= displacement*H
             end
 
             px_ip = px_rot + displacement[1]
@@ -178,7 +201,7 @@ function Inject_dike_particles3D!(phases, pT, particles::Particles, dike::Dike)
             py_ip = JustRelax.@cell   py[ip, I...]
             pz_ip = JustRelax.@cell   pz[ip, I...]
 
-            (;Angle, Type, Center, H, W, Phase, T) = dike
+            (;Angle, Center, H, W, Phase, T) = dike
             Δ = H
             α,β             =   Angle[1], Angle[end];
             RotMat_y        =   SA[cosd(α) 0.0 -sind(α); 0.0 1.0 0.0; sind(α) 0.0 cosd(α)  ];                      # perpendicular to y axis
@@ -275,11 +298,11 @@ end
 
 # Domain setup for JustRelax
 lx, ly, lz          = 10e3, 10e3, 10e3 # nondim if CharDim=CharDim
-li              = lx, lz
-ni              = nx, ny
-# ni              = nx, ny, nz
+li              = lx, ly, lz
+ni              = nx,nz
+ni              = nx, ny, nz
 b_width         = (4, 4, 1) #boundary width
-origin          = 0.0, -lz
+origin          = 0.0, 0.0, -lz
 igg             = igg
 di              = @. li / ni # grid step in x- and y-direction
 # di = @. li / (nx_g(), ny_g()) # grid step in x- and y-direction
@@ -301,27 +324,33 @@ H_ran, W_ran            = (xvi[1].stop, xvi[2].start).* [0.2;0.3];              
 Dike_Type               = "ElasticDike"
 # Tracers                 = StructArray{Tracer}(undef, 1);
 nTr_dike                = 300;
-cen              = ((xvi[1].stop, xvi[2].stop).+(xvi[1].start,xvi[2].start))./2.0 .+ rand(-0.5:1e-3:0.5, 2).*[W_ran;H_ran];
-# cen3D              = ((xvi[1].stop, xvi[2].stop,xvi[3].stop).+(xvi[1].start,xvi[2].start,xvi[3].start))./2.0 .+ rand(-0.5:1e-3:0.5, 3).*[W_ran;W_ran;H_ran];
+# cen              = ((xvi[1].stop, xvi[2].stop).+(xvi[1].start,xvi[2].start))./2.0 .+ rand(-0.5:1e-3:0.5, 2).*[W_ran;H_ran];
+cen3D              = ((xvi[1].stop, xvi[2].stop,xvi[3].stop).+(xvi[1].start,xvi[2].start,xvi[3].start))./2.0 .+ rand(-0.5:1e-3:0.5, 3).*[W_ran;W_ran;H_ran];
 T_buffer    = @zeros(ni .+ 1)
 Told_buffer = similar(T_buffer)
-if cen[end] < -5e3
-    Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth
-else
-    Angle_rand = [rand(-10.0:0.1:10.0)] # Orientation: near-vertical @ shallower depth
-end
-# if cen3D[end] < -5e3
-#     Angle_rand = [rand(80.0:0.1:100.0); rand(0:360)] # Orientation: near-vertical @ depth
+# if cen[end] < -5e3
+#     Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth
 # else
-#     Angle_rand = [rand(-10.0:0.1:10.0); rand(0:360)] # Orientation: near-vertical @ shallower depth
+#     Angle_rand = [rand(-10.0:0.1:10.0)] # Orientation: near-vertical @ shallower depth
 # end
+if cen3D[end] < -5e3
+    Angle_rand = [rand(80.0:0.1:100.0); rand(0:360)] # Orientation: near-vertical @ depth
+else
+    Angle_rand = [rand(-10.0:0.1:10.0); rand(0:360)] # Orientation: near-vertical @ shallower depth
+end
 
+dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen3D, #=ΔP=10e6,=#Phase =2 );
 # dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, #=ΔP=10e6,=#Phase =2 );
-dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, #=ΔP=10e6,=#Phase =2 );
 
 Inject_dike_particles2D!(pPhases,pT,particles, dike)
+# Inject_dike_particles3D!(pPhases,pT,particles, dike)
 plot_particles(particles, pPhases)
-
+# Advection --------------------
+# advect particles in space
+advection_RK!(particles, @velocity(stokes), grid_vx, grid_vy, dt, 2 / 3)
+# advect particles in memory
+move_particles!(particles, xvi, particle_args)
+grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
 # this will be a problem - no particles have escaped and therefore it does not inject
 # if we force inect it will probably destroy the code
 inject = check_injection(particles)
