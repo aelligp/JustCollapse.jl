@@ -7,7 +7,7 @@ struct SemiLagrangianParticles{N,T} <: AbstractParticles
 
     function SemiLagrangianParticles(xvi::NTuple{2,T}) where {T}
         nx, ny = length.(xvi)
-        n = nx*ny
+        n = nx * ny
         px_i = ntuple(Val(2)) do _
             @zeros(n)
         end

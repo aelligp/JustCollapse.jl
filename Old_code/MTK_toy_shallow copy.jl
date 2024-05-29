@@ -11,7 +11,7 @@ else
 end
 environment!(model)                        
 
-using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie    
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie      
 using ParallelStencil.FiniteDifferences2D   #specify Dimension
 using ImplicitGlobalGrid
 using MPI: MPI
@@ -40,38 +40,38 @@ println("Done loading Model... starting Dike Injection 2D routine")
 #------------------------------------------------------------------------------------------
 # @views function DikeInjection_2D(igg; figname=figname,nx=nx, ny=ny); 
 
+    ni                      = (nx-3,ny-3)   #grid spacing for JustRelax calculation 
     #-----------------------------------------------------
     # USER INPUTS
     #-----------------------------------------------------
-    Topography= true; #specify if you want topography plotted in the figures
-    Freesurface = true; #specify if you want to use freesurface
+    Topography= false; #specify if you want topography plotted in the figures
+    Freesurface = false; #specify if you want to use freesurface
     Inject_Dike = false; #specify if you want to inject a dike
-        dike_width = 2.5km; #specify the width of the dike
-        dike_height = 1.0km; #specify the height of the dike
+        dike_width = 1.0km; #specify the width of the dike
+        dike_height = 0.1km; #specify the height of the dike
         dike_temp = 1000C; #specify the temperature of the dike  
         InjectionInterval       = 15yr        # number of timesteps between injections (if Inject_Dike=true). Increase this at higher resolution. 
         #now injecting every 2 it
     
     toy = true; #specify if you want to use the toy model or the Toba model
         thermal_perturbation = :circular_anomaly ; #specify if you want a thermal perturbation in the center of the domain or random (:random)
-        # thermal_perturbation = :Toba_Inversion ; #specify if you want a thermal perturbation in the center of the domain or random (:random)
-        sphere = 1.5km;                               #specify the radius of the circular anomaly
-        temp_anomaly = 1000C;
+        sphere = 1km;                               #specify the radius of the circular anomaly
+        temp_anomaly = 900C;
     
     shear = false #specify if you want to use pure shear boundary conditions
-        # v_extension = 1e-10m/s
+        v_extension = 1e-10m/s
     regime = ViscoElastoPlastic;                  #Rheology of the Stokes Solver: ViscoElastic, ViscoElastoPlastic
     # figname = "testing";              #name of the figure
     
     # nx, ny                  = (190,190).-2  # 2D grid size - should be a multitude of 32 for optimal GPU perfomance 
     Nx,Ny,Nz                = 100,100,100   # 3D grid size (does not yet matter)
-        arrow_steps_x_dir         = 7;            # number of arrows in the quiver plot
-        arrow_steps_y_dir         = 7;            # number of arrows in the quiver plot
+        arrow_steps_x_dir         = 8;            # number of arrows in the quiver plot
+        arrow_steps_y_dir         = 8;            # number of arrows in the quiver plot
 
-    nt                      = 150             # number of timesteps
+    nt                      = 500             # number of timesteps
    
-    η_uppercrust            = 1e21          #viscosity of the upper crust
-    η_magma                 = 1e18          #viscosity of the magma
+    η_uppercrust            = 1e22          #viscosity of the upper crust
+    η_magma                 = 1e19          #viscosity of the magma
     η_air                   = 1e21          #viscosity of the air
     
     #-----------------------------------------------------
@@ -89,7 +89,6 @@ println("Done loading Model... starting Dike Injection 2D routine")
 
     # nondimensionalize with CharDim 
     CharDim                 = GEO_units(length=40km, viscosity=1e20Pa*s);
-    ni                      = (nx-3,ny-3)   #grid spacing for calculation (without ghost cells)
     
     Grid                    = CreateCartGrid(size=(Nx,Ny,Nz),x=((Topo.x.val[1,1,1])km,(Topo.x.val[end,1,1])km), y=((Topo.y.val[1,1,1])km,(Topo.y.val[1,end,1])km),z=(-40km,4km));
     X,Y,Z                   = XYZGrid(Grid.coord1D...);
@@ -108,34 +107,32 @@ println("Done loading Model... starting Dike Injection 2D routine")
     # ----------CrossSections for 2D simulation----------------------------------
 
     # Data_Cross              = CrossSection(DataPara, dims=(ni[1]+1,ni[2]+1), Interpolate=true,Start=(ustrip(-63.5km),ustrip(80.95km)), End=(ustrip(-03.72km), ustrip(20.05km)))
-    Data_Cross              = CrossSection(DataPara, dims=(ni[1]+3,ni[2]+1), Interpolate=true,Start=(ustrip(-40.00km),ustrip(50.00km)), End=(ustrip(-06.00km), ustrip(20.00km)));
-    # Data_Cross              = CrossSection(DataPara, dims=(ni[1]+1,ni[2]+1), Interpolate=true,Start=(ustrip(-10.00km),ustrip(10.00km)), End=(ustrip(-06.00km), ustrip(00.00km)));
+    # Data_Cross              = CrossSection(DataPara, dims=(ni[1]+1,ni[2]+1), Interpolate=true,Start=(ustrip(-50.00km),ustrip(60.00km)), End=(ustrip(-06.00km), ustrip(20.00km)));
+    Data_Cross              = CrossSection(DataPara, dims=(ni[1]+3,ni[2]+1), Interpolate=true,Start=(ustrip(-10.00km),ustrip(10.00km)), End=(ustrip(-06.00km), ustrip(00.00km)));
     x_new                   = FlattenCrossSection(Data_Cross);
     Data_Cross              = AddField(Data_Cross,"FlatCrossSection", x_new); 
     Phase                   = dropdims(Data_Cross.fields.Phase,dims=3); #Dropped the 3rd dim of the Phases to be consistent with new grid of the CrossSection
     Phase                   = Int64.(round.(Phase));
 
     ## Workaround to display topo on heatmaps for η,ρ,ϕ due to different dimensions (ni, not ni+1)
-    Data_Cross_ni              = CrossSection(DataPara, dims=(ni[1],ni[2]), Interpolate=true,Start=(ustrip(-40.00km),ustrip(50.00km)), End=(ustrip(-06.00km), ustrip(20.00km)));
-    # Data_Cross_ni              = CrossSection(DataPara, dims=(ni[1],ni[2]), Interpolate=true,Start=(ustrip(-10.00km),ustrip(10.00km)), End=(ustrip(-06.00km), ustrip(00.00km)));
+    # Data_Cross_ni              = CrossSection(DataPara, dims=(ni[1],ni[2]), Interpolate=true,Start=(ustrip(-50.00km),ustrip(60.00km)), End=(ustrip(-06.00km), ustrip(20.00km)));
+    Data_Cross_ni              = CrossSection(DataPara, dims=(ni[1],ni[2]), Interpolate=true,Start=(ustrip(-10.00km),ustrip(10.00km)), End=(ustrip(-06.00km), ustrip(00.00km)));
     Phase_ni                = dropdims(Data_Cross_ni.fields.Phase,dims=3); #Dropped the 3rd dim of the Phases to be consistent with new grid of the CrossSection
     Phase_ni                = Int64.(round.(Phase_ni));
 
     #Seismo Model 
-    Model3D_Cross              = CrossSection(Model3D_cart, dims=(ni[1]+1,ni[2]+1), Interpolate=true,Start=(ustrip(-40.00km),ustrip(50.00km)), End=(ustrip(-06.00km), ustrip(20.00km)));
-    # Model3D_Cross              = CrossSection(Model3D_cart, dims=(ni[1]+1,ni[2]+1), Interpolate=true,Start=(ustrip(-10.00km),ustrip(10.00km)), End=(ustrip(-06.00km), ustrip(00.00km)));
+    # Model3D_Cross              = CrossSection(Model3D_cart, dims=(ni[1]+1,ni[2]+1), Interpolate=true,Start=(ustrip(-50.00km),ustrip(60.00km)), End=(ustrip(-06.00km), ustrip(20.00km)));
+    Model3D_Cross              = CrossSection(Model3D_cart, dims=(ni[1]+1,ni[2]+1), Interpolate=true,Start=(ustrip(-10.00km),ustrip(10.00km)), End=(ustrip(-06.00km), ustrip(00.00km)));
     Model3D_new             = FlattenCrossSection(Model3D_Cross);
     Model3D_Cross           = AddField(Model3D_Cross,"Model3D_Cross",Model3D_new);
-
-    #seismo model with ni dimensions
-    Model3D_Cross_ni              = CrossSection(Model3D_cart, dims=(ni[1],ni[2]), Interpolate=true,Start=(ustrip(-40.00km),ustrip(50.00km)), End=(ustrip(-06.00km), ustrip(20.00km)));
-    # Model3D_Cross              = CrossSection(Model3D_cart, dims=(ni[1]+1,ni[2]+1), Interpolate=true,Start=(ustrip(-10.00km),ustrip(10.00km)), End=(ustrip(-06.00km), ustrip(00.00km)));
-    Model3D_new_ni            = FlattenCrossSection(Model3D_Cross_ni);
-    Model3D_Cross_ni           = AddField(Model3D_Cross_ni,"Model3D_Cross",Model3D_new_ni);
+    
+    Model3D_Cross_ni              = CrossSection(Model3D_cart, dims=(ni[1]+1,ni[2]+1), Interpolate=true,Start=(ustrip(-10.00km),ustrip(10.00km)), End=(ustrip(-06.00km), ustrip(00.00km)));
+    Model3D_new_ni             = FlattenCrossSection(Model3D_Cross_ni);
+    Model3D_Cross_ni           = AddField(Model3D_Cross,"Model3D_Cross",Model3D_new_ni);
     
     #New 2D Grid
     if Freesurface == true
-        Grid2D                  = CreateCartGrid(size=(ni[1],ni[2]), x=(extrema(Data_Cross.fields.FlatCrossSection).*km),z=((minimum(Data_Cross.z.val)./2.66).*km,(maximum(Data_Cross.z.val)).*km), CharDim=CharDim); #create new 2D grid for Injection routine
+        Grid2D                  = CreateCartGrid(size=(ni[1],ni[2]), x=(extrema(Data_Cross.fields.FlatCrossSection).*km),z=((minimum(Data_Cross.z.val)./2).*km,(maximum(Data_Cross.z.val)).*km), CharDim=CharDim); #create new 2D grid for Injection routine
     else
         # new grid with no topography as the topo now seems to be the problem with strain rate. 
         # Grid2D                  = CreateCartGrid(size=(ni[1],ni[2]), x=(extrema(Data_Cross.fields.FlatCrossSection).*km),z=((minimum(Data_Cross.z.val)./2).*km,0.0.*km), CharDim=CharDim); #create new 2D grid for Injection routine
@@ -143,7 +140,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     end
 
     Phi_melt_data           = dropdims(Model3D_Cross.fields.Phi_melt, dims=3);
-    Phi_melt_data_ni           = dropdims(Model3D_Cross_ni.fields.Phi_melt, dims=3);
+    Phi_melt_data_ni        = dropdims(Model3D_Cross_ni.fields.Phi_melt, dims=3);
     
     #Dike location initiation                                                              
     
@@ -156,21 +153,23 @@ println("Done loading Model... starting Dike Injection 2D routine")
     #-------rheology parameters--------------------------------------------------------------
     # plasticity setup
     do_DP                   = false               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
-    η_reg                   =1.0e16Pas           # regularisation "viscosity" for Drucker-Prager
-    τ_y                     = 10MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    # τ_y                     = Inf              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    ϕ                       = 30.0*do_DP         # friction angle
+    η_reg                   =1.0e10Pas           # regularisation "viscosity"
+    # τ_y                     = 35MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    τ_y                     = 35MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    ϕ                       = 30.0*do_DP
     G0                      = 1e10Pa             # elastic shear modulus
     Gi                      = G0/(6.0-4.0*do_DP) # elastic shear modulus perturbation
-    # Coh                     = 0.0        # cohesion
-    Coh                     = τ_y/cosd(ϕ)        # cohesion
-    # Coh                     = 15MPa        # cohesion
+    Coh                     = 10MPa
+    # Coh                     = τ_y/cosd(ϕ)        # cohesion
     εbg                     = 1e-15/s             # background strain rate
     εbg                     = nondimensionalize(εbg, CharDim) # background strain rate
     
+    # pl                      = DruckerPrager(C=Coh, ϕ=ϕ, Ψ=0)        # plasticity
     pl                      = DruckerPrager_regularised(C=Coh, ϕ=ϕ, η_vp=η_reg, Ψ=0)        # plasticity
-    el                      = SetConstantElasticity(; G=G0, ν=0.47)                            # elastic spring
-    el_magma                = SetConstantElasticity(; G=Gi, ν=0.3)                            # elastic spring
+    el                      = SetConstantElasticity(; G=G0, ν=0.5)                            # elastic spring
+    el_magma                = SetConstantElasticity(; G=Gi, ν=0.5)                            # elastic spring
+    # el                      = SetConstantElasticity(; G=G0, ν=0.47)                            # elastic spring
+    # el_magma                = SetConstantElasticity(; G=Gi, ν=0.3)                            # elastic spring
     el_air                  = SetConstantElasticity(; ν=0.5, Kb = 0.101MPa)                            # elastic spring
 
     # disl_creep              = DislocationCreep(A=10^-15.0 , n=2.0, E=476e3, V=0.0  ,  r=0.0, R=8.3145) #AdM    #(;E=187kJ/mol,) Kiss et al. 2023
@@ -182,17 +181,20 @@ println("Done loading Model... starting Dike Injection 2D routine")
     β_rock                  = inv(get_Kb(el))
     β_magma                 = inv(get_Kb(el_magma))
     Kb                      = get_Kb(el)
-     #-------JustRelax parameters-------------------------------------------------------------
+
+    #-------JustRelax parameters-------------------------------------------------------------
     # Domain setup for JustRelax 
-    lx, lz                  = (Grid2D.L[1]), (Grid2D.L[2]) # nondim if CharDim=CharDim
+    # lx, lz                  = (Grid2D.L[1]), (Grid2D.L[2]) # nondim if CharDim=CharDim
+    lx, lz                  = nondimensionalize(10km, CharDim), nondimensionalize(10km, CharDim) # nondim if CharDim=CharDim
     li                      = lx, lz
     b_width                 = (4, 4, 0) #boundary width
-    origin                  = Grid2D.min[1], Grid2D.min[2]
+    # origin                  = Grid2D.min[1], Grid2D.min[2]
+    origin                  = 0.0, -lz
     igg                     = igg
     di                      = @. li / (nx_g(), ny_g()) # grid step in x- and y-direction
+    # di                      = @. li / (ni[1], ni[2]) # grid step in x- and y-direction
     xci, xvi                = lazy_grid(di, li, ni; origin=origin) #non-dim nodes at the center and the vertices of the cell (staggered grid)
     #---------------------------------------------------------------------------------------
-
     # # Set material parameters                                       
     MatParam                =   (
         SetMaterialParams(Name="UpperCrust", Phase=1, 
@@ -218,32 +220,19 @@ println("Done loading Model... starting Dike Injection 2D routine")
                    CharDim  = CharDim,),   
                                         
          SetMaterialParams(Name="Sticky Air", Phase=3, 
-         Density  = PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),
-         HeatCapacity = ConstantHeatCapacity(cp=1050J/kg/K),
-         Conductivity = ConstantConductivity(k=1.5Watt/K/m),       
-           LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
-    CompositeRheology = CompositeRheology((creep_rock, el, pl, )),
-  #   CompositeRheology = CompositeRheology((el, creep_rock, pl, )),
-              Melting = MeltingParam_Caricchi(),
-          #  Elasticity = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
-           Elasticity = el,
-             CharDim  = CharDim,), 
-                                      
-        #  SetMaterialParams(Name="Sticky Air", Phase=3, 
-        #           Density    = ConstantDensity(ρ=1000kg/m^3,),                     
-        #         HeatCapacity = ConstantHeatCapacity(cp=1000J/kg/K),
-        #         Conductivity = ConstantConductivity(k=1.5Watt/K/m),       
-        #           LatentHeat = ConstantLatentHeat(Q_L=0.0J/kg),
-        #            CompositeRheology = CompositeRheology((creep_air,)),
-        #         #    Elasticity = el_air,
-        #            Elasticity = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
-        #              CharDim  = CharDim),
+                  Density    = ConstantDensity(ρ=1000kg/m^3,),                     
+                HeatCapacity = ConstantHeatCapacity(cp=1000J/kg/K),
+                Conductivity = ConstantConductivity(k=1.5Watt/K/m),       
+                  LatentHeat = ConstantLatentHeat(Q_L=0.0J/kg),
+                   CompositeRheology = CompositeRheology((creep_air,)),
+                #    Elasticity = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
+                     CharDim  = CharDim),
                                     )  
                         
 
     #----------------------------------------------------------------------------------
     # Physical Parameters 
-    ΔT                      =   nondimensionalize(450C, CharDim)
+    ΔT                      =   nondimensionalize(300C, CharDim)
     GeoT                    =   -(ΔT - nondimensionalize(0C, CharDim)) / li[2]
     η                       =   MatParam[2].CompositeRheology[1][1].η.val       # viscosity for the Rayleigh number
     # η                       =   MatParam[2].CompositeRheology[1][2].η.val       # viscosity for the Rayleigh number
@@ -258,7 +247,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
     Ra                      =   ρ0 * g * α * ΔT * 10^3 / (η * κ)                # Rayleigh number
     dt                      = dt_diff = 0.5 * min(di...)^2 / κ / 2.01           # diffusive CFL timestep limiter
 
-    v_extension             = nondimensionalize(1e-10m/s, CharDim)   # extension velocity for pure shear boundary conditions
+    v_extension             = nondimensionalize(1e-9m/s, CharDim)   # extension velocity for pure shear boundary conditions
     relaxation_time         = nondimensionalize(η_magma  *Pas, CharDim)/nondimensionalize(Gi, CharDim) # η_magma/Gi
     # Initialize arrays for PT thermal solver
     k                       = @fill(nondimensionalize(1.5Watt/K/m,CharDim), ni...);
@@ -277,12 +266,13 @@ println("Done loading Model... starting Dike Injection 2D routine")
     Tnew_cpu                = Matrix{Float64}(undef, ni.+1...)                  # Temperature for the CPU
     Phi_melt_cpu            = Matrix{Float64}(undef, ni...);                    # Melt fraction for the CPU
     stokes                  = StokesArrays(ni, regime);                         # initialise stokes arrays with the defined regime
-    pt_stokes               = PTStokesCoeffs(li, di; ϵ=1e-5,  CFL=0.8 / √2.1); #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    # pt_stokes               = PTStokesCoeffs(li, di; ϵ=1e-5,  CFL=0.8 / √2.1); #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes               = PTStokesCoeffs(li, di; ϵ=1e-11,  CFL=0.8 / √2.1); #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
 
     # Boundary conditions of the flow
     if shear == true
-        dirichlet_velocities_pureshear!(@velocity(stokes)..., v_extension, xvi);
-        # pureshear_bc!(stokes, xci, xvi, εbg)
+        # dirichlet_velocities_pureshear!(@velocity(stokes)..., v_extension, xvi);
+        pureshear_bc!(stokes, xci, xvi, εbg)
     end
     flow_bcs                = FlowBoundaryConditions(; 
                 free_slip   = (left=true, right=true, top=true, bot=true), 
@@ -373,7 +363,8 @@ println("Done loading Model... starting Dike Injection 2D routine")
         #update phase on the vertices
         @views phase_v[Phase .== 3] .= 3
         #update phase on the center
-        @views phase_c[Phase_ni .== 3] .= 3       
+        @views phase_c[Phase_ni .== 3] .= 3
+        
     elseif Topography == false && Freesurface == true
         let
             xci_phase, xvi_phase = lazy_grid(di, li, (ni[1].+2,ni[2]); origin=origin)  
@@ -386,7 +377,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
         end
     end
     
-    
+
     #----- thermal Array setup ----------------------------------------------------------------------    
     thermal.T .= PTArray([xvi[2][iy] * GeoT +
     nondimensionalize(0C, CharDim) for ix in axes(thermal.T,1), iy in axes(thermal.T,2)]);
@@ -400,90 +391,71 @@ println("Done loading Model... starting Dike Injection 2D routine")
     @copy  thermal.Told thermal.T;
     @copy  Tnew_cpu Array(thermal.T[2:end-1,:]);
 
-    # #trial for melt location of the inversion study
-    # @views phase_c[Phi_melt_data_ni.>0.12]  .=2
-    # @views phase_v[2:end-1,:][Phi_melt_data.>0.12]  .=2
-
-    @parallel (@idx ni) temperature2center!(thermal.Tc, thermal.T)  
-   
-    @parallel (@idx ni) compute_melt_fraction!(args.ϕ, MatParam, phase_c,  (T=thermal.Tc,))
-
-    args                    = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s) # this is used for various functions, remember to update it within loops.
 
     if -Inf < MatParam[1].Elasticity[1].Kb.val < Inf  
         for i in 1:2
         @parallel (@idx ni) compute_ρg!(ρg[2], args.ϕ, MatParam,(T=thermal.Tc, P=stokes.P))
         @parallel init_P!(stokes.P, ρg[2], xci[2])                # init pressure field
-        # @parallel init_P_topography!(stokes.P, ρg[2], xci[2],phase_c)
-        # @views stokes.P[phase_c .==3] .= nondimensionalize(0MPa,CharDim)
+
         end
     else
         @parallel (@idx ni) compute_ρg!(ρg[2], args.ϕ, MatParam,(T=thermal.Tc, P=stokes.P))
         @parallel init_P!(stokes.P, ρg[2], xci[2])                # init pressure field
-        # @parallel init_P_topography!(stokes.P, ρg[2], xci[2],phase_c)
-        # @views stokes.P[phase_c .==3] .= nondimensionalize(0MPa,CharDim)
 
     end
 
-        if Freesurface == true
-            xc, yc      = 0.66*lx, 0.4*lz  # origin of thermal anomaly
-        else 
-            # xc, yc      = 0.66*lx, 0.5*lz  # origin of thermal anomaly
-            xc, yc      = 0.5*lx, 0.5*lz  # origin of thermal anomaly
-        end
-        if toy == true
-            if thermal_perturbation == :random
-                δT          = 5.0              # thermal perturbation (in %)
-                random_perturbation!(thermal.T, δT, (lx*1/8, lx*7/8), (-2000e3, -2600e3), xvi)
-                @show "random perturbation"
-            elseif thermal_perturbation == :circular
-                δT          = 10.0              # thermal perturbation (in %)
-                r           = nondimensionalize(5km, CharDim)         # radius of perturbation
-                circular_perturbation!(thermal.T, δT, xc, yc, r, xvi)
-                @show "circular perturbation"
-            elseif thermal_perturbation == :circular_anomaly
-                anomaly     = nondimensionalize(temp_anomaly,CharDim) # temperature anomaly
-                radius           = nondimensionalize(sphere, CharDim)         # radius of perturbation
-                circular_anomaly!(thermal.T, anomaly, phase_v, xc, yc, radius, xvi)
-                circular_anomaly_center!(phase_c, xc, yc, radius, xci)
-                @show "circular anomaly"
-                
-                ΔP = nondimensionalize(1MPa, CharDim)
-                @views stokes.P[phase_c .== 2] .+= ΔP 
-                @info "Pressure anomaly added with an overpressure of $(dimensionalize(ΔP,MPa, CharDim))"
-            elseif thermal_perturbation == :Toba_Inversion
-                # Toba Inversion
-                @views phase_c[Phi_melt_data_ni.>0.12]  .=2
-                @views phase_v[Phi_melt_data.>0.12]  .=2
-    
-                anomaly     = nondimensionalize(temp_anomaly,CharDim) # temperature anomaly
-                @views thermal.T[phase_v .== 2] .= anomaly
+    if Freesurface == true
+        xc, yc      = 0.66*lx, 0.4*lz  # origin of thermal anomaly
+    else 
+        # xc, yc      = 0.66*lx, 0.5*lz  # origin of thermal anomaly
+        xc, yc      = 0.5*lx, 0.5*lz  # origin of thermal anomaly
+    end
+    if toy == true
+        if thermal_perturbation == :random
+            δT          = 5.0              # thermal perturbation (in %)
+            random_perturbation!(thermal.T, δT, (lx*1/8, lx*7/8), (-2000e3, -2600e3), xvi)
+            @show "random perturbation"
+        elseif thermal_perturbation == :circular
+            δT          = 10.0              # thermal perturbation (in %)
+            r           = nondimensionalize(5km, CharDim)         # radius of perturbation
+            circular_perturbation!(thermal.T, δT, xc, yc, r, xvi)
+            @show "circular perturbation"
+        elseif thermal_perturbation == :circular_anomaly
+            anomaly     = nondimensionalize(temp_anomaly,CharDim) # temperature anomaly
+            radius           = nondimensionalize(sphere, CharDim)         # radius of perturbation
+            circular_anomaly!(thermal.T, anomaly, phase_v, xc, yc, radius, xvi)
+            circular_anomaly_center!(phase_c, xc, yc, radius, xci)
+            @show "circular anomaly"
             
-                # ΔP = nondimensionalize(1MPa, CharDim)
-                # @views stokes.P[phase_c .== 2] .+= ΔP 
-                # @info "Pressure anomaly added with an overpressure of $(dimensionalize(ΔP,MPa, CharDim))"
-    
-    
-            end
+            # ΔP = nondimensionalize(1MPa, CharDim)
+            # @views stokes.P[phase_c .== 2] .+= ΔP 
+            # @info "Pressure anomaly added with an overpressure of $(dimensionalize(ΔP,MPa, CharDim))"
         end
-    
-        pxc = PTArray([x for x in xci[1], y in xci[2]]); # x-coordinates of the center for Pressure Gaussian
-        pyc = PTArray([y for x in xci[1], y in xci[2]]); # y-coordinates of the center for Pressure Gaussian
-    
-        if toy == true
-            xc, yc      = 0.68*lx, 0.15*lz  # origin of thermal anomaly
-            #Pressure Gaussian 
-            Qmask .= 0.15.* exp.(.-128.0((pxc.-xc).^2.0 + (pyc.+yc).^2.0));
-            # Qmask .= Qmass.* exp.(.-128.0((pxc.-xc).^2.0 + (pyc.+yc).^2.0));
-            # @views P_chamber[phase_c .==2 ] .= Qmask[phase_c .== 2]; 
-            @views P_chamber[phase_c .== 2] .= nondimensionalize(1MPa,CharDim)
-        end
-        @parallel (@idx ni) computeViscosity!(η, ϕ, S, mfac, η_f, η_s)
-        # ν = 0.05
-        #     @parallel (@idx ni) compute_viscosity_MTK!(
-        #         η, ν, @strain(stokes)..., args, MatParam, phase_c
-        #     )
+    end
 
+    pxc = PTArray([x for x in xci[1], y in xci[2]]); # x-coordinates of the center for Pressure Gaussian
+    pyc = PTArray([y for x in xci[1], y in xci[2]]); # y-coordinates of the center for Pressure Gaussian
+
+    if toy == true
+        #Pressure Gaussian 
+        # Qmask .= 0.15.* exp.(.-128.0((pxc.-xc).^2.0 + (pyc.+yc).^2.0));
+        # Qmask .= Qmass.* exp.(.-128.0((pxc.-xc).^2.0 + (pyc.+yc).^2.0));
+        Qmask .= 0.75.* exp.(.-128.0((pxc.-xc).^2.0 + (pyc.+yc).^2.0));
+        P_chamber[phase_c .==2 ] .= Qmask[phase_c .== 2]; 
+    end
+
+    @parallel (@idx ni) temperature2center!(thermal.Tc, thermal.T)  
+   
+    @parallel (@idx ni) compute_melt_fraction!(args.ϕ, MatParam, phase_c,  (T=thermal.Tc,))
+
+    # ϕ[phase_c .==2 ] .= 0.99; ϕ[phase_c .==1 ] .= 0.0; 
+ 
+    args                    = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s) # this is used for various functions, remember to update it within loops.
+        # @parallel (@idx ni) computeViscosity!(η, ϕ, S, mfac, η_f, η_s)
+        ν = 1.0
+            @parallel (@idx ni) compute_viscosity_MTK!(
+                η, ν, @strain(stokes)..., args, MatParam, phase_c
+            )
     # ----------------------------------------------------  
    
     # Time loop
@@ -492,44 +464,21 @@ println("Done loading Model... starting Dike Injection 2D routine")
     InjectVol   = 0.0;
     evo_t       = Float64[]
     evo_InjVol  = Float64[]
+    evo_Stress  = Float64[]
     local iters             
     @parallel (@idx ni) update_G!(G, MatParam, phase_c);
     @copy stokes.P0 stokes.P;
     P_init .= stokes.P;
-    # ##testing pressure with nils code
-    # maskrho_solid_and_chamber = BitArray{2}(undef, ni...)
-    # @views maskrho_solid_and_chamber[phase_c .==3] .= 0  
-    # @views maskrho_solid_and_chamber[phase_c .<3] .= 1
-    # stokes.P .= reverse(cumsum(ρg[2].*reverse(maskrho_solid_and_chamber,dims=2),dims=2),dims=2)
-    # stokes.P .= stokes.P .*maskrho_solid_and_chamber
-    # # P .= cumsum(ρg[2].*(phase_c, dims=2),dims=2)
-
-     # Plot initial T and η profiles
-     let
-        Yv  = [y for x in xvi[1], y in xvi[2]][:]
-        Y   = [y for x in xci[1], y in xci[2]][:]
-        fig = Figure(resolution = (1200, 900))
-        ax1 = Axis(fig[1,1], aspect = 2/3, title = "T")
-        ax2 = Axis(fig[1,2], aspect = 2/3, title = "Pressure")
-        lines!(ax1, Array(ustrip.(dimensionalize(thermal.T[2:end-1,:][:],C,CharDim))), ustrip.(dimensionalize(Yv,km,CharDim)))
-        lines!(ax2, Array(ustrip.(dimensionalize(stokes.P[:],MPa,CharDim))), ustrip.(dimensionalize(Y,km,CharDim)))
-        # ylims!(ax1, minimum(xvi[2]), 0)
-        # ylims!(ax2, minimum(xvi[2]), 0)
-        hideydecorations!(ax2)
-        save(joinpath(figdir, "initial_profile.png"), fig)
-        fig
-    end
-
-
-    # while it < nt   
+    
+    while it < nt   
      
         args = (; ϕ = ϕ,  T = thermal.Tc, P = stokes.P, dt = Inf, S=S, mfac=mfac, η_f=η_f, η_s=η_s); 
         if Inject_Dike == true
               if rem(it, 2) == 0
             # if  ustrip(dimensionalize(t,yr,CharDim)) >= (ustrip(InjectionInterval)*interval) #Inject every time the physical time exceeds the injection interval
-                ID             =     rand(ind_melt)
-                cen            = [x1[ID],z1[ID]]  # Randomly vary center of dike
-                # cen              = ((xvi[1].stop, xvi[2].stop).+(xvi[1].start,xvi[2].start))./2.0 .+ rand(-0.5:1e-3:0.5, 2).*[W_ran;H_ran]; 
+                # ID             =     rand(ind_melt)
+                # cen            = [x1[ID],z1[ID]]  # Randomly vary center of dike
+                cen              = ((xvi[1].stop, xvi[2].stop).+(xvi[1].start,xvi[2].start))./2.0 .+ rand(-0.5:1e-3:0.5, 2).*[W_ran;H_ran]; 
                 #   Dike injection based on Toba seismic inversion
                 if cen[end] < ustrip(nondimensionalize(-5km, CharDim))
                     Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth             
@@ -559,9 +508,10 @@ println("Done loading Model... starting Dike Injection 2D routine")
             end
         end
         # P_dike = PTArray(zeros(ni...))
-        P_dike .*= exp(-t/relaxation_time);
-        P_chamber .*= exp(-t/relaxation_time);
-        # @views P_dike[thermal.Tc .== nondimensionalize(dike_temp, CharDim)] .= nondimensionalize(1MPa, CharDim)
+        # P_dike .*= exp(-t/relaxation_time);
+        # P_chamber .*= exp(-t/relaxation_time);
+        # @views P_dike[thermal.Tc .== nondimensionalize(900C, CharDim)] .= nondimensionalize(1MPa, CharDim)
+        
         if ustrip(dimensionalize(t,yr,CharDim)) > (ustrip(InjectionInterval)*interval)
             interval += 1.0 
         end
@@ -583,18 +533,21 @@ println("Done loading Model... starting Dike Injection 2D routine")
         #     );        
 
         # end
-        if Inject_Dike == true 
-            @views P_Dirichlet .= stokes.P .+ P_dike
-        else
-            if it == 1
-             @views P_Dirichlet = stokes.P .+ P_chamber #P_Dike is the gaussian pressure gradient in this case
-            else 
-             @views P_Dirichlet = stokes.P #not pressurizing chamber
-            end
-            # @views P_Dirichlet = stokes.P #not pressurizing chamber
-        end 
-        if shear == true 
-                @views P_Dirichlet[ϕ .> 0.12] = stokes.P[ϕ .> 0.12] + P_chamber[ϕ .> 0.12]
+        # if Inject_Dike == true 
+        #     @views P_Dirichlet .= stokes.P .+ P_dike
+        # else
+        #     if it == 0 
+        #         @views P_Dirichlet .= stokes.P
+        #     else  it == 3; it ==6; it ==9; it ==12; it ==15
+        #         @views P_Dirichlet = stokes.P .+ P_chamber #P_Dike is the gaussian pressure gradient in this case
+        #         @info "Pressure anomaly added"
+        #     #    else 
+        #     #     @views P_Dirichlet = stokes.P #not pressurizing chamber
+        #     end
+        # end 
+        if shear == true
+                # @views P_Dirichlet[phase_c.==2] = stokes.P[phase_c .==2]
+                @views P_Dirichlet = stokes.P
         end
 
         @parallel (@idx ni) compute_ρg!(ρg[2], args.ϕ, MatParam,(T=thermal.Tc, P=stokes.P))
@@ -615,8 +568,8 @@ println("Done loading Model... starting Dike Injection 2D routine")
             MatParam, # do a few initial time-steps without plasticity to improve convergence
             dt,   # if no elasticity then Inf otherwise dt
             igg;
-            iterMax=500e3,  # 10e3 for testing
-            nout=5000,
+            iterMax=50e3,  # 10e3 for testing
+            nout=1000,
             b_width,
             verbose=true,
         )
@@ -651,10 +604,12 @@ println("Done loading Model... starting Dike Injection 2D routine")
         @parallel update_phase_v(phase_v, ϕ_v)
         # @parallel (@idx ni) compute_ρg!(ρg[2], args.ϕ, MatParam, (T=args.T, P=args.P))
         @parallel (@idx ni) compute_ρg_phase!(ρg[2], phase_c, MatParam, (T=args.T, P=args.P))
-        @parallel (@idx ni) computeViscosity!(η, ϕ, S, mfac, η_f, η_s)
-
+        # @parallel (@idx ni) computeViscosity!(η, ϕ, S, mfac, η_f, η_s)
+        ν = 1.0
+        @parallel (@idx ni) compute_viscosity_MTK!(
+            η, ν, @strain(stokes)..., args, MatParam, phase_c
+        )
         @parallel (@idx ni) tensor_invariant!(stokes.ε.II, @strain(stokes)...)
-        stokes.τ.II[phase_c .== 3] .= nondimensionalize(0.0MPa, CharDim)
         # @copy η_vep η
 
         @show it += 1
@@ -745,14 +700,13 @@ println("Done loading Model... starting Dike Injection 2D routine")
                 η_d[ind_ni].= NaN                   
                 η_vep_d[ind_ni].= NaN                   
                 ϕ_d[ind_ni]  .= NaN                   
-                # τII_d[ind_ni].= NaN
+                τII_d[ind_ni].= NaN
                 P_d[ind_ni].= NaN
                 ρ_d[ind_ni].= NaN 
-            #     εxy_d[ind_ni].= NaN
-            #     εII_d[ind_ni].= NaN
+                εxy_d[ind_ni].= NaN
             elseif Topography == false && Freesurface == true
                 ρ_d[ind_ni].= NaN # dont comment bc free surface is too low to see magma difference properly
-                # εxy_d[ind_ni].= NaN
+                εxy_d[ind_ni].= NaN
             end
             if igg.me == 0
                 fig = Figure(resolution = (2000, 2000), createmissing = true)
@@ -768,11 +722,11 @@ println("Done loading Model... starting Dike Injection 2D routine")
 
                 ax1 = Axis(fig[2,1][1,1], aspect = ar, title = L"T [\mathrm{C}]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 # ax2 = Axis(fig[2,2][1,1], aspect = ar, title = L"\log_{10}(\eta [\mathrm{Pas}])",titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
-                ax2 = Axis(fig[2,2][1,1], aspect = ar, title = L"\log_{10}(\eta_{vep} [\mathrm{Pas}])",titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
+                ax2 = Axis(fig[2,2][1,1], aspect = ar, title = L"\log_{10}(\eta_{vep}) [\mathrm{Pas}]",titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 ax3 = Axis(fig[3,1][1,1], aspect = ar, title = L"Vy [\mathrm{cm/yr}]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 # ax4 = Axis(fig[3,2][1,1], aspect = ar, title = L"\rho [\mathrm{kgm}^{-3}]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 # ax4 = Axis(fig[3,2][1,1], aspect = ar, title = L"\varepsilon_{\textrm{xy}}[\mathrm{s}^{-1}]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
-                ax4 = Axis(fig[3,2][1,1], aspect = ar, title = L"\log_{10}(\varepsilon_{\textrm{II}}[\mathrm{s}^{-1}])", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
+                ax4 = Axis(fig[3,2][1,1], aspect = ar, title = L"\log_{10}(\varepsilon_{\textrm{II}})[\mathrm{s}^{-1}]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 # ax5 = Axis(fig[4,1][1,1], aspect = ar, title = L"\phi", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 ax5 = Axis(fig[4,1][1,1], aspect = ar, title = L"P", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
                 ax6 = Axis(fig[4,2][1,1], aspect = ar, title = L"\tau_{\textrm{II}} [MPa]", xlabel="Width [km]", titlesize=40, yticklabelsize=25, xticklabelsize=25, xlabelsize=25)
@@ -803,8 +757,8 @@ println("Done loading Model... starting Dike Injection 2D routine")
                 # p3  = heatmap!(ax3, x_c, y_c, ∇V_d, colormap=:vik)
                 # p4  = heatmap!(ax4, x_c, y_c, Vx_d, colormap=:vik)
                 # p4  = heatmap!(ax4, x_c, y_c, ρ_d, colormap=:jet, xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
-                p4  = heatmap!(ax4, x_v, y_v, log10.(εII_d), colormap=:jet)#, xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
-                # p4  = heatmap!(ax4, x_v, y_v, log10.(εxy_d), colormap=:jet)#, xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
+                # p4  = heatmap!(ax4, x_v, y_v, εxy_d, colormap=:jet)#, xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
+                p4  = heatmap!(ax4, x_c, y_c, log10.(εII_d), colormap=:jet)#, xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
                     arrows!(ax4, Xp_d[:], Yp_d[:], Vxp[:]*Vscale, Vyp[:]*Vscale, arrowsize = 10, lengthscale=30,arrowcolor=:white ,linecolor=:white)
                 # p5  = heatmap!(ax5, x_c, y_c, ϕ_d, colormap=:lajolla)
                 p5  = heatmap!(ax5, x_c, y_c, P_d, colormap=:lajolla,xlims=(20.0,55.0), ylims=(-20.0, maximum(y_v)))
@@ -875,27 +829,7 @@ println("Done loading Model... starting Dike Injection 2D routine")
             #     end
             # end
             
-                    
-                    
-        #         #   if center[end] < ustrip(nondimensionalize(-25km, CharDim))
-        #         #     Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth             
-        #         #   else
-        #         #     Angle_rand = [rand(-10.0:0.1:10.0)] # Orientation: near-vertical @ shallower depth     
-        #         #   end
-        #         dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, Phase = 2); 
-        #         @copy Tnew_cpu Array(@views thermal.T[2:end-1,:])
-        #         ## MTK injectDike
-        #         Tracers, Tnew_cpu, Vol, dike_poly, Velo  =   MagmaThermoKinematics.InjectDike(Tracers, Tnew_cpu, xvi, dike, nTr_dike);   # Add dike, move hostrocks
 
-        #         #   if center[end] < ustrip(nondimensionalize(-25km, CharDim))
-        #         #     Angle_rand = [rand(80.0:0.1:100.0)] # Orientation: near-vertical @ depth             
-        #         #   else
-        #         #     Angle_rand = [rand(-10.0:0.1:10.0)] # Orientation: near-vertical @ shallower depth     
-        #         #   end
-        #         dike      =   Dike(Angle=Angle_rand, W=W_in, H=H_in, Type=Dike_Type, T=T_in, Center=cen, Phase = 2); 
-        #         @copy Tnew_cpu Array(@views thermal.T[2:end-1,:])
-        #         ## MTK injectDike
-        #         Tracers, Tnew_cpu, Vol, dike_poly, Velo  =   MagmaThermoKinematics.InjectDike(Tracers, Tnew_cpu, xvi, dike, nTr_dike);   # Add dike, move hostrocks
 
 
 
@@ -905,27 +839,18 @@ println("Done loading Model... starting Dike Injection 2D routine")
             # outfiles = vtk_save(vtkfile); #=pvd[time/kyr] = vtkfile=# pvd[ustrip.(t_Myrs)] = vtkfile  
         end
 
-
-
-        #     end
-        #     if ustrip(dimensionalize(t,yr,CharDim)) > (ustrip(InjectionInterval)*interval)
-        #     interval += 1.0 
-        #     end
-        # end
        
-        #     end
-        #     if ustrip(dimensionalize(t,yr,CharDim)) > (ustrip(InjectionInterval)*interval)
-        #     interval += 1.0 
-        #     end
-        # end
-       
+        
         push!(evo_t, ustrip(dimensionalize(t,yr,CharDim)))
-        push!(evo_InjVol, ustrip(dimensionalize(InjectVol,km^3,CharDim)))
+        push!(evo_Stress, ustrip.(dimensionalize(mean(Array(stokes.τ.II)), MPa, CharDim)))
+        # push!(evo_t, ustrip(dimensionalize(t,yr,CharDim)))
+        # push!(evo_InjVol, ustrip(dimensionalize(InjectVol,km^3,CharDim)))
         # if Inject_Dike == true
-        #     fig2 = Figure(resolution = (2000, 2000), createmissing = true, fontsize = 40.0)
-        #     ax10 = Axis(fig2[1,1], limits = (-0.0, max(ustrip(dimensionalize(t, yr,CharDim)) + 5e2), 0.0, max(InjectVol + 1e2)),xlabel="Time [Myrs]", ylabel="Injected Volume [km³]", title="Injected Volume")
-        #     scatter!(ax10, evo_t, evo_InjVol, markersize=40, markeralpha=0.5, markerstrokewidth=0.0, markerstrokecolor=:black, markercolor=:black)
-        #     display(fig2)
+            fig2 = Figure(resolution = (2000, 2000), createmissing = true, fontsize = 40.0)
+            # ax10 = Axis(fig2[1,1], limits = (-0.0, max(ustrip(dimensionalize(t, yr,CharDim)) + 5e2), 0.0, max( + 1e2)),xlabel="Time [Myrs]", ylabel="Injected Volume [km³]", title="Injected Volume")
+            ax10 = Axis(fig2[1,1],xlabel="Time [Myrs]", ylabel="Stress [km³]", title="Stress")
+            scatter!(ax10, evo_t, evo_Stress, markersize=40, markeralpha=0.5, markerstrokewidth=0.0, markerstrokecolor=:black, markercolor=:black)
+            display(fig2)
         # end
         # if minimum(ustrip.(dimensionalize(thermal.T, C, CharDim))) < 0.0
         #     println("Negative temperature")
@@ -935,15 +860,16 @@ println("Done loading Model... starting Dike Injection 2D routine")
     end
     # Plots.gif(anim, "$gifname"*".gif", fps = 1)
     
-    vtk_save(pvd)
+     vtk_save(pvd)
 
-    # # to be able to save the history of the simulation - update arrays to be saved accordingly
-    # jldsave("history_$figname($it).jld2"; nx = nx, ny = ny, igg = igg, stokes= Array(stokes), thermal=Array(thermal), 
+    # to be able to save the history of the simulation - update arrays to be saved accordingly
+    #not yet working
+    # jldsave("history_$figname($it).jld2"; nx = nx, ny = ny, igg = igg, stokes_P= Array(stokes.P),stokes_P0= Array(stokes.P0), stokes_R= Array(stokes.R), thermal=Array(thermal), 
     #         ρg=Array(ρg), η=Array(η), phase_c=Array(phase_c), phase_v=Array(phase_v), ϕ=Array(ϕ), Tracers=Array(Tracers), Tnew_cpu=Array(Tnew_cpu))
 
     
-    # finalize_global_grid(; finalize_MPI=true)
-    finalize_global_grid()
+    finalize_global_grid(; finalize_MPI=false)
+    # finalize_global_grid()
 
     # print_timer() 
     return thermal, stokes
@@ -952,11 +878,11 @@ end
 # figdir = "figs2D"
 # ni, xci, li, di, figdir ,thermal = DikeInjection_2D();
 function run()
-    figname = "ϕ_Toba_Inversion_GeoMod"
+    figname = "low_resolution"
     # nx     = 384-3    #to include ghost nodes with optimal performance at a multiple of 32
     # ny     = 768-3    #to include ghost nodes
-    nx     = 128    #to include ghost nodes with optimal performance at a multiple of 32
-    ny     = 128    #to include ghost nodes
+    nx     = 32    #to include ghost nodes with optimal performance at a multiple of 32
+    ny     = 32    #to include ghost nodes
     igg  = if !(JustRelax.MPI.Initialized())
         IGG(init_global_grid(nx-3, ny-3, 0; init_MPI= true)...)
     else
@@ -968,4 +894,4 @@ function run()
     
 end
 
-@time run()
+run()
