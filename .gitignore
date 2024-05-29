@@ -15,6 +15,7 @@ Manifest.toml
 */*.png
 */*.vti
 */*.vtm
+*/*.vtr
 */*.h5
 
 *.png
@@ -23,3 +24,5 @@ Manifest.toml
 *.h5
 *.txt
 *.out
+*.vtr
+*.history
