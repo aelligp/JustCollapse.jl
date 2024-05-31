@@ -15,6 +15,7 @@ const backend = CUDABackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 
 # Load script dependencies
 using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
+import GeoParams.Dislocation
 using StaticArrays
 # using ParallelStencil.FiniteDifferences2D   #specify Dimension
 # using ImplicitGlobalGrid
@@ -341,10 +342,6 @@ end
 #     end
 # end
 
-@parallel_indices (i, j) function compute_melt_fraction!(ϕ, rheology, args)
-    ϕ[i, j] = compute_meltfraction(rheology, ntuple_idx(args, i, j))
-    return nothing
-end
 
 @parallel_indices (I...) function compute_melt_fraction!(ϕ, phase_ratios, rheology, args)
     ϕ[I...] = compute_melt_frac(rheology, (;T=args.T[I...]), phase_ratios[I...])
@@ -571,7 +568,8 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             size=(ni[1], ni[2]),
             x=(extrema(Data_Cross.fields.FlatCrossSection) .* km),
             z=(
-                (minimum(Data_Cross.z.val) ./ 2.66) .* km, (maximum(Data_Cross.z.val)) .* km
+                # (minimum(Data_Cross.z.val) ./ 2.0) .* km, (maximum(Data_Cross.z.val)) .* km
+                (-25.0) .* km, (maximum(Data_Cross.z.val)) .* km
             ),
             CharDim=CharDim,
         ) #create new 2D grid for Injection routine
@@ -618,18 +616,19 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     εbg     = nondimensionalize(εbg, CharDim) # background strain rate
 
     # soft_C      = LinearSoftening((ustrip(Coh)/2, ustrip(Coh)), (0e0, 1e-1)) # softening law
-    soft_C      =  soft_C  = NonLinearSoftening(;ξ₀ = ustrip.(Coh), Δ=ustrip.(Coh)/2)
+    soft_C      =  soft_C  = NonLinearSoftening(;ξ₀ = ustrip.(Coh), Δ=ustrip.(Coh)/99)
     pl          = DruckerPrager_regularised(; C=Coh, ϕ=ϕ, η_vp=η_reg, Ψ=0.0, softening_C = soft_C)        # plasticity
 
     # el       = SetConstantElasticity(; G=G0, ν=0.46)                            # elastic spring
     el       = SetConstantElasticity(; G=G0, ν=0.3)                            # elastic spring
     el_magma = SetConstantElasticity(; G=G_magma, ν=0.3)                            # elastic spring
-    el_air   = SetConstantElasticity(; ν=0.5, Kb=0.101MPa)                            # elastic spring
+    el_air   = SetConstantElasticity(; ν=0.3, Kb=0.101MPa)                            # elastic spring
     # el_air   = SetConstantElasticity(; G=G0, ν=0.3)                            # elastic spring
     disl_upper_crust = DislocationCreep(;
         A=5.07e-18, n=2.3, E=154e3, V=0.0, r=0.0, R=8.3145
     ) #(;E=187kJ/mol,) Kiss et al. 2023
-    creep_rock = LinearViscous(; η=η_uppercrust * Pa * s)
+    # creep_rock = LinearViscous(; η=η_uppercrust * Pa * s)
+    creep_rock = SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
     # creep_rock = DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
     creep_magma = LinearViscous(; η=η_magma * Pa * s)
     creep_air = LinearViscous(; η=η_air * Pa * s)
@@ -664,7 +663,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat         = ConstantShearheating(1.0NoUnits),
             CompositeRheology = CompositeRheology((creep_rock, el, pl, )),
-            Melting = MeltingParam_Caricchi(),
+            Melting = MeltingParam_Smooth3rdOrder(),
             Elasticity = el,
             CharDim  = CharDim,),
 
@@ -677,7 +676,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat         = ConstantShearheating(0.0NoUnits),
             CompositeRheology = CompositeRheology((creep_magma, el_magma)),
-            Melting = MeltingParam_Caricchi(),
+            Melting = MeltingParam_Smooth3rdOrder(),
             Elasticity = el_magma,
             CharDim  = CharDim,),
 
@@ -690,7 +689,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat         = ConstantShearheating(0.0NoUnits),
             CompositeRheology = CompositeRheology((creep_magma,el_magma)),
-            Melting = MeltingParam_Caricchi(),
+            Melting = MeltingParam_Smooth3rdOrder(),
             Elasticity = el_magma,
             CharDim  = CharDim,),
 
@@ -748,14 +747,14 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     particle_args       = (pT, pT0, pPhases)
 
     if Topography == true
-        xc, yc = 0.5 * lx, 0.25 * -lz  # origin of thermal anomaly
-        x_anomaly, y_anomaly = lx * 0.5, -lz * 0.25  # Randomly vary center of dike
+        xc, yc = 0.5 * lx, 0.17 * -lz  # origin of thermal anomaly
+        x_anomaly, y_anomaly = lx * 0.5, -lz * 0.17  # Randomly vary center of dike
         # coordinates for case: ellipse = 35km
         # xc, yc = 0.66 * lx, 0.4 * -lz  # origin of thermal anomaly
         # x_anomaly, y_anomaly = lx * 0.66, -lz * 0.5  # Randomly vary center of dike
     elseif Freesurface == true
-        xc, yc = 0.5 * lx, 0.25 * -lz  # origin of thermal anomaly
-        x_anomaly, y_anomaly = lx * 0.5, -lz * 0.25  # Randomly vary center of dike
+        xc, yc = 0.5 * lx, 0.17 * -lz  # origin of thermal anomaly
+        x_anomaly, y_anomaly = lx * 0.5, -lz * 0.17  # Randomly vary center of dike
         # xc, yc = 0.5 * lx, 0.5 * -(lz-nondimensionalize(sticky_air,CharDim))  # origin of thermal anomaly
         # x_anomaly, y_anomaly = lx * 0.5, -(lz-nondimensionalize(sticky_air,CharDim)) * 0.6 # Randomly vary center of dike
     else
@@ -901,7 +900,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 thermal.T, δT, (lx * 1 / 8, lx * 7 / 8), (-2000e3, -2600e3), xvi
             )
         elseif thermal_perturbation == :circular
-            δT = 10.0              # thermal perturbation (in %)
+            δT = 20.0              # thermal perturbation (in %)
             r  = nondimensionalize(5km, CharDim)         # radius of perturbation
             circular_perturbation!(thermal.T, δT, xc, yc, r, xvi)
 
@@ -913,8 +912,8 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         elseif thermal_perturbation == :elliptical_anomaly
             anomaly = nondimensionalize(temp_anomaly, CharDim) # temperature anomaly
             radius  = nondimensionalize(ellipse, CharDim)         # radius of perturbation
-            offset  = nondimensionalize(350C, CharDim)
-            δT      = 40.0              # thermal perturbation (in %)
+            offset  = nondimensionalize(500C, CharDim)
+            δT      = 25.0              # thermal perturbation (in %)
             elliptical_anomaly_gradient!(
                     thermal.T, offset, xc, yc, a, b, radius, xvi
                     )
@@ -976,26 +975,26 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     end
 
     # dt *= 0.2
-    while it < 35 #nt
+    while it < 150 #nt
 
 
-        # if rem(it, 75) == 0
-        #     # if it > 75 && rem(it, 75) == 0
-        #         x_anomaly, y_anomaly = lx * 0.6, -lz * 0.27  # Randomly vary center of dike
-        #         r_anomaly = nondimensionalize(0.75km,CharDim)
-        #         δT = 20.0              # thermal perturbation (in %)
-        #         new_thermal_anomaly(pPhases, particles, x_anomaly, y_anomaly, r_anomaly)
-        #         circular_perturbation!(thermal.T, δT, x_anomaly, -y_anomaly, r_anomaly, xvi)
-        #         for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
-        #             copyinn_x!(dst, src)
-        #         end
-        #         @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
-        #         @views thermal.T[2:end-1, :] .= T_buffer
-        #         temperature2center!(thermal)
-        #         grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles.coords)
+        if rem(it, 25) == 0
+            # if it > 75 && rem(it, 75) == 0
+            x_anomaly, y_anomaly = lx * 0.5, -lz * 0.17  # Randomly vary center of dike
+                r_anomaly = nondimensionalize(0.75km,CharDim)
+                δT = 30.0              # thermal perturbation (in %)
+                new_thermal_anomaly(pPhases, particles, x_anomaly, y_anomaly, r_anomaly)
+                circular_perturbation!(thermal.T, δT, x_anomaly, -y_anomaly, r_anomaly, xvi)
+                for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
+                    copyinn_x!(dst, src)
+                end
+                @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
+                @views thermal.T[2:end-1, :] .= T_buffer
+                temperature2center!(thermal)
+                grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
 
-        #         phase_ratios_center(phase_ratios, particles, grid, pPhases)
-        #     end
+                phase_ratios_center!(phase_ratios, particles, grid, pPhases)
+            end
 
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc)
 
