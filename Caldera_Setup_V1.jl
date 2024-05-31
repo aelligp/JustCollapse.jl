@@ -978,23 +978,23 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     while it < 150 #nt
 
 
-        if rem(it, 25) == 0
-            # if it > 75 && rem(it, 75) == 0
+        # if rem(it, 25) == 0
+        if it > 1 && rem(it, 25) == 0
             x_anomaly, y_anomaly = lx * 0.5, -lz * 0.17  # Randomly vary center of dike
-                r_anomaly = nondimensionalize(0.75km,CharDim)
-                δT = 30.0              # thermal perturbation (in %)
-                new_thermal_anomaly(pPhases, particles, x_anomaly, y_anomaly, r_anomaly)
-                circular_perturbation!(thermal.T, δT, x_anomaly, -y_anomaly, r_anomaly, xvi)
-                for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
-                    copyinn_x!(dst, src)
-                end
-                @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
-                @views thermal.T[2:end-1, :] .= T_buffer
-                temperature2center!(thermal)
-                grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
-
-                phase_ratios_center!(phase_ratios, particles, grid, pPhases)
+            r_anomaly = nondimensionalize(0.75km,CharDim)
+            δT = 30.0              # thermal perturbation (in %)
+            new_thermal_anomaly(pPhases, particles, x_anomaly, y_anomaly, r_anomaly)
+            circular_perturbation!(thermal.T, δT, x_anomaly, -y_anomaly, r_anomaly, xvi)
+            for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
+                copyinn_x!(dst, src)
             end
+            @views T_buffer[:, end] .= nondimensionalize(0.0C, CharDim)
+            @views thermal.T[2:end-1, :] .= T_buffer
+            temperature2center!(thermal)
+            grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
+
+            phase_ratios_center!(phase_ratios, particles, grid, pPhases)
+        end
 
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc)
 
@@ -1121,7 +1121,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         # check if we need to inject particles
         inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer, ), xvi)
         #phase change for particles
-        phase_change!(pPhases, particles)
+        # phase_change!(pPhases, particles)
         # update phase ratios
         phase_ratios_center!(phase_ratios, particles, grid, pPhases)
         @parallel (@idx ni) compute_melt_fraction!(
@@ -1228,8 +1228,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             idxv = particles.index.data[:]
 
             if do_vtk
-                # JustRelax.velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
-
+                # velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
                 data_v = (;
                     T   = Array(T_d),
                     τxy = Array(τxy_d),
@@ -1244,12 +1243,17 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                     ϕ   = Array(ϕ_d),
                     ρ  = Array(ρ_d),
                 )
+                velocity_v = (
+                    Array(Vx_d),
+                    Array(Vy_d),
+                )
                 save_vtk(
                     joinpath(vtk_dir, "vtk_" * lpad("$it", 6, "0")),
                     (x_v,y_v),
                     (x_c,y_c),
                     data_v,
                     data_c,
+                    velocity_v
                 )
             end
 
@@ -1439,7 +1443,7 @@ end
     # mkdir(figname)
     do_vtk = true
     ar = 2 # aspect ratio
-    n = 128
+    n = 256
     nx = n * ar - 2
     ny = n - 2
     nz = n - 2
