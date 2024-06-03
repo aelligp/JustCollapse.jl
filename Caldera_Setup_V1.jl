@@ -465,6 +465,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     # IO ----- -------------------------------------------
     # if it does not exist, make folder where figures are stored
     figdir = "./fig2D/$figname/"
+    checkpoint = joinpath(figdir, "checkpoint")
     if do_vtk
         vtk_dir      = joinpath(figdir,"vtk")
         take(vtk_dir)
@@ -1142,7 +1143,25 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
 
         #  # # Plotting -------------------------------------------------------
         if it == 1 || rem(it, 1) == 0
-            # checkpointing_jld2(figdir, stokes, thermal, η, particles, pPhases, t; igg=igg)
+            if it == 1
+                metadata(pwd(), checkpoint, "Caldera_Setup_2D.jl")
+            end
+            checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
+            ## Somehow fails to open with load("particles.jld2")
+            mktempdir() do tmpdir
+                # Save the checkpoint file in the temporary directory
+                tmpfname = joinpath(tmpdir, basename(joinpath(checkpoint, "particles.jld2")))
+                jldsave(
+                    tmpfname;
+                    particles=Array(particles),
+                    pPhases=Array(pPhases),
+                    time=t,
+                    timestep=dt,
+                )
+                # Move the checkpoint file from the temporary directory to the destination directory
+                mv(tmpfname, joinpath(checkpoint, "particles.jld2"); force=true)
+            end
+
 
             # Arrow plotting routine
             Xc, Yc = [x for x in xvi[1], y in xvi[2]], [y for x in xvi[1], y in xvi[2]]
