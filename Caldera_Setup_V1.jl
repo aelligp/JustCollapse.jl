@@ -382,6 +382,28 @@ function phase_change!(phases, particles)
     @parallel (@idx ni) _phase_change!( phases, particles.coords..., particles.index)
 end
 
+function phase_change!(phases, EII_pl, particles)
+    ni = size(phases)
+    @parallel_indices (I...) function _phase_change!(phases, EII_pl, px, py, index)
+
+        @inbounds for ip in JustRelax.cellaxes(phases)
+            #quick escape
+            JustRelax.@cell(index[ip, I...]) == 0 && continue
+
+            x = JustRelax.@cell px[ip,I...]
+            y = (JustRelax.@cell py[ip,I...])
+            phase_ij = @cell phases[ip, I...]
+            EII_pl_ij = EII_pl[I...]
+            if EII_pl_ij > 1e-1 && (phase_ij < 4.0)
+                @cell phases[ip, I...] = 2.0
+            end
+        end
+        return nothing
+    end
+
+    @parallel (@idx ni) _phase_change!(phases, EII_pl, particles.coords..., particles.index)
+end
+
 function open_conduit!(phases, particles, xc_conduit, yc_conduit, r_conduit)
     ni = size(phases)
     @parallel_indices (I...) function _open_conduit!(phases, px, py, index, xc_conduit, yc_conduit, r_conduit)
@@ -429,7 +451,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     #-----------------------------------------------------
     # USER INPUTS
     #-----------------------------------------------------
-    Topography= true; #specify if you want topography plotted in the figures
+    Topography= false; #specify if you want topography plotted in the figures
     Freesurface = true #specify if you want to use freesurface
         sticky_air = 5km #specify the thickness of the sticky air layer
     Inject_Dike = false #specify if you want to inject a dike
@@ -610,19 +632,19 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     do_DP   = true               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
     η_reg   = 1.0e16Pas           # regularisation "viscosity" for Drucker-Prager
     Coh     = 10.0MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    ϕ       = 30.0 * do_DP         # friction angle
+    ϕ_fric       = 30.0 * do_DP         # friction angle
     G0      = 25e9Pa        # elastic shear modulus
     G_magma = 10e9Pa        # elastic shear modulus perturbation
     εbg     = 2e-14 / s             # background strain rate
     εbg     = nondimensionalize(εbg, CharDim) # background strain rate
 
     # soft_C      = LinearSoftening((ustrip(Coh)/2, ustrip(Coh)), (0e0, 1e-1)) # softening law
-    soft_C      =  soft_C  = NonLinearSoftening(;ξ₀ = ustrip.(Coh), Δ=ustrip.(Coh)/99)
-    pl          = DruckerPrager_regularised(; C=Coh, ϕ=ϕ, η_vp=η_reg, Ψ=0.0, softening_C = soft_C)        # plasticity
+    soft_C      = NonLinearSoftening(;ξ₀ = ustrip.(Coh), Δ=ustrip.(Coh)/9999)
+    pl          = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C = soft_C)        # plasticity
 
     # el       = SetConstantElasticity(; G=G0, ν=0.46)                            # elastic spring
-    el       = SetConstantElasticity(; G=G0, ν=0.3)                            # elastic spring
-    el_magma = SetConstantElasticity(; G=G_magma, ν=0.3)                            # elastic spring
+    el       = SetConstantElasticity(; G=G0, ν=0.25)                            # elastic spring
+    el_magma = SetConstantElasticity(; G=G_magma, ν=0.25)                            # elastic spring
     el_air   = SetConstantElasticity(; ν=0.3, Kb=0.101MPa)                            # elastic spring
     # el_air   = SetConstantElasticity(; G=G0, ν=0.3)                            # elastic spring
     disl_upper_crust = DislocationCreep(;
@@ -864,6 +886,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     τxy_viz   = Array{Float64}(undef,ni_v_viz...)                                 # Shear stress with ni_viz .-1
     τII_viz   = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the stress tensor with ni_viz .-2
     εII_viz   = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the strain tensor with ni_viz .-2
+    EII_pl_viz   = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the strain tensor with ni_viz .-2
     εxy_viz   = Array{Float64}(undef,ni_v_viz...)                                 # Shear strain with ni_viz .-1
     η_viz     = Array{Float64}(undef,ni_viz...)                                   # Viscosity with ni_viz .-2
     η_vep_viz = Array{Float64}(undef,ni_viz...)                                   # Viscosity for the VEP with ni_viz .-2
@@ -1045,11 +1068,13 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         # @views thermal.T[2:end-1, :] .= T_buffer
         # temperature2center!(thermal)
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt)
-        compute_ρg!(ρg[end], phase_ratios, MatParam, (T=thermal.Tc, P=stokes.P))
-        compute_viscosity!(
-            stokes, phase_ratios, args, MatParam, cutoff_visc
-        )
+        # for i in eachindex(stokes.EII_pl)
+        #     if stokes.EII_pl[i] > 1e-3
+        #         stokes.viscosity.η[i] = nondimensionalize(creep_magma.η,CharDim)
+        #     end
+
+        # end
+
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc)
         # Stokes solver -----------------
         solve!(
@@ -1122,6 +1147,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         # check if we need to inject particles
         inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer, ), xvi)
         #phase change for particles
+        phase_change!(pPhases, stokes.EII_pl, particles)
         # phase_change!(pPhases, particles)
         # update phase ratios
         phase_ratios_center!(phase_ratios, particles, grid, pPhases)
@@ -1144,7 +1170,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         #  # # Plotting -------------------------------------------------------
         if it == 1 || rem(it, 1) == 0
             if it == 1
-                metadata(pwd(), checkpoint, "Caldera_Setup_2D.jl")
+                metadata(pwd(), checkpoint, "Caldera_Setup_V1.jl")
             end
             checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
             ## Somehow fails to open with load("particles.jld2")
@@ -1198,6 +1224,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             P_inn = Array(stokes.P[2:(end - 1), 2:(end - 1)])
             τII_inn = Array(stokes.τ.II[2:(end - 1), 2:(end - 1)])
             τxy_inn = Array(stokes.τ.xy[2:(end - 1), 2:(end - 1)])
+            EII_pl_inn = Array(stokes.EII_pl[2:(end - 1), 2:(end - 1)])
             εII_inn = Array(stokes.ε.II[2:(end - 1), 2:(end - 1)])
             εxy_inn = Array(stokes.ε.xy[2:(end - 1), 2:(end - 1)])
             η_inn = Array(stokes.viscosity.η[2:(end - 1), 2:(end - 1)])
@@ -1212,6 +1239,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             gather!(P_inn, P_viz)
             gather!(τII_inn, τII_viz)
             gather!(τxy_inn, τxy_viz)
+            gather!(EII_pl_inn, EII_pl_viz)
             gather!(εII_inn, εII_viz)
             gather!(εxy_inn, εxy_viz)
             gather!(η_inn, η_viz)
@@ -1231,6 +1259,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             ϕ_d = Array(ϕ_viz)
             τII_d = ustrip.(dimensionalize(Array(τII_viz), MPa, CharDim))
             τxy_d = ustrip.(dimensionalize(Array(τxy_viz), MPa, CharDim))
+            EII_pl_d = Array(EII_pl_viz)
             εII_d = ustrip.(dimensionalize(Array(εII_viz), s^-1, CharDim))
             εxy_d = ustrip.(dimensionalize(Array(εxy_viz), s^-1, CharDim))
             t_yrs = dimensionalize(t, yr, CharDim)
@@ -1349,7 +1378,8 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 ax5 = Axis(
                     fig[4, 1][1, 1];
                     aspect=ar,
-                    title=L"Phases",
+                    title=L"Plastic Strain",
+                    # title=L"Phases",
                     xlabel="Width [km]",
                     titlesize=40,
                     yticklabelsize=25,
@@ -1380,6 +1410,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 @views η_vep_d[pp.==4.0] .= NaN
                 @views τII_d[pp.==4.0] .= NaN
                 @views εII_d[pp.==4.0] .= NaN
+                @views EII_pl_d[pp.==4.0] .= NaN
                 @views ϕ_d[pp.==4.0] .= NaN
                 @views Vy_d[1:end-1, 1:end-1][pp.==4.0] .=NaN
 
@@ -1390,9 +1421,10 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 p3 = heatmap!(ax3, x_v, y_v, Vy_d; colormap=:vik)
                 # p3 = heatmap!(ax3, x_v, y_v, τII_d; colormap=:batlow)
                 p4 = heatmap!(ax4, x_c, y_c, log10.(εII_d); colormap=:glasgow, colorrange= (log10(5e-15), log10(5e-12)))
-                p5 = scatter!(
-                    ax5, Array(pxv[idxv]), Array(pyv[idxv]); color=Array(clr[idxv]), markersize=2
-                )
+                p5 = heatmap!(ax5, x_c, y_c, EII_pl_d; colormap=:glasgow)
+                # p5 = scatter!(
+                #     ax5, Array(pxv[idxv]), Array(pyv[idxv]); color=Array(clr[idxv]), markersize=2
+                # )
                 arrows!(
                     ax5,
                     x_c[1:5:end-1], y_c[1:5:end-1], Array.((Vx_d[1:5:end-1, 1:5:end-1], Vy_d[1:5:end-1, 1:5:end-1]))...,
@@ -1458,11 +1490,11 @@ end
 
 
 # function run()
-    figname = "Caldera_setup_V1"
+    figname = "Particles_loading"
     # mkdir(figname)
     do_vtk = true
     ar = 2 # aspect ratio
-    n = 256
+    n = 128
     nx = n * ar - 2
     ny = n - 2
     nz = n - 2
