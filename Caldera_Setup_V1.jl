@@ -669,6 +669,9 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     (; xci, xvi) = grid # nodes at the center and vertices of the cells
     #---------------------------------------------------------------------------------------
 
+    ## randomize cohesion
+    perturbation_C = @rand(ni...) # perturbation of the cohesion
+
     # Set material parameters
     MatParam = (
         #Name="UpperCrust"
@@ -842,7 +845,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     Tnew_cpu = Array{Float64}(undef, ni .+ 1...)                  # Temperature for the CPU
     Phi_melt_cpu = Array{Float64}(undef, ni...)                    # Melt fraction for the CPU
 
-    args = (; T=thermal.Tc, P=stokes.P, dt=dt,  ΔTc=thermal.ΔTc)
+    args = (; T=thermal.Tc, P=stokes.P, dt=dt,  ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
     # PT coefficients for thermal diffusion -------------
     pt_thermal = PTThermalCoeffs(
@@ -890,7 +893,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     ρg_viz    = Array{Float64}(undef,ni_viz...)                                   # Buoyancy force with ni_viz .-2
 
     # Arguments for functions
-    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc)
+    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
     @copy thermal.Told thermal.T
     @copy Tnew_cpu Array(thermal.T[2:(end - 1), :])
 
@@ -1006,7 +1009,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         end
         while Restart
             for iter in 1:iterMax_stokes
-                args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc)
+                args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
                 # Stokes solver -----------------
                 iter, err_evo1 =
                 solve!(
