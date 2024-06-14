@@ -25,4 +25,9 @@ Manifest.toml
 *.txt
 *.out
 *.vtr
+*.vts
 *.history
+*.bmp
+*.gif
+*.jld2
+*/*/checkpoint/*
