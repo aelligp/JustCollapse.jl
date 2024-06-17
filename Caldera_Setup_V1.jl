@@ -626,6 +626,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     do_DP   = true               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
     η_reg   = 1.0e15Pas           # regularisation "viscosity" for Drucker-Prager
     Coh     = 10.0MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
+    perturbation_C = @rand(ni...) # perturbation of the cohesion
     ϕ_fric       = 30.0 * do_DP         # friction angle
     G0      = 25e9Pa        # elastic shear modulus
     G_magma = 10e9Pa        # elastic shear modulus perturbation
@@ -668,9 +669,6 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     grid         = Geometry(ni, li; origin = origin)
     (; xci, xvi) = grid # nodes at the center and vertices of the cells
     #---------------------------------------------------------------------------------------
-
-    ## randomize cohesion
-    perturbation_C = @rand(ni...) # perturbation of the cohesion
 
     # Set material parameters
     MatParam = (
@@ -885,7 +883,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     τxy_viz   = Array{Float64}(undef,ni_v_viz...)                                 # Shear stress with ni_viz .-1
     τII_viz   = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the stress tensor with ni_viz .-2
     εII_viz   = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the strain tensor with ni_viz .-2
-    EII_pl_viz   = Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the strain tensor with ni_viz .-2
+    EII_pl_viz= Array{Float64}(undef,ni_viz...)                                   # 2nd invariant of the strain tensor with ni_viz .-2
     εxy_viz   = Array{Float64}(undef,ni_v_viz...)                                 # Shear strain with ni_viz .-1
     η_viz     = Array{Float64}(undef,ni_viz...)                                   # Viscosity with ni_viz .-2
     η_vep_viz = Array{Float64}(undef,ni_viz...)                                   # Viscosity for the VEP with ni_viz .-2
