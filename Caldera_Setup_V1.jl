@@ -38,11 +38,11 @@ Topo = convert2CartData(LonLat, proj);
 println("Done loading Model... starting Dike Injection 2D routine")
 #------------------------------------------------------------------------------------------
 
-function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r, xc_anomaly, yc_anomaly, r_anomaly,xc_conduit, yc_conduit, r_conduit)
+function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r, xc_anomaly, yc_anomaly, r_anomaly,x_bottom, y_bottom, width, height)
     ni = size(phases)
-
+    @info x_bottom, y_bottom, width, height
     @parallel_indices (i, j) function init_phases!(
-        phases, px, py, index, phases_topo, xc, yc, a, b, r, xc_anomaly, yc_anomaly, r_anomaly,xc_conduit, yc_conduit, r_conduit
+        phases, px, py, index, phases_topo, xc, yc, a, b, r, xc_anomaly, yc_anomaly, r_anomaly, x_bottom, y_bottom, width, height
     )
         @inbounds for ip in JustRelax.JustRelax.cellaxes(phases)
             # quick escape
@@ -52,7 +52,8 @@ function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r, xc_anomal
             y = -(JustRelax.@cell py[ip, i, j])
             @cell phases[ip, i, j] = 1.0 # crust
 
-            if ((x - xc_conduit)^2 ≤ r_conduit^2) && (0.25*(y - yc_conduit)^2 ≤ r_conduit^2)
+            # Check if the point is inside the rectangle
+            if x >= x_bottom && x <= x_bottom + width && y >= y_bottom && y <= y_bottom + height
                 JustRelax.@cell phases[ip, i, j] = 1.0
             end
 
@@ -75,7 +76,7 @@ function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r, xc_anomal
     end
 
     @parallel (@idx ni) init_phases!(
-        phases, particles.coords..., particles.index, phases_topo, xc, yc, a, b, r, xc_anomaly, yc_anomaly, r_anomaly, xc_conduit, yc_conduit, r_conduit
+        phases, particles.coords..., particles.index, phases_topo, xc, yc, a, b, r, xc_anomaly, yc_anomaly, r_anomaly, x_bottom, y_bottom, width, height
     )
 end
 
@@ -260,50 +261,35 @@ end
     return nothing
 end
 
-function conduit_gradient!(T, offset, xc_conduit, yc_conduit, r_conduit, xvi)
-
+function conduit_gradient!(T, offset, xvi, x_bottom, y_bottom, width, height)
+    @info x_bottom, y_bottom, width, height
     @parallel_indices (i, j) function _conduit_gradient!(
-        T, offset, xc_conduit, yc_conduit, r_conduit, x, y
+        T, offset, x, y, x_bottom, y_bottom, width, height
     )
-        @inbounds if ((x[i] - xc_conduit)^2 ≤ r_conduit^2) && (0.325*(y[j] - yc_conduit)^2 ≤ r_conduit^2)
+        @inbounds if x[i] >= x_bottom && x[i] <= (x_bottom + width) && y[j] >= y_bottom && y[j] <= (y_bottom + height)
             T[i+1, j] += offset
         end
         return nothing
     end
     nx, ny = size(T)
 
-    @parallel (1:nx-2, 1:ny) _conduit_gradient!(T, offset, xc_conduit, yc_conduit, r_conduit, xvi...)
+    @parallel (1:nx-2, 1:ny) _conduit_gradient!(T, offset, xvi..., x_bottom, y_bottom, width, height)
 end
 
-function conduit_gradient_TBuffer!(T, offset, xc_conduit, yc_conduit, r_conduit, xvi)
 
-    @parallel_indices (i, j) function _conduit_gradient_TBuffer!(
-        T, offset, xc_conduit, yc_conduit, r_conduit, x, y
-    )
-        @inbounds if ((x[i] - xc_conduit)^2 ≤ r_conduit^2) && (0.325*(y[j] - yc_conduit)^2 ≤ r_conduit^2)
-            T[i, j] += offset
-            # T[i + 1, j] = rand(0.55:0.001:offset)
+function circular_perturbation!(T, δT, max_temperature, xc_anomaly, yc_anomaly, r_anomaly, xvi)
+
+    @parallel_indices (i, j) function _circular_perturbation!(T, δT, max_temperature, xc_anomaly, yc_anomaly, r_anomaly, x, y)
+        @inbounds if  ((x[i] - xc_anomaly)^2 + (y[j] + yc_anomaly)^2 ≤ r_anomaly^2)
+            new_temperature = T[i+1, j] * (δT / 100 + 1)
+            T[i+1, j] = new_temperature > max_temperature ? max_temperature : new_temperature
         end
         return nothing
     end
+
     nx, ny = size(T)
 
-    @parallel (1:nx, 1:ny) _conduit_gradient_TBuffer!(T, offset, xc_conduit, yc_conduit, r_conduit, xvi...)
-end
-
-
-function circular_perturbation!(T, δT, xc_anomaly, yc_anomaly, r_anomaly, xvi)
-
-    @parallel_indices (i, j) function _circular_perturbation!(T, δT, xc_anomaly, yc_anomaly, r_anomaly, x, y)
-    @inbounds if  ((x[i] - xc_anomaly)^2 + (y[j] + yc_anomaly)^2 ≤ r_anomaly^2)
-        T[i+1, j] *= δT / 100 + 1
-    end
-    return nothing
-end
-
-nx, ny = size(T)
-
-@parallel (1:nx-2, 1:ny) _circular_perturbation!(T, δT, xc_anomaly, yc_anomaly, r_anomaly, xvi...)
+    @parallel (1:nx-2, 1:ny) _circular_perturbation!(T, δT, max_temperature, xc_anomaly, yc_anomaly, r_anomaly, xvi...)
 end
 
 @parallel_indices (i, j) function circular_perturbation_particles!(temperature, phases, px, py, index, δT, xc, yc, r)
@@ -393,7 +379,7 @@ function phase_change!(phases, EII_pl, threshold, particles)
             x = JustRelax.@cell px[ip,I...]
             y = (JustRelax.@cell py[ip,I...])
             phase_ij = @cell phases[ip, I...]
-            EII_pl_ij = EII_pl[I...]
+            EII_pl_ij = @cell EII_pl[ip, I...]
             if EII_pl_ij > threshold && (phase_ij < 4.0)
                 @cell phases[ip, I...] = 2.0
             end
@@ -402,6 +388,28 @@ function phase_change!(phases, EII_pl, threshold, particles)
     end
 
     @parallel (@idx ni) _phase_change!(phases, EII_pl, threshold, particles.coords..., particles.index)
+end
+
+function phase_change!(phases, melt_fraction, threshold, sticky_air_phase, particles)
+    ni = size(phases)
+    @parallel_indices (I...) function _phase_change!(phases, melt_fraction, threshold, sticky_air_phase, px, py, index)
+
+        @inbounds for ip in JustRelax.cellaxes(phases)
+            #quick escape
+            JustRelax.@cell(index[ip, I...]) == 0 && continue
+
+            x = JustRelax.@cell px[ip,I...]
+            y = (JustRelax.@cell py[ip,I...])
+            phase_ij = @cell phases[ip, I...]
+            melt_fraction_ij = @cell melt_fraction[ip, I...]
+            if melt_fraction_ij < threshold && (phase_ij < sticky_air_phase)
+                @cell phases[ip, I...] = 1.0
+            end
+        end
+        return nothing
+    end
+
+    @parallel (@idx ni) _phase_change!(phases, melt_fraction, threshold, sticky_air_phase, particles.coords..., particles.index)
 end
 
 function open_conduit!(phases, particles, xc_conduit, yc_conduit, r_conduit)
@@ -475,9 +483,6 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     η_magma = 1e15                  #viscosity of the magma
     η_air = 1e15                    #viscosity of the air
 
-    #-----------------------------------------------------
-
-    # IO ------------------------------------------------
     # IO ----- -------------------------------------------
     # if it does not exist, make folder where figures are stored
     figdir = "./fig2D/$figname/"
@@ -761,8 +766,8 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     # velocity grids
     grid_vx, grid_vy = velocity_grids(xci, xvi, di)
     # temperature
-    pT, pT0, pPhases    = init_cell_arrays(particles, Val(3))
-    particle_args       = (pT, pT0, pPhases)
+    pT, pT0, pPhases, pη_vep, pEII, pϕ    = init_cell_arrays(particles, Val(6))
+    particle_args       = (pT, pT0, pPhases, pη_vep, pEII, pϕ)
 
     if Topography == true
         xc, yc = 0.5 * lx, 0.17 * -lz  # origin of thermal anomaly
@@ -786,9 +791,15 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     r_anomaly = nondimensionalize(0.75km,CharDim)             # radius of perturbation
     # Case for ellipse = 35km
     # r_anomaly = nondimensionalize(1.5km,CharDim)             # radius of perturbation
-    xc_conduit, yc_conduit, r_conduit = (lx*0.5),nondimensionalize(4.15km,CharDim),nondimensionalize(2.3km,CharDim)
 
-    init_phases!(pPhases, particles, phases_topo_v, xc, yc, a, b, radius, x_anomaly, y_anomaly, r_anomaly, xc_conduit, yc_conduit, r_conduit)
+    # Parameters for the rectangle
+    x_bottom = (lx*0.49)  # x-coordinate of the bottom edge of the rectangle
+    y_bottom = yc + b  # y-coordinate of the bottom edge of the rectangle
+    width = nondimensionalize(1km, CharDim)  # Width of the rectangle
+    height = nondimensionalize(5km, CharDim)  # Height of the rectangle
+    # xc_conduit, yc_conduit, r_conduit = (lx*0.5),nondimensionalize(4.15km,CharDim),nondimensionalize(2.3km,CharDim)
+
+    init_phases!(pPhases, particles, phases_topo_v, xc, yc, a, b, radius, x_anomaly, y_anomaly, r_anomaly, x_bottom, y_bottom, width, height)
     phase_ratios = PhaseRatio(backend_JR, ni, length(MatParam))
 
     phase_ratios_center!(phase_ratios, particles, grid, pPhases)
@@ -909,7 +920,8 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         elseif thermal_perturbation == :circular
             δT = 20.0              # thermal perturbation (in %)
             r  = nondimensionalize(5km, CharDim)         # radius of perturbation
-            circular_perturbation!(thermal.T, δT, xc, yc, r, xvi)
+            max_temperature = nondimensionalize(1250C, CharDim)
+            circular_perturbation!(thermal.T, δT, max_temperature,xc, yc, r, xvi)
 
         elseif thermal_perturbation == :circular_anomaly
             anomaly = nondimensionalize(temp_anomaly, CharDim) # temperature anomaly
@@ -919,13 +931,14 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         elseif thermal_perturbation == :elliptical_anomaly
             anomaly = nondimensionalize(temp_anomaly, CharDim) # temperature anomaly
             radius  = nondimensionalize(ellipse, CharDim)         # radius of perturbation
-            offset  = nondimensionalize(500C, CharDim)
+            offset  = nondimensionalize(600C, CharDim)
+            max_temperature = nondimensionalize(1250C, CharDim)
             δT      = 25.0              # thermal perturbation (in %)
             elliptical_anomaly_gradient!(
                     thermal.T, offset, xc, yc, a, b, radius, xvi
                     )
-            # conduit_gradient!(thermal.T, offset, xc_conduit, -yc_conduit, r_conduit, xvi)
-            circular_perturbation!(thermal.T, δT, x_anomaly, -y_anomaly, r_anomaly, xvi)
+            # conduit_gradient!(thermal.T, offset, xvi, x_bottom, y_bottom, width, height)#, x_bottom, y_bottom, width, height)
+            circular_perturbation!(thermal.T, δT, max_temperature, x_anomaly, -y_anomaly, r_anomaly, xvi)
         end
     end
     # make sure they are the same
@@ -942,6 +955,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     iterMax_stokes = 250e3
     iterMax_thermal = 10e3
     dt_array = Float64[]
+    dt_new, dt_mean = dt, dt
     local Vx_v, Vy_v
     if do_vtk
         Vx_v = @zeros(ni.+1...)
@@ -957,6 +971,9 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         copyinn_x!(dst, src)
     end
     grid2particle!(pT, xvi, T_buffer, particles)
+    centroid2particle!(pη_vep, xci, stokes.viscosity.η_vep, particles)
+    centroid2particle!(pEII, xci, stokes.EII_pl, particles)
+    centroid2particle!(pϕ, xci, ϕ, particles)
     pT0.data    .= pT.data
     @copy stokes.P0 stokes.P
 
@@ -983,17 +1000,20 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     end
 
     while it < 150 #nt
-        dt = dt_new
+        if it > 1
+            dt = dt_new
+        end
         Restart = true
 
         # if rem(it, 25) == 0
         # if it > 1 && rem(it, 25) == 0
-        if it > 1 && ustrip(dimensionalize(t,yr,CharDim)) >= (ustrip(3.5e3yr)*interval)
+        if it > 1 && ustrip(dimensionalize(t,yr,CharDim)) >= (ustrip(1.5e3yr)*interval)
             x_anomaly, y_anomaly = lx * 0.5, -lz * 0.17  # Randomly vary center of dike
             r_anomaly = nondimensionalize(0.75km,CharDim)
+            max_temperature = nondimensionalize(1250C, CharDim)
             δT = 30.0              # thermal perturbation (in %)
             new_thermal_anomaly(pPhases, particles, x_anomaly, y_anomaly, r_anomaly)
-            circular_perturbation!(thermal.T, δT, x_anomaly, -y_anomaly, r_anomaly, xvi)
+            circular_perturbation!(thermal.T, δT, max_temperature, x_anomaly, -y_anomaly, r_anomaly, xvi)
             for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
                 copyinn_x!(dst, src)
             end
@@ -1029,7 +1049,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 )
                 tensor_invariant!(stokes.ε)
 
-                if iter < iterMax_stokes && err_evo1[end] < pt_stokes.ϵ
+                if iter ≤ iterMax_stokes && err_evo1[end] < pt_stokes.ϵ
                     @info "Stokes solver converged ($(dimensionalize(dt,yr,CharDim)))"
                     Restart = false
                     push!(dt_array,dt) # Add the
@@ -1037,7 +1057,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                         popfirst!(dt_array)
                     end
                     if length(dt_array) == 5  # If we have 5 time steps, compute the average
-                        dt_mean .= mean(dt_array)
+                        dt_mean = mean(dt_array)
                     end
 
                     break
@@ -1047,7 +1067,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 end
             end
         end
-
+        ≤
         # dt = compute_dt(stokes, di, dt_diff, igg) #* 0.1
         ## Save the checkpoint file before a possible thermal solver blow up
         checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
@@ -1080,9 +1100,9 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             )
         )
 
-        if iter_count == iterMax_thermal || (norm_ResT < pt_thermal.ϵ)
-            @error "Thermal solver did not converge"
-        end
+        # if iter_count == iterMax_thermal || (norm_ResT < pt_thermal.ϵ)
+        #     @error "Thermal solver did not converge"
+        # end
 
         for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
             copyinn_x!(dst, src)
@@ -1094,7 +1114,14 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         subgrid_diffusion!(
             pT, T_buffer, thermal.ΔT[2:end-1, :], subgrid_arrays, particles, xvi,  di, dt
         )
+        @parallel (@idx ni) compute_melt_fraction!(
+            ϕ, phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
+        )
         # ------------------------------
+        # Update the particles Arguments
+        centroid2particle!(pη_vep, xci, stokes.viscosity.η_vep, particles)
+        centroid2particle!(pEII, xci, stokes.EII_pl, particles)
+        centroid2particle!(pϕ, xci, ϕ, particles)
 
         # Advection --------------------
         # advect particles in space
@@ -1106,13 +1133,14 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         # check if we need to inject particles
         inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer, ), xvi)
         #phase change for particles
-        phase_change!(pPhases, stokes.EII_pl, 2e-2, particles)
-        # phase_change!(pPhases, particles)
+        phase_change!(pPhases, pϕ, 0.05, 4.0, particles)
+        phase_change!(pPhases, pEII, 1e-2, particles)
+        phase_change!(pPhases, particles)
         # update phase ratios
         phase_ratios_center!(phase_ratios, particles, grid, pPhases)
-        @parallel (@idx ni) compute_melt_fraction!(
-            ϕ, phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
-        )
+        # @parallel (@idx ni) compute_melt_fraction!(
+        #     ϕ, phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
+        # )
 
         particle2grid!(T_buffer, pT, xvi, particles)
         @views T_buffer[:, end] .= Tsurf
@@ -1389,6 +1417,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 # p3 = heatmap!(ax3, x_v, y_v, τII_d; colormap=:batlow)
                 p4 = heatmap!(ax4, x_c, y_c, log10.(εII_d); colormap=:glasgow, colorrange= (log10(5e-15), log10(5e-12)))
                 p5 = heatmap!(ax5, x_c, y_c, EII_pl_d; colormap=:glasgow)
+                contour!(ax5, x_c, y_c, T_d, ; color=:white, levels=600:200:1200, labels = true)
                 # p5 = scatter!(
                 #     ax5, Array(pxv[idxv]), Array(pyv[idxv]); color=Array(clr[idxv]), markersize=2
                 # )
@@ -1448,6 +1477,22 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                     save(joinpath(figdir, "pressure_profile_$it.png"), fig)
                     fig
                 end
+                let
+                    p = particles.coords
+                    # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+                    ppx, ppy = p
+                    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
+                    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
+                    pxv = ppx.data[:]
+                    pyv = ppy.data[:]
+                    clr = pPhases.data[:]
+                    # clrT = pT.data[:]
+                    idxv = particles.index.data[:]
+                    f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
+                    Colorbar(f[1,2], h)
+                    save(joinpath(figdir, "particles_$it.png"), f)
+                    f
+                end
             end
         end
     end
@@ -1456,9 +1501,9 @@ end
 
 
 # function run()
-    figname = "Caldera_2D"
+    figname = "debug_caldera_2D"
     # mkdir(figname)
-    do_vtk = true
+    do_vtk = false
     ar = 2 # aspect ratio
     n = 128
     nx = n * ar - 2
@@ -1481,9 +1526,20 @@ function plot_particles(particles, pPhases)
     pxv = ppx.data[:]
     pyv = ppy.data[:]
     clr = pPhases.data[:]
-    # clrT = pT.data[:]
+    # clr = pϕ.data[:]
     idxv = particles.index.data[:]
     f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
     Colorbar(f[1,2], h)
     f
+end
+
+
+function check_and_switch_phases(EII_pl, temp, phases, high_enough, magma_phase)
+    for i in 1:size(EII_pl, 1)
+        for j in 1:size(EII_pl, 2)
+            if EII_pl[I...] >= high_enough && temp[i, j] == 800
+                phases[ip,I...] = magma_phase
+            end
+        end
+    end
 end
