@@ -1058,6 +1058,12 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         Restart = true
         interval_stokes = 0.0
 
+        stokes.U.Ux[1,:] .= εbg * (-lx * 0.5) * lx * dt / 2
+        stokes.U.Ux[end,:] .= εbg * (lx * 0.5) * lx * dt / 2
+        stokes.U.Uy[1:end-1,1] .= [abs(max(depth_corrected_v[i,1],0.0)) * εbg * lz * dt / 2 for i in eachindex(xvi[1])]
+        stokes.U.Uy[1:end-1,end] .= [abs(max(depth_corrected_v[i,end],0.0)) * εbg * lz * dt / 2 for i in eachindex(xvi[1])]
+        flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+
         # if rem(it, 25) == 0
         # if it > 1 && rem(it, 25) == 0
         if it > 1 && ustrip(dimensionalize(t,yr,CharDim)) >= (ustrip(1.5e3yr)*interval)
