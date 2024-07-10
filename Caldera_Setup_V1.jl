@@ -40,7 +40,6 @@ println("Done loading Model... starting Dike Injection 2D routine")
 
 function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r, xc_anomaly, yc_anomaly, r_anomaly,x_bottom, y_bottom, width, height)
     ni = size(phases)
-    @info x_bottom, y_bottom, width, height
     @parallel_indices (i, j) function init_phases!(
         phases, px, py, index, phases_topo, xc, yc, a, b, r, xc_anomaly, yc_anomaly, r_anomaly, x_bottom, y_bottom, width, height
     )
@@ -262,7 +261,6 @@ end
 end
 
 function conduit_gradient!(T, offset, xvi, x_bottom, y_bottom, width, height)
-    @info x_bottom, y_bottom, width, height
     @parallel_indices (i, j) function _conduit_gradient!(
         T, offset, x, y, x_bottom, y_bottom, width, height
     )
@@ -479,9 +477,9 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
 
     nt = 500                        # number of timesteps
 
-    η_uppercrust = 1e22             #viscosity of the upper crust
-    η_magma = 1e15                  #viscosity of the magma
-    η_air = 1e15                    #viscosity of the air
+    η_uppercrust = 1e23             #viscosity of the upper crust
+    η_magma = 1e16                  #viscosity of the magma
+    η_air = 1e16                    #viscosity of the air
 
     # IO ----- -------------------------------------------
     # if it does not exist, make folder where figures are stored
@@ -629,32 +627,35 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     #-------rheology parameters--------------------------------------------------------------
     # plasticity setup
     do_DP   = true               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
-    η_reg   = 1.0e15Pas           # regularisation "viscosity" for Drucker-Prager
+    η_reg   = 1.0e16Pas           # regularisation "viscosity" for Drucker-Prager
     Coh     = 10.0MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
     perturbation_C = @rand(ni...) # perturbation of the cohesion
     ϕ_fric       = 30.0 * do_DP         # friction angle
     G0      = 25e9Pa        # elastic shear modulus
     G_magma = 10e9Pa        # elastic shear modulus perturbation
-    εbg     = 5e-15 / s             # background strain rate
+    εbg     = 2.5e-14 / s             # background strain rate
     εbg     = nondimensionalize(εbg, CharDim) # background strain rate
 
     # soft_C      = LinearSoftening((ustrip(Coh)/2, ustrip(Coh)), (0e0, 1e-1)) # softening law
-    soft_C      = NonLinearSoftening(;ξ₀ = ustrip.(Coh), Δ=ustrip.(Coh)/9999)
+    # soft_C      = NonLinearSoftening(;ξ₀ = ustrip.(Coh), Δ=ustrip.(Coh)/999)
+    soft_C      = NonLinearSoftening(;ξ₀ = ustrip.(Coh), Δ=ustrip.(Coh)/2)
     pl          = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C = soft_C)        # plasticity
 
     # el       = SetConstantElasticity(; G=G0, ν=0.46)                            # elastic spring
-    el       = SetConstantElasticity(; G=G0, ν=0.5)                            # elastic spring
-    el_magma = SetConstantElasticity(; G=G_magma, ν=0.5)                            # elastic spring
+    el       = SetConstantElasticity(; G=G0, ν=0.25)                            # elastic spring
+    el_magma = SetConstantElasticity(; G=G_magma, ν=0.25)                            # elastic spring
     el_air   = SetConstantElasticity(; ν=0.3, Kb=0.101MPa)                            # elastic spring
     # el_air   = SetConstantElasticity(; G=G0, ν=0.3)                            # elastic spring
     disl_upper_crust = DislocationCreep(;
         A=5.07e-18, n=2.3, E=154e3, V=0.0, r=0.0, R=8.3145
     ) #(;E=187kJ/mol,) Kiss et al. 2023
-    creep_rock = LinearViscous(; η=η_uppercrust * Pa * s)
-    # creep_rock = SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
-    # creep_rock = DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
+    # creep_rock = LinearViscous(; η=η_uppercrust * Pa * s)
+    creep_rock = SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
     creep_magma = LinearViscous(; η=η_magma * Pa * s)
     creep_air = LinearViscous(; η=η_air * Pa * s)
+
+    linear_viscosity_rhy      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e1Pa*s))
+    linear_viscosity_bas      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -9.6012, B = 1.3374e+04K, T0 = 307.8043K, η0=1e1Pa*s))
     cutoff_visc = (
         nondimensionalize(1e16Pa * s, CharDim), nondimensionalize(1e24Pa * s, CharDim)
     )
@@ -681,24 +682,26 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         SetMaterialParams(;
             Phase   = 1,
             Density  = PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),
-            HeatCapacity = ConstantHeatCapacity(Cp=1050J/kg/K),
+            # Density           = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
+            HeatCapacity = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             Conductivity = ConstantConductivity(k=3.0Watt/K/m),
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat         = ConstantShearheating(1.0NoUnits),
             CompositeRheology = CompositeRheology((creep_rock, el, pl, )),
-            Melting = MeltingParam_Smooth3rdOrder(),
+            Melting = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
             Elasticity = el,
             CharDim  = CharDim,),
 
         #Name="Magma"
         SetMaterialParams(;
             Phase   = 2,
-            Density  = PT_Density(ρ0=2600kg/m^3, β=β_magma/Pa),
-            HeatCapacity = ConstantHeatCapacity(Cp=1050J/kg/K),
+            Density  = PT_Density(ρ0=2900kg/m^3, β=β_magma/Pa),
+            # Density  = MeltDependent_Density(ρsolid=PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2800kg / m^3, β=β_rock/Pa)),
+            HeatCapacity = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             Conductivity = ConstantConductivity(k=1.5Watt/K/m),
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat         = ConstantShearheating(0.0NoUnits),
-            CompositeRheology = CompositeRheology((creep_magma, el_magma)),
+            CompositeRheology = CompositeRheology((linear_viscosity_rhy, el_magma)),
             Melting = MeltingParam_Smooth3rdOrder(),
             Elasticity = el_magma,
             CharDim  = CharDim,),
@@ -706,12 +709,13 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         #Name="Thermal Anomaly"
         SetMaterialParams(;
             Phase   = 3,
-            Density  = PT_Density(ρ0=2600kg/m^3, β=β_magma/Pa),
-            HeatCapacity = ConstantHeatCapacity(Cp=1050J/kg/K),
+            Density  = PT_Density(ρ0=2900kg/m^3, β=β_magma/Pa),
+            # Density  = MeltDependent_Density(ρsolid=PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2800kg / m^3, β=β_rock/Pa)),
+            HeatCapacity = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             Conductivity = ConstantConductivity(k=1.5Watt/K/m),
             LatentHeat = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat         = ConstantShearheating(0.0NoUnits),
-            CompositeRheology = CompositeRheology((creep_magma,el_magma)),
+            CompositeRheology = CompositeRheology((linear_viscosity_rhy, el_magma)),
             Melting = MeltingParam_Smooth3rdOrder(),
             Elasticity = el_magma,
             CharDim  = CharDim,),
@@ -809,24 +813,27 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     geotherm_nd = ustrip(Value(nondimensionalize(geotherm, CharDim)))
     ΔT = geotherm_nd * (lz - nondimensionalize(sticky_air,CharDim)) # temperature difference between top and bottom of the domain
     tempoffset = nondimensionalize(0C, CharDim)
-    η = MatParam[2].CompositeRheology[1][1].η.val       # viscosity for the Rayleigh number
-    Cp0 = MatParam[2].HeatCapacity[1].Cp.val              # heat capacity
+    # η = MatParam[2].CompositeRheology[1][1].η.val       # viscosity for the Rayleigh number
+    # Cp0 = MatParam[2].HeatCapacity[1].Cp             # heat capacity
+    Cp0 = MatParam[2].HeatCapacity[1].Cp.Cp.val             # heat capacity
     ρ0 = MatParam[2].Density[1].ρ0.val                   # reference Density
+             # reference Density
+    # Cp0 = compute_heatcapacity(nondimensionalize(MatParam[1].HeatCapacity[1].Cp, CharDim))
+    # ρ0 = nondimensionalize(MatParam[2].Density[1].ρ,CharDim)                   # reference Density
     k0 = MatParam[2].Conductivity[1]              # Conductivity
     G = MatParam[1].Elasticity[1].G.val                 # Shear Modulus
     κ = nondimensionalize(1.5Watt / K / m, CharDim) / (ρ0 * Cp0)                                   # thermal diffusivity
+    # κ = (4 / (compute_heatcapacity(MatParam[1].HeatCapacity[1].Cp) * MatParam[1].Density[1].ρ))                                   # thermal diffusivity
     g = MatParam[1].Gravity[1].g.val                    # Gravity
 
     α = MatParam[1].Density[1].α.val                    # thermal expansion coefficient for PT Density
-    Ra =   ρ0 * g * α * ΔT * 10^3 / (η * κ)                # Rayleigh number
+    # α = MatParam[1].Density[1].ρsolid.α.val                    # thermal expansion coefficient for PT Density
+    # Ra =   ρ0 * g * α * ΔT * 10^3 / (η * κ)                # Rayleigh number
     dt = dt_diff = 0.5 * min(di...)^2 / κ / 2.01           # diffusive CFL timestep limiter
 
     v_extension = nondimensionalize(2.0cm / yr, CharDim)   # extension velocity for pure shear boundary conditions
     relaxation_time =
         nondimensionalize(η_magma * Pas, CharDim) / nondimensionalize(G_magma, CharDim) # η_magma/Gi
-    # Initialize arrays for PT thermal solver
-    k = @fill(nondimensionalize(1.5Watt / K / m, CharDim), ni...)
-    ρCp = @fill(ρ0 .* Cp0, ni...)
 
     # Initialisation
     stokes          = StokesArrays(backend_JR, ni)
@@ -858,7 +865,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
 
     # PT coefficients for thermal diffusion -------------
     pt_thermal = PTThermalCoeffs(
-        backend_JR, MatParam, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=1e-1 / √2.1
+        backend_JR, MatParam, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=0.2 / √2.1
     )
     # Boundary conditions of the flow
     if shear == true
@@ -998,12 +1005,33 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         save(joinpath(figdir, "initial_profile.png"), fig)
         fig
     end
-
+    let
+        Yv = [y for x in xvi[1], y in xvi[2]][:]
+        Y = [y for x in xci[1], y in xci[2]][:]
+        fig = Figure(; size=(1200, 900))
+        ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="η")
+        ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Melt_fraction")
+        scatter!(
+            ax1,
+            log10.(ustrip.(dimensionalize((Array(stokes.viscosity.η[:])), Pa*s, CharDim))),
+            ustrip.(dimensionalize(Y, km, CharDim)),
+        )
+        lines!(
+            ax2,
+            Array(ϕ[:]),
+            ustrip.(dimensionalize(Y, km, CharDim)),
+        )
+        hideydecorations!(ax2)
+        save(joinpath(figdir, "initial_profile_viscosity_melt.png"), fig)
+        fig
+    end
+    dt *=0.75
     while it < 150 #nt
         if it > 1
             dt = dt_new
         end
         Restart = true
+        interval_stokes = 0.0
 
         # if rem(it, 25) == 0
         # if it > 1 && rem(it, 25) == 0
@@ -1027,7 +1055,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         end
         while Restart
             for iter in 1:iterMax_stokes
-                args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+                args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt,ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
                 # Stokes solver -----------------
                 iter, err_evo1 =
                 solve!(
@@ -1049,7 +1077,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 )
                 tensor_invariant!(stokes.ε)
 
-                if iter ≤ iterMax_stokes && err_evo1[end] < pt_stokes.ϵ
+                if it < 5 || iter ≤ iterMax_stokes && err_evo1[end] < pt_stokes.ϵ || interval_stokes > 4.0
                     @info "Stokes solver converged ($(dimensionalize(dt,yr,CharDim)))"
                     Restart = false
                     push!(dt_array,dt) # Add the
@@ -1061,13 +1089,14 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                     end
 
                     break
-                else
-                    dt *= 0.5
+                elseif interval_stokes <= 4.0
+                    interval_stokes += 1.0
+                    dt *= 0.75
                     @warn "Stokes solver did not converge, restarting with a smaller timestep ($(dimensionalize(dt,yr,CharDim)))"
                 end
             end
         end
-        ≤
+
         # dt = compute_dt(stokes, di, dt_diff, igg) #* 0.1
         ## Save the checkpoint file before a possible thermal solver blow up
         checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
@@ -1119,9 +1148,9 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         )
         # ------------------------------
         # Update the particles Arguments
-        centroid2particle!(pη_vep, xci, stokes.viscosity.η_vep, particles)
-        centroid2particle!(pEII, xci, stokes.EII_pl, particles)
-        centroid2particle!(pϕ, xci, ϕ, particles)
+        # centroid2particle!(pη_vep, xci, stokes.viscosity.η_vep, particles)
+        # centroid2particle!(pEII, xci, stokes.EII_pl, particles)
+        # centroid2particle!(pϕ, xci, ϕ, particles)
 
         # Advection --------------------
         # advect particles in space
@@ -1133,7 +1162,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         # check if we need to inject particles
         inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer, ), xvi)
         #phase change for particles
-        phase_change!(pPhases, pϕ, 0.05, 4.0, particles)
+        # phase_change!(pPhases, pϕ, 0.05, 4.0, particles)
         phase_change!(pPhases, pEII, 1e-2, particles)
         phase_change!(pPhases, particles)
         # update phase ratios
@@ -1158,7 +1187,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
 
         #  # # Plotting -------------------------------------------------------
         if it == 1 || rem(it, 1) == 0
-            if it == 1
+            if igg.me == 0 && it == 1
                 metadata(pwd(), checkpoint, "Caldera_Setup_V1.jl")
             end
             checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
@@ -1397,7 +1426,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 hideydecorations!(ax2; grid=false)
                 hidexdecorations!(ax3; grid=false)
                 hidexdecorations!(ax2; grid=false)
-                hidexdecorations!(ax4; grid=false)
+                # hidexdecorations!(ax4; grid=false)
                 pp = [argmax(p) for p in phase_ratios.center];
                 @views pp = pp[2:end-1,2:end-1]
                 @views T_d[pp.==4.0] .= NaN
@@ -1410,8 +1439,8 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
 
                 p1 = heatmap!(ax1, x_c, y_c, T_d; colormap=:batlow, colorrange=(000, 1200))
                 contour!(ax1, x_c, y_c, T_d, ; color=:white, levels=600:200:1200)
-                # p2 = heatmap!(ax2, x_c, y_c, log10.(η_d); colormap=:glasgow, colorrange= (log10(1e16), log10(1e22)))
-                p2 = heatmap!(ax2, x_c, y_c, log10.(η_vep_d); colormap=:glasgow, colorrange= (log10(1e16), log10(1e22)))
+                # p2 = heatmap!(ax2, x_c, y_c, log10.(η_d); colormap=:glasgow) #colorrange= (log10(1e16), log10(1e22)))
+                p2 = heatmap!(ax2, x_c, y_c, log10.(η_vep_d); colormap=:glasgow)#, colorrange= (log10(1e16), log10(1e22)))
                 contour!(ax2, x_c, y_c, T_d, ; color=:white, levels=600:200:1200, labels = true)
                 p3 = heatmap!(ax3, x_v, y_v, Vy_d; colormap=:vik)
                 # p3 = heatmap!(ax3, x_v, y_v, τII_d; colormap=:batlow)
@@ -1421,12 +1450,12 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 # p5 = scatter!(
                 #     ax5, Array(pxv[idxv]), Array(pyv[idxv]); color=Array(clr[idxv]), markersize=2
                 # )
-                arrows!(
-                    ax5,
-                    x_c[1:5:end-1], y_c[1:5:end-1], Array.((Vx_d[1:5:end-1, 1:5:end-1], Vy_d[1:5:end-1, 1:5:end-1]))...,
-                    lengthscale = 5 / max(maximum(Vx_d),  maximum(Vy_d)),
-                    color = :red,
-                )
+                # arrows!(
+                #     ax5,
+                #     x_c[1:5:end-1], y_c[1:5:end-1], Array.((Vx_d[1:5:end-1, 1:5:end-1], Vy_d[1:5:end-1, 1:5:end-1]))...,
+                #     lengthscale = 5 / max(maximum(Vx_d),  maximum(Vy_d)),
+                #     color = :red,
+                # )
                 p6 = heatmap!(ax6, x_v, y_v, τII_d; colormap=:batlow)
 
                 Colorbar(
@@ -1501,7 +1530,7 @@ end
 
 
 # function run()
-    figname = "debug_caldera_2D"
+    figname = "less_weakening"
     # mkdir(figname)
     do_vtk = false
     ar = 2 # aspect ratio
