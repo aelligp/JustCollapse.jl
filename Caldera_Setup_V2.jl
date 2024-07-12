@@ -183,6 +183,35 @@ function BC_topography_displ(Ux,Uy, εbg, depth_corrected, xvi, lx,ly, dt)
     return nothing
 end
 
+function BC_update!(Ux, Uy, εbg, depth_corrected, xvi, lx, ly, dt)
+    xv, yv = xvi
+
+    # Precompute the values on the CPU for Ux
+    function pure_shear_x!(Ux)
+        for i in 1:size(Ux, 1)
+            for j in 1:(size(Ux, 2) - 1)
+                xi = xv[i]
+                Ux[i, j + 1] = εbg * (xi - lx * 0.5) * lx * dt / 2
+            end
+        end
+    end
+
+    # Precompute the values on the CPU for Uy
+    function pure_shear_y!(Uy)
+        for i in 1:(size(Uy, 1) - 1)
+            for j in 1:size(Uy, 2)
+                yi = max(depth_corrected[i, j], 0.0)
+                Uy[i + 1, j] = abs(yi) * εbg * ly * dt / 2
+            end
+        end
+    end
+
+    # Call the precompute functions
+    pure_shear_x!(Ux)
+    pure_shear_y!(Uy)
+
+    return nothing
+end
 
 function dirichlet_velocities_pureshear!(Vx, Vy, v_extension, xvi)
     lx = abs(reduce(-, extrema(xvi[1])))
@@ -475,7 +504,7 @@ function new_thermal_anomaly(phases, particles, xc_anomaly, yc_anomaly, r_anomal
     @parallel (@idx ni) new_anomlay_particles(phases, particles.coords..., particles.index, xc_anomaly, yc_anomaly, r_anomaly)
 end
 
-function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
+# function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -502,7 +531,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
 
     η_uppercrust = 1e23             #viscosity of the upper crust
     η_magma = 1e16                  #viscosity of the magma
-    η_air = 1e16                    #viscosity of the air
+    η_air = 1e18                    #viscosity of the air
 
     # IO ----- -------------------------------------------
     # if it does not exist, make folder where figures are stored
@@ -1051,17 +1080,18 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         fig
     end
     # dt *=0.75
-    while it < 150 #nt
+    while it < 1500 #nt
         if it > 1
             dt = dt_new
         end
         Restart = true
         interval_stokes = 0.0
 
-        stokes.U.Ux[1,:] .= εbg * (-lx * 0.5) * lx * dt / 2
-        stokes.U.Ux[end,:] .= εbg * (lx * 0.5) * lx * dt / 2
-        stokes.U.Uy[1:end-1,1] .= [abs(max(depth_corrected_v[i,1],0.0)) * εbg * lz * dt / 2 for i in eachindex(xvi[1])]
-        stokes.U.Uy[1:end-1,end] .= [abs(max(depth_corrected_v[i,end],0.0)) * εbg * lz * dt / 2 for i in eachindex(xvi[1])]
+        # @views stokes.U.Ux[1,:] .= εbg * (-lx * 0.5) * lx * dt / 2
+        # @views stokes.U.Ux[end,:] .= εbg * (lx * 0.5) * lx * dt / 2
+        # @views stokes.U.Uy[1:end-1,1] .= [abs(max(depth_corrected_v[i,1],0.0)) * εbg * lz * dt / 2 for i in eachindex(xvi[1])]
+        # @views stokes.U.Uy[1:end-1,end] .= [abs(max(depth_corrected_v[i,end],0.0)) * εbg * lz * dt / 2 for i in eachindex(xvi[1])]
+        BC_update!(@displacement(stokes)..., εbg, depth_corrected_v,xvi,lx,lz,dt)
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
 
         # if rem(it, 25) == 0
@@ -1086,7 +1116,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         end
         while Restart
             for iter in 1:iterMax_stokes
-                args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt,ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+                args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt,#=ΔTc=thermal.ΔTc,=# perturbation_C = perturbation_C)
                 # Stokes solver -----------------
                 iter, err_evo1 =
                 solve!(
@@ -1108,7 +1138,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 )
                 tensor_invariant!(stokes.ε)
 
-                if it < 5 || iter ≤ iterMax_stokes && err_evo1[end] < pt_stokes.ϵ || interval_stokes > 4.0
+                if it < 5 || iter ≤ iterMax_stokes && err_evo1[end] < pt_stokes.ϵ || interval_stokes == 0.0
                     @info "Stokes solver converged ($(dimensionalize(dt,yr,CharDim)))"
                     Restart = false
                     push!(dt_array,dt) # Add the
@@ -1120,10 +1150,10 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                     end
 
                     break
-                elseif interval_stokes <= 4.0
-                    interval_stokes += 1.0
-                    dt *= 0.75
-                    @warn "Stokes solver did not converge, restarting with a smaller timestep ($(dimensionalize(dt,yr,CharDim)))"
+                # elseif interval_stokes <= 2.0
+                #     interval_stokes += 1.0
+                #     dt *= 0.75
+                #     @warn "Stokes solver did not converge, restarting with a smaller timestep ($(dimensionalize(dt,yr,CharDim)))"
                 end
             end
         end
@@ -1187,7 +1217,8 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         # advect particles in space
             # Advection --------------------
         # advect particles in space
-        advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        # advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
         # check if we need to inject particles
@@ -1274,48 +1305,48 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             T_inn = Array(thermal.Tc[2:(end - 1), 2:(end - 1)])
             Vx_inn = Array(Vx_vertex[2:(end - 1), 2:(end - 1)])
             Vy_inn = Array(Vy_vertex[2:(end - 1), 2:(end - 1)])
-            ∇V_inn = Array(stokes.∇V[2:(end - 1), 2:(end - 1)])
-            P_inn = Array(stokes.P[2:(end - 1), 2:(end - 1)])
+            # ∇V_inn = Array(stokes.∇V[2:(end - 1), 2:(end - 1)])
+            # P_inn = Array(stokes.P[2:(end - 1), 2:(end - 1)])
             τII_inn = Array(stokes.τ.II[2:(end - 1), 2:(end - 1)])
-            τxy_inn = Array(stokes.τ.xy[2:(end - 1), 2:(end - 1)])
+            # τxy_inn = Array(stokes.τ.xy[2:(end - 1), 2:(end - 1)])
             EII_pl_inn = Array(stokes.EII_pl[2:(end - 1), 2:(end - 1)])
             εII_inn = Array(stokes.ε.II[2:(end - 1), 2:(end - 1)])
-            εxy_inn = Array(stokes.ε.xy[2:(end - 1), 2:(end - 1)])
+            # εxy_inn = Array(stokes.ε.xy[2:(end - 1), 2:(end - 1)])
             η_inn = Array(stokes.viscosity.η[2:(end - 1), 2:(end - 1)])
             η_vep_inn = Array(stokes.viscosity.η_vep[2:(end - 1), 2:(end - 1)])
             ϕ_inn = Array(ϕ[2:(end - 1), 2:(end - 1)])
-            ρg_inn = Array(ρg[2][2:(end - 1), 2:(end - 1)])
+            # ρg_inn = Array(ρg[2][2:(end - 1), 2:(end - 1)])
 
             gather!(T_inn, Tc_viz)
             gather!(Vx_inn, Vx_viz)
             gather!(Vy_inn, Vy_viz)
-            gather!(∇V_inn, ∇V_viz)
-            gather!(P_inn, P_viz)
+            # gather!(∇V_inn, ∇V_viz)
+            # gather!(P_inn, P_viz)
             gather!(τII_inn, τII_viz)
-            gather!(τxy_inn, τxy_viz)
+            # gather!(τxy_inn, τxy_viz)
             gather!(EII_pl_inn, EII_pl_viz)
             gather!(εII_inn, εII_viz)
-            gather!(εxy_inn, εxy_viz)
+            # gather!(εxy_inn, εxy_viz)
             gather!(η_inn, η_viz)
             gather!(η_vep_inn, η_vep_viz)
             gather!(ϕ_inn, ϕ_viz)
-            gather!(ρg_inn, ρg_viz)
+            # gather!(ρg_inn, ρg_viz)
 
             T_d = ustrip.(dimensionalize(Array(Tc_viz), C, CharDim))
             η_d = ustrip.(dimensionalize(Array(η_viz), Pas, CharDim))
             η_vep_d = ustrip.(dimensionalize(Array(η_vep_viz), Pas, CharDim))
             Vy_d = ustrip.(dimensionalize(Array(Vy_viz), cm / yr, CharDim))
             Vx_d = ustrip.(dimensionalize(Array(Vx_viz), cm / yr, CharDim))
-            ∇V_d = ustrip.(dimensionalize(Array(∇V_viz), cm / yr, CharDim))
-            P_d = ustrip.(dimensionalize(Array(P_viz), MPa, CharDim))
-            ρg_d = ustrip.(dimensionalize(Array(ρg_viz), kg / m^3 * m / s^2, CharDim))
-            ρ_d = ρg_d / 10
+            # ∇V_d = ustrip.(dimensionalize(Array(∇V_viz), cm / yr, CharDim))
+            # P_d = ustrip.(dimensionalize(Array(P_viz), MPa, CharDim))
+            # ρg_d = ustrip.(dimensionalize(Array(ρg_viz), kg / m^3 * m / s^2, CharDim))
+            # ρ_d = ρg_d / 10
             ϕ_d = Array(ϕ_viz)
             τII_d = ustrip.(dimensionalize(Array(τII_viz), MPa, CharDim))
-            τxy_d = ustrip.(dimensionalize(Array(τxy_viz), MPa, CharDim))
+            # τxy_d = ustrip.(dimensionalize(Array(τxy_viz), MPa, CharDim))
             EII_pl_d = Array(EII_pl_viz)
             εII_d = ustrip.(dimensionalize(Array(εII_viz), s^-1, CharDim))
-            εxy_d = ustrip.(dimensionalize(Array(εxy_viz), s^-1, CharDim))
+            # εxy_d = ustrip.(dimensionalize(Array(εxy_viz), s^-1, CharDim))
             t_yrs = dimensionalize(t, yr, CharDim)
             t_Kyrs = t_yrs / 1e3
             t_Myrs = t_Kyrs / 1e3
@@ -1334,7 +1365,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                 data_v = (;
                     T   = Array(T_d),
                     τxy = Array(τxy_d),
-                    εxy = Array(εxy_d),
+                    # εxy = Array(εxy_d),
                     Vx  = Array(Vx_d),
                     Vy  = Array(Vy_d),
                 )
@@ -1343,7 +1374,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                     τII = Array(τII_d),
                     η   = Array(η_d),
                     ϕ   = Array(ϕ_d),
-                    ρ  = Array(ρ_d),
+                    # ρ  = Array(ρ_d),
                 )
                 velocity_v = (
                     Array(Vx_d),
@@ -1537,22 +1568,22 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
                     save(joinpath(figdir, "pressure_profile_$it.png"), fig)
                     fig
                 end
-                let
-                    p = particles.coords
-                    # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
-                    ppx, ppy = p
-                    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-                    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
-                    pxv = ppx.data[:]
-                    pyv = ppy.data[:]
-                    clr = pPhases.data[:]
-                    # clrT = pT.data[:]
-                    idxv = particles.index.data[:]
-                    f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
-                    Colorbar(f[1,2], h)
-                    save(joinpath(figdir, "particles_$it.png"), f)
-                    f
-                end
+                # let
+                #     p = particles.coords
+                #     # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+                #     ppx, ppy = p
+                #     # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
+                #     # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
+                #     pxv = ppx.data[:]
+                #     pyv = ppy.data[:]
+                #     clr = pPhases.data[:]
+                #     # clrT = pT.data[:]
+                #     idxv = particles.index.data[:]
+                #     f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
+                #     Colorbar(f[1,2], h)
+                #     save(joinpath(figdir, "particles_$it.png"), f)
+                #     f
+                # end
             end
         end
     end
@@ -1561,11 +1592,11 @@ end
 
 
 # function run()
-    figname = "Caldera_Setup_V2_displacement"
+    figname = "Test_Caldera_V2"
     # mkdir(figname)
     do_vtk = false
     ar = 2 # aspect ratio
-    n = 128
+    n = 96
     nx = n * ar - 2
     ny = n - 2
     nz = n - 2
