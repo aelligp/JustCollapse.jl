@@ -3,16 +3,6 @@ using JustRelax
 import JustRelax.@cell
 using Adapt
 
-function copyinn_x!(A, B)
-
-    @parallel function f_x(A, B)
-        @all(A) = @inn_x(B)
-        return nothing
-    end
-
-    @parallel f_x(A, B)
-end
-
 
 @kwdef struct Dike{_T,N}
     Angle       ::  NTuple{N, _T} =   ntuple(i -> 0.0, N)
