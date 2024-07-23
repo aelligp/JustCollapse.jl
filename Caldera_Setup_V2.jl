@@ -504,7 +504,7 @@ function new_thermal_anomaly(phases, particles, xc_anomaly, yc_anomaly, r_anomal
     @parallel (@idx ni) new_anomlay_particles(phases, particles.coords..., particles.index, xc_anomaly, yc_anomaly, r_anomaly)
 end
 
-# function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
+function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -1250,7 +1250,7 @@ end
         #  # # Plotting -------------------------------------------------------
         if it == 1 || rem(it, 1) == 0
             if igg.me == 0 && it == 1
-                metadata(pwd(), checkpoint, "Caldera_Setup_V1.jl")
+                metadata(pwd(), checkpoint, basename(@__FILE__))
             end
             checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
             ## Somehow fails to open with load("particles.jld2")
