@@ -109,9 +109,7 @@ end
     if phases[i, j] == 4.0
         @all(P) = 0.0
     else
-        # @all(P) = abs(@all(ρg) * (@all_j(z) + sticky_air)) #* <((@all_j(z) + sticky_air), 0.0)
-        # @all(P) = @all(ρg)
-        @all(P) = abs(@all(ρg) * (@all_j(z)))
+        @all(P) = abs(@all(ρg) * (@all_j(z))) * <((@all_j(z)), 0.0)
     end
     return nothing
 end
@@ -141,10 +139,10 @@ function plot_particles(particles, pPhases)
     f
 end
 
-[...]
+# [...]
 
 
-# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, do_vtk=false)
+@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -186,7 +184,7 @@ end
     # -----------------------------------------------------
     sticky_air      = nondimensionalize(sticky_air*km, CharDim)             # nondimensionalize sticky air
     lx              = nondimensionalize(li_GMG[1]*km, CharDim)              # nondimensionalize domain length in x-direction
-    lz              = nondimensionalize(li_GMG[2]*km, CharDim) - sticky_air # nondimensionalize domain length in y-direction
+    lz              = nondimensionalize(li_GMG[2]*km, CharDim)              # nondimensionalize domain length in y-direction
     li              = (lx, lz)                                              # domain length in x- and y-direction
     ni              = (nx, nz)                                              # number of grid points in x- and y-direction
     di              = @. li / ni                                            # grid spacing in x- and y-direction
@@ -197,14 +195,14 @@ end
     (; xci, xvi) = grid                                                     # nodes at the center and vertices of the cells
 
     εbg          = nondimensionalize(εbg_dim, CharDim)                      # background strain rate
-    perturbation_C = @rand(ni...)                                           # perturbation of the cohesion
+    perturbation_C = @rand(ni...);                                          # perturbation of the cohesion
 
     # Physical Parameters
-    rheology     = init_rheology(CharDim; is_compressible=true)
+    rheology     = init_rheology(CharDim; is_compressible=false)
     cutoff_visc  = nondimensionalize((1e16Pa*s, 1e24Pa*s),CharDim)
     # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
     κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
-    dt = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
+    dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
 
     # Initalize particles ----------------------------------
     nxcell           = 20
@@ -212,12 +210,12 @@ end
     min_xcell        = 15
     particles        = init_particles(backend, nxcell, max_xcell, min_xcell, xvi, di, ni);
 
-    subgrid_arrays   = SubgridDiffusionCellArrays(particles)
+    subgrid_arrays   = SubgridDiffusionCellArrays(particles);
     # velocity grids
-    grid_vx, grid_vy = velocity_grids(xci, xvi, di)
+    grid_vx, grid_vy = velocity_grids(xci, xvi, di);
     # temperature
-    pT, pT0, pPhases, pη_vep, pEII, pϕ    = init_cell_arrays(particles, Val(6))
-    particle_args       = (pT, pT0, pPhases, pη_vep, pEII, pϕ)
+    pT, pT0, pPhases, pη_vep, pEII, pϕ    = init_cell_arrays(particles, Val(6));
+    particle_args       = (pT, pT0, pPhases, pη_vep, pEII, pϕ);
 
     # Assign material phases --------------------------
     phases_dev   = PTArray(backend_JR)(phases_GMG)
@@ -348,7 +346,7 @@ end
         fig
     end
 
-    # while it < 25 #nt
+    while it < 25 #nt
 
         dt = dt_new # update dt
 
@@ -356,6 +354,7 @@ end
         # BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
 
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
         ## Stokes solver -----------------------------------
         iter, err_evo1 =
         solve!(
@@ -446,6 +445,7 @@ end
         @views thermal.T[2:end - 1, :] .= T_buffer;
         thermal_bcs!(thermal.T, thermal_bc)
         temperature2center!(thermal)
+        vertex2center!(thermal.ΔTc, thermal.ΔT)
 
         @show it += 1
         t += dt

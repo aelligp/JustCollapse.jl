@@ -244,11 +244,11 @@ function volcano_setup2D(nx,ny,nz)
     # T      = LinearTemp(Ttop=20, Tbot=1000),
     # )
 
-    # surf = Grid.z.val .> 0.0
+    surf = Grid.z.val .> 0.0
     # Temp[surf] .= 20.0
-    # Phases[surf] .= 4
-    @. Temp[Phases == 4]  = 20
-    @. Temp               = max(Temp, 20)
+    Phases[surf] .= 4
+    @. Temp[Phases == 4]  = 0
+    # @. Temp               = max(Temp, 20)
     Grid = addfield(Grid,(; Phases, Temp))
 
 
@@ -257,7 +257,7 @@ function volcano_setup2D(nx,ny,nz)
 
     ph      = Phases[:,1,:]
     T       = Temp[:,1,:]
-    write_paraview(Grid, "Volcano2D")
+    # write_paraview(Grid, "Volcano2D")
     return li, origin, ph, T, Grid
 end
 

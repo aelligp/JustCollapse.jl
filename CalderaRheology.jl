@@ -190,6 +190,9 @@ end
                 d = d_ijk
                 particle_phase = phase_grid[ii, jj]
             end
+            if pᵢ[end] > 0.0 && phase_grid[ii, jj] > 1.0
+                particle_phase = 4.0
+            end
         end
         @cell phases[ip, I...] = Float64(particle_phase)
     end
