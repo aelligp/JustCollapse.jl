@@ -34,7 +34,7 @@ function init_rheology(CharDim; is_compressible = false)
     ## Viscosity setup
     creep_rock  = LinearViscous(; η=1e23 * Pa * s)                         # viscosity of lithosphere
     creep_magma = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of magma
-    creep_air   = LinearViscous(; η=1e21 * Pa * s)                         # viscosity of air
+    creep_air   = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of air
     g           = 9.81m/s^2
 
     ## Different rheology options
@@ -48,7 +48,7 @@ function init_rheology(CharDim; is_compressible = false)
 
     ## Rheology setup
     # Set material parameters
-    MatParam = (
+    rheology = (
         #Name="UpperCrust"
         SetMaterialParams(;
             Phase               = 1,
@@ -102,9 +102,9 @@ function init_rheology(CharDim; is_compressible = false)
             Conductivity        = ConstantConductivity(k=15Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=0.0J/kg),
             ShearHeat           = ConstantShearheating(0.0NoUnits),
-            # CompositeRheology = CompositeRheology((creep_air,)),
-            CompositeRheology   = CompositeRheology((creep_air,el)),
-            Elasticity          = el,
+            CompositeRheology = CompositeRheology((creep_air,)),
+            # CompositeRheology   = CompositeRheology((creep_air,el)),
+            # Elasticity          = el,
             # Elasticity        = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
             CharDim             = CharDim
             ),
@@ -160,7 +160,7 @@ function init_phases2D!(phases, phase_grid, particles, xvi)
     @parallel (@idx ni) _init_phases2D!(phases, phase_grid, particles.coords, particles.index, xvi)
 end
 
-@parallel_indices (I...) function _init_phases2D!(phases, phase_grid, pcoords::NTuple{N, T}, index, xvi) where {N,T}
+@parallel_indices (I...) function _init_phases2D(phases, phase_grid, pcoords::NTuple{N, T}, index, xvi) where {N,T}
 
     ni = size(phases)
 
@@ -185,17 +185,61 @@ end
                 xvi[1][ii],
                 xvi[2][jj],
             )
-            d_ijk = √(sum((pᵢ[i] - xvᵢ[i])^2 for i in 1:N))
-            if d_ijk < d
-                d = d_ijk
-                particle_phase = phase_grid[ii, jj]
-            end
-            if pᵢ[end] > 0.0 && phase_grid[ii, jj] > 1.0
+            if phase_grid[ii, jj] == 1.0
+                particle_phase = 1.0
+            elseif phase_grid[ii, jj] == 2.0
+                particle_phase = 2.0
+            elseif phase_grid[ii, jj] == 3.0
+                particle_phase = 3.0
+            elseif phase_grid[ii, jj] == 4.0
                 particle_phase = 4.0
             end
+            # if pᵢ[end] > 0.0 && phase_grid[ii, jj] > 1.0
+            #     particle_phase = 4.0
+            # end
         end
         @cell phases[ip, I...] = Float64(particle_phase)
     end
 
     return nothing
 end
+
+# @parallel_indices (I...) function _init_phases2D!(phases, phase_grid, pcoords::NTuple{N, T}, index, xvi) where {N,T}
+
+#     ni = size(phases)
+
+#     for ip in JustRelax.cellaxes(phases)
+#         # quick escape
+#         @cell(index[ip, I...]) == 0 && continue
+
+#         pᵢ = ntuple(Val(N)) do i
+#             @cell pcoords[i][ip, I...]
+#         end
+
+#         d = Inf # distance to the nearest particle
+#         particle_phase = -1
+#         for offi in 0:1, offj in 0:1
+#             ii = I[1] + offi
+#             jj = I[2] + offj
+
+#             !(ii ≤ ni[1]) && continue
+#             !(jj ≤ ni[2]) && continue
+
+#             xvᵢ = (
+#                 xvi[1][ii],
+#                 xvi[2][jj],
+#             )
+#             d_ijk = √(sum((pᵢ[i] - xvᵢ[i])^2 for i in 1:N))
+#             if d_ijk < d
+#                 d = d_ijk
+#                 particle_phase = phase_grid[ii, jj]
+#             end
+#             # if pᵢ[end] > 0.0 && phase_grid[ii, jj] > 1.0
+#             #     particle_phase = 4.0
+#             # end
+#         end
+#         @cell phases[ip, I...] = Float64(particle_phase)
+#     end
+
+#     return nothing
+# end

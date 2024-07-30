@@ -152,6 +152,7 @@ end
     #-----------------------------------------------------
     # Define model to be run
     nt              = 500                       # number of timesteps
+    DisplacementFormulation = false              #specify if you want to use the displacement formulation
     Topography      = false;                    #specify if you want topography plotted in the figures
     Freesurface     = true                      #specify if you want to use freesurface
         sticky_air  = 5                         #specify the thickness of the sticky air layer in km
@@ -243,17 +244,31 @@ end
         backend_JR, rheology, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=0.2 / √2.1
     )
     # Boundary conditions of the flow
-    if shear == true
-        # BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
+    if shear == true && DisplacementFormulation == true
         BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
+        flow_bcs = DisplacementBoundaryConditions(;
+        free_slip=(left=true, right=true, top=true, bot=true),
+        free_surface =true,
+        )
+        flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+        displacement2velocity!(stokes, dt) # convert displacement to velocity
+        update_halo!(@velocity(stokes)...) # update halo cells
+    elseif shear == true && DisplacementFormulation == false
+        BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
+        flow_bcs = VelocityBoundaryConditions(;
+        free_slip=(left=true, right=true, top=true, bot=true),
+        free_surface =true,
+        )
+        flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+        update_halo!(@velocity(stokes)...) # update halo cells
+    else
+        flow_bcs = VelocityBoundaryConditions(;
+        free_slip=(left=true, right=true, top=true, bot=true),
+        free_surface =true,
+        )
+        flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+        update_halo!(@velocity(stokes)...) # update halo cells
     end
-    flow_bcs = DisplacementBoundaryConditions(;
-    free_slip=(left=true, right=true, top=true, bot=true),
-    free_surface =true,
-    )
-    flow_bcs!(stokes, flow_bcs) # apply boundary conditions
-    displacement2velocity!(stokes, dt) # convert displacement to velocity
-    update_halo!(@velocity(stokes)...) # update halo cells
 
     # Melt Fraction
     ϕ = @zeros(ni...)
@@ -312,7 +327,7 @@ end
 
     T_buffer    = @zeros(ni.+1)
     Told_buffer = similar(T_buffer)
-    Tsurf  = nondimensionalize(20C,CharDim)
+    Tsurf  = nondimensionalize(0C,CharDim)
     Tbot   = nondimensionalize(575C,CharDim)
     dt₀         = similar(stokes.P)
     for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
@@ -349,9 +364,11 @@ end
     while it < 25 #nt
 
         dt = dt_new # update dt
-
-        BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
-        # BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
+        if DisplacementFormulation == true
+            BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
+        else
+            BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
+        end
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
 
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
