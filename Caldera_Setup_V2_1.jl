@@ -1,4 +1,4 @@
-const isCUDA = true
+const isCUDA = false
 
 @static if isCUDA
     using CUDA
@@ -17,9 +17,9 @@ end
 using ParallelStencil, ParallelStencil.FiniteDifferences2D
 
 @static if isCUDA
-    @init_parallel_stencil(CUDA, Float64, 3)
+    @init_parallel_stencil(CUDA, Float64, 2)
 else
-    @init_parallel_stencil(Threads, Float64, 3)
+    @init_parallel_stencil(Threads, Float64, 2)
 end
 
 using JustPIC, JustPIC._2D
