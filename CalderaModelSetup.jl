@@ -11,8 +11,11 @@ function Toba_topo(nx,ny,nz)
     cartesian = convert2CartData(Topo, proj)
 
     # our model is in [km] -> need to convert from lat-long
-    x = LinRange(minimum(Topo.lon.val), maximum(Topo.lon.val), nx) |> collect
-    y = LinRange(minimum(Topo.lat.val), maximum(Topo.lat.val), ny) |> collect
+    # x = LinRange(minimum(Topo.lon.val), maximum(Topo.lon.val), nx) |> collect
+    # y = LinRange(minimum(Topo.lat.val), maximum(Topo.lat.val), ny) |> collect
+    # our model is in [km] -> need to convert from lat-long
+    x = LinRange(98.0, 99.8, nx) |> collect
+    y = LinRange(1.2, 3.3, nz) |> collect
     X = (
         Topo.lon.val[:, 1, 1],
         Topo.lat.val[1, :, 1],
@@ -116,14 +119,14 @@ function Toba_setup2D(nx,ny,nz)
     return li, origin, ph, T, topo1D
 end
 
-function Toba_setup3D(nx,ny,nz)
+function Toba_setup3D(nx,ny,nz; sticky_air=5)
     topo_toba, Topo_cartesian, Lx, Ly = Toba_topo(nx,ny,nz)
 
     Grid3D = create_CartGrid(;
         size=(nx, ny, nz),
         x=((Topo_cartesian.x.val[1, 1, 1])km, (Topo_cartesian.x.val[end, 1, 1])km),
         y=((Topo_cartesian.y.val[1, 1, 1])km, (Topo_cartesian.y.val[1, end, 1])km),
-        z=(-20km, 5km),
+        z=(-20km, sticky_air*km),
     )
 
     Grid3D_cart = CartData(xyz_grid(Grid3D.coord1D...));
@@ -192,22 +195,24 @@ function Toba_setup3D(nx,ny,nz)
 end
 
 
-function volcano_setup2D(nx,ny,nz)
+function volcano_setup2D(nx,ny,nz;sticky_air=5)
     Lx = Ly = 40
-
+    ny = 2
     x = range(0.0, Lx, nx);
-    z = range(-20, 5, nz);
-    Grid = CartData(xyz_grid(x,0,z));
+    y = range(0.0, Ly, ny);
+    z = range(-20, sticky_air, nz);
+    Grid = CartData(xyz_grid(x,y,z));
 
 
     # Now we create an integer array that will hold the `Phases` information (which usually refers to the material or rock type in the simulation)
-    Phases = fill(4, nx, 1, nz);
+    Phases = fill(4, nx, ny, nz);
 
     # In many (geodynamic) models, one also has to define the temperature, so lets define it as well
-    Temp = fill(20.0, nx, 1, nz);
+    Temp = fill(20.0, nx, ny, nz);
 
     add_box!(Phases, Temp, Grid;
         xlim=(minimum(Grid.x.val), maximum(Grid.x.val)),
+        ylim=(minimum(Grid.y.val), maximum(Grid.y.val)),
         zlim=(minimum(Grid.z.val), 0.0),
         phase = LithosphericPhases(Layers=[30], Phases=[1]),
         T = HalfspaceCoolingTemp(Age=20)
@@ -261,12 +266,12 @@ function volcano_setup2D(nx,ny,nz)
     return li, origin, ph, T, Grid
 end
 
-function volcano_setup3D(nx,ny,nz)
+function volcano_setup3D(nx,ny,nz;sticky_air=5)
     Lx = Ly = 40
 
     x = range(0.0, Lx, nx);
     y = range(0.0, Ly, ny);
-    z = range(-30, 10, nz);
+    z = range(-30, sticky_air, nz);
     Grid = CartData(xyz_grid(x,y,z));
 
     # Now we create an integer array that will hold the `Phases` information (which usually refers to the material or rock type in the simulation)

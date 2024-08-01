@@ -1,4 +1,4 @@
-const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -106,11 +106,12 @@ function BC_displ!(Ux,Uy, εbg, xvi, lx,ly, dt)
 end
 
 @parallel_indices (i, j) function init_P!(P, ρg, z, phases,sticky_air)
-    if phases[i, j] == 4.0
-        @all(P) = 0.0
-    else
+    # if phases[i, j] == 4.0
+    #     @all(P) = 0.0
+    # else
         @all(P) = abs(@all(ρg) * (@all_j(z))) * <((@all_j(z)), 0.0)
-    end
+        # @all(P) = @all(ρg)
+    # end
     return nothing
 end
 
@@ -134,7 +135,7 @@ function plot_particles(particles, pPhases)
     clr = pPhases.data[:]
     # clr = pϕ.data[:]
     idxv = particles.index.data[:]
-    f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=2)
+    f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
     Colorbar(f[1,2], h)
     f
 end
@@ -142,7 +143,7 @@ end
 # [...]
 
 
-@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -158,7 +159,7 @@ end
         sticky_air  = 5                         #specify the thickness of the sticky air layer in km
     toy = true                                  #specify if you want to use the toy model or the Toba model
 
-    shear = true                                #specify if you want to use pure shear boundary conditions
+    shear = false                                #specify if you want to use pure shear boundary conditions
     εbg_dim   = 1e-15 / s * shear                                 #specify the background strain rate
 
     # IO --------------------------------------------------
@@ -174,9 +175,9 @@ end
     # Set up the grid
     # ----------------------------------------------------
     if Topography == true
-        li_GMG, origin_GMG, phases_GMG, T_GMG, topo1D = Toba_setup2D(nx+1,ny+1,nz+1)
+        li_GMG, origin_GMG, phases_GMG, T_GMG = Toba_setup2D(nx+1,ny+1,nz+1; sticky_air=sticky_air)
     elseif Freesurface == true
-        li_GMG, origin_GMG, phases_GMG, T_GMG, Grid = volcano_setup2D(nx+1,ny+1,nz+1)
+        li_GMG, origin_GMG, phases_GMG, T_GMG, Grid = volcano_setup2D(nx+1,ny+1,nz+1; sticky_air=sticky_air)
     else
         li_GMG, origin_GMG, phases_GMG, T_GMG = simple_setup_no_FS2D(nx+1,ny+1,nz+1)
     end
@@ -201,15 +202,15 @@ end
     # Physical Parameters
     rheology     = init_rheology(CharDim; is_compressible=false)
     cutoff_visc  = nondimensionalize((1e16Pa*s, 1e24Pa*s),CharDim)
-    # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
-    κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
+    κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
+    # κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
     dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
 
     # Initalize particles ----------------------------------
-    nxcell           = 20
+    nxcell           = 30
     max_xcell        = 40
-    min_xcell        = 15
-    particles        = init_particles(backend, nxcell, max_xcell, min_xcell, xvi, di, ni);
+    min_xcell        = 20
+    particles        = init_particles(backend, nxcell, max_xcell, min_xcell, xvi...);
 
     subgrid_arrays   = SubgridDiffusionCellArrays(particles);
     # velocity grids
@@ -238,7 +239,7 @@ end
     stokes          = StokesArrays(backend_JR, ni)
     pt_stokes       = PTStokesCoeffs(li, di; ϵ=1e-4, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
     # -----------------------------------------------------
-    args = (; T=thermal.Tc, P=stokes.P, dt=dt,  ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+    args = (; T=thermal.Tc, P=stokes.P, dt=dt)#,  ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
     pt_thermal = PTThermalCoeffs(
         backend_JR, rheology, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=0.2 / √2.1
@@ -300,12 +301,13 @@ end
     ϕ_viz     = Array{Float64}(undef,ni_viz...)                                   # Melt fraction with ni_viz .-2
     ρg_viz    = Array{Float64}(undef,ni_viz...)                                   # Buoyancy force with ni_viz .-2
 
-    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt)#, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
     for _ in 1:5
         compute_ρg!(ρg[end], phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
         @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
     end
+
     @parallel (@idx ni) compute_melt_fraction!(
         ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
     )
@@ -361,17 +363,16 @@ end
         fig
     end
 
-    while it < 25 #nt
+    # while it < 250 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
             BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
-        else
-            BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
+            flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+            # BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
         end
-        flow_bcs!(stokes, flow_bcs) # apply boundary conditions
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt)#, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
         ## Stokes solver -----------------------------------
         iter, err_evo1 =
         solve!(
@@ -386,7 +387,7 @@ end
             dt,
             igg;
             kwargs = (;
-                iterMax          = 250e3,#50e3,
+                iterMax          = 100e3,#50e3,
                 free_surface     = false,
                 nout             = 2e3,#5e3,
                 viscosity_cutoff = cutoff_visc,
@@ -439,22 +440,16 @@ end
         )
         # Advection --------------------
         # advect particles in space
-        # advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
-        advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        # advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
+
         # check if we need to inject particles
         inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer, ), xvi)
-        ## Phase change for particles
-        # phase_change!(pPhases, pϕ, 0.05, 4.0, particles)
-        # phase_change!(pPhases, pEII, 1e-2, particles)
-        # phase_change!(pPhases, particles)
 
         # update phase ratios
         phase_ratios_center!(phase_ratios, particles, grid, pPhases)
-        # @parallel (@idx ni) compute_melt_fraction!(
-        #     ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
-        # )
 
         particle2grid!(T_buffer, pT, xvi, particles)
         @views T_buffer[:, end] .= Tsurf;
@@ -789,11 +784,11 @@ end
     end
 end
 
-figname = "crosstest_new_code_setup"
+figname = "Debug_V3"
 # mkdir(figname)
 do_vtk = true
 ar = 2 # aspect ratio
-n = 64
+n = 96
 nx = n * ar - 2
 ny = n - 2
 nz = n - 2
