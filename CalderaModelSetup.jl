@@ -33,14 +33,14 @@ function Toba_topo(nx,ny,nz)
 
     return surf_interp, cartesian, Lx, Ly
 end
-function Toba_setup2D(nx,ny,nz)
+function Toba_setup2D(nx,ny,nz; sticky_air=5)
     topo_toba, Topo_cartesian, Lx, Ly = Toba_topo(nx,ny,nz)
 
     Grid3D = create_CartGrid(;
         size=(nx, ny, nz),
         x=((Topo_cartesian.x.val[1, 1, 1])km, (Topo_cartesian.x.val[end, 1, 1])km),
         y=((Topo_cartesian.y.val[1, 1, 1])km, (Topo_cartesian.y.val[1, end, 1])km),
-        z=(-20km, 5km),
+        z=(-20km, sticky_air*km),
     )
 
     Grid3D_cart = CartData(xyz_grid(Grid3D.coord1D...));
@@ -197,18 +197,17 @@ end
 
 function volcano_setup2D(nx,ny,nz;sticky_air=5)
     Lx = Ly = 40
-    ny = 2
     x = range(0.0, Lx, nx);
-    y = range(0.0, Ly, ny);
+    y = range(0.0, Ly, 2);
     z = range(-20, sticky_air, nz);
     Grid = CartData(xyz_grid(x,y,z));
 
 
     # Now we create an integer array that will hold the `Phases` information (which usually refers to the material or rock type in the simulation)
-    Phases = fill(4, nx, ny, nz);
+    Phases = fill(4, nx, 2, nz);
 
     # In many (geodynamic) models, one also has to define the temperature, so lets define it as well
-    Temp = fill(20.0, nx, ny, nz);
+    Temp = fill(0.0, nx, 2, nz);
 
     add_box!(Phases, Temp, Grid;
         xlim=(minimum(Grid.x.val), maximum(Grid.x.val)),
@@ -249,11 +248,6 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
     # T      = LinearTemp(Ttop=20, Tbot=1000),
     # )
 
-    surf = Grid.z.val .> 0.0
-    # Temp[surf] .= 20.0
-    Phases[surf] .= 4
-    @. Temp[Phases == 4]  = 0
-    # @. Temp               = max(Temp, 20)
     Grid = addfield(Grid,(; Phases, Temp))
 
 

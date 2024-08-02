@@ -63,12 +63,13 @@ function BC_velo!(Vx,Vy, εbg, xvi, lx,ly)
 
     @parallel_indices (i, j) function pure_shear_x!(Vx)
         xi = xv[i]
-        Vx[i, j + 1] = εbg * (xi - lx * 0.5) * (lx)/2
+        yi = min(yv[j],0.0)
+        Vx[i, j + 1] = yi < 0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
         return nothing
     end
 
     @parallel_indices (i, j) function pure_shear_y!(Vy)
-        yi = yi = min(yv[j],0.0)
+        yi = min(yv[j],0.0)
         Vy[i + 1, j] = (abs(yi) * εbg / ly) / 2
         return nothing
     end
@@ -87,7 +88,8 @@ function BC_displ!(Ux,Uy, εbg, xvi, lx,ly, dt)
 
     @parallel_indices (i, j) function pure_shear_x!(Ux)
         xi = xv[i]
-        Ux[i, j + 1] = εbg * (xi - lx * 0.5) * lx * dt / 2
+        yi = min(yv[j],0.0)
+        Ux[i, j + 1] = yi < 0 ? εbg * (xi - lx * 0.5) * lx * dt / 2 : 0.0
         return nothing
     end
 
@@ -143,7 +145,7 @@ end
 # [...]
 
 
-# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -159,7 +161,7 @@ end
         sticky_air  = 5                         #specify the thickness of the sticky air layer in km
     toy = true                                  #specify if you want to use the toy model or the Toba model
 
-    shear = false                                #specify if you want to use pure shear boundary conditions
+    shear = true                                #specify if you want to use pure shear boundary conditions
     εbg_dim   = 1e-15 / s * shear                                 #specify the background strain rate
 
     # IO --------------------------------------------------
@@ -186,7 +188,7 @@ end
     # -----------------------------------------------------
     sticky_air      = nondimensionalize(sticky_air*km, CharDim)             # nondimensionalize sticky air
     lx              = nondimensionalize(li_GMG[1]*km, CharDim)              # nondimensionalize domain length in x-direction
-    lz              = nondimensionalize(li_GMG[2]*km, CharDim)              # nondimensionalize domain length in y-direction
+    lz              = nondimensionalize(li_GMG[end]*km, CharDim)            # nondimensionalize domain length in y-direction
     li              = (lx, lz)                                              # domain length in x- and y-direction
     ni              = (nx, nz)                                              # number of grid points in x- and y-direction
     di              = @. li / ni                                            # grid spacing in x- and y-direction
@@ -363,7 +365,7 @@ end
         fig
     end
 
-    # while it < 250 #nt
+    while it < 250 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -372,7 +374,7 @@ end
             # BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
         end
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt)#, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc)#, perturbation_C = perturbation_C)
         ## Stokes solver -----------------------------------
         iter, err_evo1 =
         solve!(
@@ -387,8 +389,8 @@ end
             dt,
             igg;
             kwargs = (;
-                iterMax          = 100e3,#50e3,
-                free_surface     = false,
+                iterMax          = 100e3,#250e3,
+                free_surface     = true,
                 nout             = 2e3,#5e3,
                 viscosity_cutoff = cutoff_visc,
             )
@@ -684,15 +686,15 @@ end
                 hidexdecorations!(ax3; grid=false)
                 hidexdecorations!(ax2; grid=false)
                 # hidexdecorations!(ax4; grid=false)
-                pp = [argmax(p) for p in phase_ratios.center];
-                @views pp = pp[2:end-1,2:end-1]
-                @views T_d[pp.==4.0] .= NaN
-                @views η_vep_d[pp.==4.0] .= NaN
-                @views τII_d[pp.==4.0] .= NaN
-                @views εII_d[pp.==4.0] .= NaN
-                @views EII_pl_d[pp.==4.0] .= NaN
-                @views ϕ_d[pp.==4.0] .= NaN
-                @views Vy_d[1:end-1, 1:end-1][pp.==4.0] .=NaN
+                # pp = [argmax(p) for p in phase_ratios.center];
+                # @views pp = pp[2:end-1,2:end-1]
+                # @views T_d[pp.==4.0] .= NaN
+                # @views η_vep_d[pp.==4.0] .= NaN
+                # @views τII_d[pp.==4.0] .= NaN
+                # @views εII_d[pp.==4.0] .= NaN
+                # @views EII_pl_d[pp.==4.0] .= NaN
+                # @views ϕ_d[pp.==4.0] .= NaN
+                # @views Vy_d[1:end-1, 1:end-1][pp.==4.0] .=NaN
 
                 p1 = heatmap!(ax1, x_c, y_c, T_d; colormap=:batlow, colorrange=(000, 1200))
                 contour!(ax1, x_c, y_c, T_d, ; color=:white, levels=600:200:1200)
@@ -797,3 +799,21 @@ igg = if !(JustRelax.MPI.Initialized())
 else
     igg
 end
+
+# p = particles.coords
+# # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+# ppx, ppy = p
+# # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
+# # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
+# pxv = ppx.data[:]
+# pyv = ppy.data[:]
+# clr = pPhases.data[:]
+# # clr = pϕ.data[:]
+# idxv = particles.index.data[:]
+
+# f,ax, h = heatmap(ustrip.(dimensionalize(xvi[1],km, CharDim)),ustrip.(dimensionalize(xvi[2],km, CharDim)),stokes.V.Vx, colormap=:inferno)
+# # f,ax, h = heatmap(ustrip.(dimensionalize(xvi[1],km, CharDim)),ustrip.(dimensionalize(xvi[2],km, CharDim)),Grid.fields.Phases[:,1,:], colormap=:inferno)
+# # p= scatter(ustrip.(dimensionalize(xvi[1],km, CharDim)),ustrip.(dimensionalize(xvi[2],km, CharDim)),thermal.T[2:end-1,:], colormap=:inferno)
+# p =scatter!(ax,ustrip.(dimensionalize(Array(pxv[idxv]),km,CharDim)), ustrip.(dimensionalize(Array(pyv[idxv]),km,CharDim)), color=Array(clr[idxv]), colormap=:roma, markersize=1)
+# Colorbar(f[1,2], h)
+# Colorbar(f[1,3], p)
