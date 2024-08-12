@@ -111,7 +111,7 @@ end
     # if phases[i, j] == 4.0
     #     @all(P) = 0.0
     # else
-        @all(P) = abs(@all(ρg) * (@all_j(z))) * <((@all_j(z)), 0.0)
+        @all(P) = abs(@all(ρg) * (@all_j(z))) #* <((@all_j(z)), 0.0)
         # @all(P) = @all(ρg)
     # end
     return nothing
@@ -468,7 +468,7 @@ end
         ## Plotting -------------------------------------------------------
         if it == 1 || rem(it, 1) == 0
             if igg.me == 0 && it == 1
-                metadata(pwd(), checkpoint, basename(@__FILE__))
+                metadata(pwd(), checkpoint, basename(@__FILE__), "CalderaModelSetup.jl", "CalderaRheology.jl")
             end
             checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
             ## Somehow fails to open with load("particles.jld2")

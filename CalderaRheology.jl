@@ -32,9 +32,9 @@ function init_rheology(CharDim; is_compressible = false)
     end
 
     ## Viscosity setup
-    creep_rock  = LinearViscous(; η=1e24 * Pa * s)                         # viscosity of lithosphere
+    creep_rock  = LinearViscous(; η=1e23 * Pa * s)                         # viscosity of lithosphere
     creep_magma = LinearViscous(; η=1e17 * Pa * s)                         # viscosity of magma
-    creep_air   = LinearViscous(; η=1e17 * Pa * s)                         # viscosity of air
+    creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
     g           = 9.81m/s^2
 
     ## Different rheology options
@@ -103,7 +103,7 @@ function init_rheology(CharDim; is_compressible = false)
         #Name="Sticky Air"
         SetMaterialParams(;
             Phase               = 4,
-            Density             = ConstantDensity(ρ=10kg/m^3,),
+            Density             = ConstantDensity(ρ=100kg/m^3,),
             HeatCapacity        = ConstantHeatCapacity(Cp=1000J/kg/K),
             Conductivity        = ConstantConductivity(k=15Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=0.0J/kg),
