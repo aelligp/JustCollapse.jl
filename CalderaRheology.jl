@@ -1,25 +1,25 @@
 ## Rheology setup via rheology function
 
-function init_rheology(CharDim; is_compressible = false)
+function init_rheology(CharDim; is_compressible=false, linear=true)
 
     ## plasticity setup
     do_DP   = true               # do_DP=false: Von Mises, do_DP=true: Drucker-Prager (friction angle)
     η_reg   = 1.0e16Pas           # regularisation "viscosity" for Drucker-Prager
     Coh     = 10.0MPa              # yield stress. If do_DP=true, τ_y stand for the cohesion: c*cos(ϕ)
-    ϕ_fric       = 30.0 * do_DP         # friction angle
+    ϕ_fric  = 30.0 * do_DP         # friction angle
     G0      = 25e9Pa        # elastic shear modulus
     G_magma = 10e9Pa        # elastic shear modulus perturbation
 
     ## Strain softening law
     # soft_C = LinearSoftening((ustrip(Coh)/2, ustrip(Coh)), (0e0, 1e-1))   # linear softening law
-    soft_C  = NonLinearSoftening(; ξ₀=ustrip(Coh), Δ=ustrip(Coh) / 2)       # nonlinear softening law
+    soft_C  = NonLinearSoftening(; ξ₀=ustrip(Coh), Δ=ustrip(Coh) / 9999)       # nonlinear softening law
 
-    pl      = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C = soft_C)
+    pl      = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C=soft_C)
     if is_compressible == true
         el       = SetConstantElasticity(; G=G0, ν=0.25)                    # elasticity of lithosphere
         el_magma = SetConstantElasticity(; G=G_magma, ν=0.25)               # elasticity of magma
         el_air   = SetConstantElasticity(; ν=0.25, Kb=0.101MPa)             # elasticity of air
-        β_rock = inv(get_Kb(el))
+        β_rock    = inv(get_Kb(el))
         β_magma = inv(get_Kb(el_magma))
         Kb = get_Kb(el)
     else
@@ -32,23 +32,23 @@ function init_rheology(CharDim; is_compressible = false)
     end
 
     ## Viscosity setup
-    creep_rock  = LinearViscous(; η=1e23 * Pa * s)                         # viscosity of lithosphere
-    creep_magma = LinearViscous(; η=1e17 * Pa * s)                         # viscosity of magma
-    creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
-    g           = 9.81m/s^2
-
-    ## Different rheology options
-
-    # disl_upper_crust = DislocationCreep(;
-    #     A=5.07e-18, n=2.3, E=154e3, V=0.0, r=0.0, R=8.3145
-    # )
-    # creep_rock = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008)
-    # linear_viscosity_rhy      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e1Pa*s))
-    # linear_viscosity_bas      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -9.6012, B = 1.3374e+04K, T0 = 307.8043K, η0=1e1Pa*s))
+    if linear == true
+        creep_rock  = LinearViscous(; η=1e23 * Pa * s)                         # viscosity of lithosphere
+        creep_magma = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of magma
+        creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
+        g           = 9.81m / s^2
+    else # nonlinear
+        creep_rock  = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
+        creep_magma = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of magma
+        creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
+        g           = 9.81m / s^2
+        # linear_viscosity_rhy      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e1Pa*s))
+        # linear_viscosity_bas      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -9.6012, B = 1.3374e+04K, T0 = 307.8043K, η0=1e1Pa*s))
+    end
 
     ## Rheology setup
     # Set material parameters
-    rheology = (
+    return rheology = (
         # #Name="UpperCrust"
         SetMaterialParams(;
             Phase               = 1,
@@ -108,61 +108,18 @@ function init_rheology(CharDim; is_compressible = false)
             Conductivity        = ConstantConductivity(k=15Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=0.0J/kg),
             ShearHeat           = ConstantShearheating(0.0NoUnits),
-            CompositeRheology = CompositeRheology((creep_air,)),
+            CompositeRheology = CompositeRheology((creep_air,el_air)),
             # CompositeRheology   = CompositeRheology((creep_air,el)),
-            # Elasticity          = el,
-            # Elasticity        = ConstantElasticity(; G=Inf*Pa, Kb=Inf*Pa),
             CharDim             = CharDim
             ),
         )
 end
 
-function init_phases3D!(phases, phase_grid, particles, xvi)
-    ni = size(phases)
-    @parallel (@idx ni) _init_phases3D!(phases, phase_grid, particles.coords, particles.index, xvi)
-end
-
-@parallel_indices (I...) function _init_phases3D!(phases, phase_grid, pcoords::NTuple{N, T}, index, xvi) where {N,T}
-
-    ni = size(phases)
-
-    for ip in JustRelax.cellaxes(phases)
-        # quick escape
-        @cell(index[ip, I...]) == 0 && continue
-
-        pᵢ = ntuple(Val(N)) do i
-            @cell pcoords[i][ip, I...]
-        end
-
-        d = Inf # distance to the nearest particle
-        particle_phase = -1
-        for offi in 0:1, offj in 0:1, offk in 0:1
-            ii, jj, kk = I[1] + offi, I[2] + offj, I[3] + offk
-
-            !(ii ≤ ni[1]) && continue
-            !(jj ≤ ni[2]) && continue
-            !(kk ≤ ni[3]) && continue
-
-            xvᵢ = (
-                xvi[1][ii],
-                xvi[2][jj],
-                xvi[3][kk],
-            )
-            d_ijk = √(sum((pᵢ[i] - xvᵢ[i])^2 for i in 1:N))
-            if d_ijk < d
-                d = d_ijk
-                particle_phase = phase_grid[ii, jj, kk]
-            end
-        end
-        JustRelax.@cell phases[ip, I...] = Float64(particle_phase)
-    end
-
-    return nothing
-end
-
 function init_phases2D!(phases, phase_grid, particles, xvi)
     ni = size(phases)
-    @parallel (@idx ni) _init_phases2D!(phases, phase_grid, particles.coords, particles.index, xvi)
+    @parallel (@idx ni) _init_phases2D!(
+        phases, phase_grid, particles.coords, particles.index, xvi
+    )
 end
 
 # @parallel_indices (I...) function _init_phases2D!(phases, phase_grid, pcoords::NTuple{N, T}, index, xvi) where {N,T}
@@ -209,8 +166,9 @@ end
 #     return nothing
 # end
 
-@parallel_indices (I...) function _init_phases2D!(phases, phase_grid, pcoords::NTuple{N, T}, index, xvi) where {N,T}
-
+@parallel_indices (I...) function _init_phases2D!(
+    phases, phase_grid, pcoords::NTuple{N,T}, index, xvi
+) where {N,T}
     ni = size(phases)
 
     for ip in JustRelax.cellaxes(phases)
@@ -230,10 +188,7 @@ end
             !(ii ≤ ni[1]) && continue
             !(jj ≤ ni[2]) && continue
 
-            xvᵢ = (
-                xvi[1][ii],
-                xvi[2][jj],
-            )
+            xvᵢ = (xvi[1][ii], xvi[2][jj])
             d_ijk = √(sum((pᵢ[i] - xvᵢ[i])^2 for i in 1:N))
             if d_ijk < d
                 d = d_ijk
@@ -244,6 +199,48 @@ end
             # end
         end
         @cell phases[ip, I...] = Float64(particle_phase)
+    end
+
+    return nothing
+end
+
+function init_phases3D!(phases, phase_grid, particles, xvi)
+    ni = size(phases)
+    @parallel (@idx ni) _init_phases3D!(
+        phases, phase_grid, particles.coords, particles.index, xvi
+    )
+end
+
+@parallel_indices (I...) function _init_phases3D!(
+    phases, phase_grid, pcoords::NTuple{N,T}, index, xvi
+) where {N,T}
+    ni = size(phases)
+
+    for ip in JustRelax.cellaxes(phases)
+        # quick escape
+        @cell(index[ip, I...]) == 0 && continue
+
+        pᵢ = ntuple(Val(N)) do i
+            @cell pcoords[i][ip, I...]
+        end
+
+        d = Inf # distance to the nearest particle
+        particle_phase = -1
+        for offi in 0:1, offj in 0:1, offk in 0:1
+            ii, jj, kk = I[1] + offi, I[2] + offj, I[3] + offk
+
+            !(ii ≤ ni[1]) && continue
+            !(jj ≤ ni[2]) && continue
+            !(kk ≤ ni[3]) && continue
+
+            xvᵢ = (xvi[1][ii], xvi[2][jj], xvi[3][kk])
+            d_ijk = √(sum((pᵢ[i] - xvᵢ[i])^2 for i in 1:N))
+            if d_ijk < d
+                d = d_ijk
+                particle_phase = phase_grid[ii, jj, kk]
+            end
+        end
+        JustRelax.@cell phases[ip, I...] = Float64(particle_phase)
     end
 
     return nothing
