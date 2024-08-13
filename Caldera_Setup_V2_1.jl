@@ -267,7 +267,7 @@ end
 # [...]
 
 
-# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -912,7 +912,7 @@ figname = "Debug_V3"
 # mkdir(figname)
 do_vtk = true
 ar = 2 # aspect ratio
-n = 96
+n = 128
 nx = n * ar - 2
 ny = n - 2
 nz = n - 2
@@ -921,6 +921,8 @@ igg = if !(JustRelax.MPI.Initialized())
 else
     igg
 end
+
+Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=do_vtk)
 
 # p = particles.coords
 # # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
