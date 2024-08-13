@@ -487,7 +487,7 @@ end
         fig
     end
 
-    while it < 250 #nt
+    while it < 2500 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -922,7 +922,7 @@ else
     igg
 end
 
-Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=do_vtk)
+Caldera_2D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
 
 # p = particles.coords
 # # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
