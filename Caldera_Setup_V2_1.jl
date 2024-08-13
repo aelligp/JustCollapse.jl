@@ -516,7 +516,7 @@ end
             dt,
             igg;
             kwargs = (;
-                iterMax          = 100e3,#250e3,
+                iterMax          = 250e3,#250e3,
                 free_surface     = true,
                 nout             = 2e3,#5e3,
                 viscosity_cutoff = cutoff_visc,
@@ -908,11 +908,11 @@ end
     end
 end
 
-figname = "Debug_V3"
+figname = "ALW_256ny_test"
 # mkdir(figname)
 do_vtk = true
 ar = 2 # aspect ratio
-n = 128
+n = 256
 nx = n * ar - 2
 ny = n - 2
 nz = n - 2
