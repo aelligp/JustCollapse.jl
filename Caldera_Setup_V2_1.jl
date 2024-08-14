@@ -442,7 +442,7 @@ end
 
     t, it      = 0.0, 0
     interval   = 1.0
-    dt_new     = dt
+    dt_new     = dt *0.1
     iterMax_stokes = 250e3
     iterMax_thermal = 10e3
     local Vx_v, Vy_v
@@ -887,32 +887,16 @@ end
                     save(joinpath(figdir, "pressure_profile_$it.png"), fig)
                     fig
                 end
-                # let
-                #     p = particles.coords
-                #     # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
-                #     ppx, ppy = p
-                #     # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-                #     # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
-                #     pxv = ppx.data[:]
-                #     pyv = ppy.data[:]
-                #     clr = pPhases.data[:]
-                #     # clrT = pT.data[:]
-                #     idxv = particles.index.data[:]
-                #     f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
-                #     Colorbar(f[1,2], h)
-                #     save(joinpath(figdir, "particles_$it.png"), f)
-                #     f
-                # end
             end
         end
     end
 end
 
-figname = "ALW_256ny_test"
+figname = "debug_viscosity"
 # mkdir(figname)
 do_vtk = true
 ar = 2 # aspect ratio
-n = 256
+n = 64
 nx = n * ar - 2
 ny = n - 2
 nz = n - 2
