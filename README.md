@@ -7,9 +7,9 @@ JustCollapse.jl is a Julia package designed to simulate magmatic systems using t
 - Parallel computing and MPI support for large-scale simulations.
 - Customizable setups for various magmatic scenarios.
 
-!!! info "Installation"
-    To install JustCollapse.jl, you can use the Julia package manager:
-    ```julia
-    using Pkg
-    Pkg.add("https://github.com/aelligp/JustCollapse.jl.git")
-    ```
+## Installation
+To install JustCollapse.jl, you can use the Julia package manager:
+```julia
+using Pkg
+Pkg.add("https://github.com/aelligp/JustCollapse.jl.git")
+```
