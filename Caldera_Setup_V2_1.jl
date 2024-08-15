@@ -267,7 +267,7 @@ end
 # [...]
 
 
-@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -887,6 +887,23 @@ end
                     hideydecorations!(ax2)
                     save(joinpath(figdir, "pressure_profile_$it.png"), fig)
                     fig
+                end
+
+                let
+                    p = particles.coords
+                    # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+                    ppx, ppy = p
+                    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
+                    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
+                    pxv = ppx.data[:]
+                    pyv = ppy.data[:]
+                    clr = pPhases.data[:]
+                    # clrT = pT.data[:]
+                    idxv = particles.index.data[:]
+                    f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
+                    Colorbar(f[1,2], h)
+                    save(joinpath(figdir, "particles_$it.png"), f)
+                    f
                 end
             end
         end
