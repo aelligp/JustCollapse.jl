@@ -1,4 +1,4 @@
-const isCUDA = true
+const isCUDA = false
 
 @static if isCUDA
     using CUDA
@@ -575,7 +575,8 @@ end
 
         # Advection --------------------
         # advect particles in space
-        advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        advection!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        # advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
