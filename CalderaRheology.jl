@@ -15,10 +15,12 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
     soft_C  = NonLinearSoftening(; ξ₀=ustrip(Coh), Δ=ustrip(Coh) / 9999)       # nonlinear softening law
 
     pl      = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C=soft_C)
+    
     if is_compressible == true
         el       = SetConstantElasticity(; G=G0, ν=0.25)                    # elasticity of lithosphere
         el_magma = SetConstantElasticity(; G=G_magma, ν=0.25)               # elasticity of magma
-        el_air   = SetConstantElasticity(; ν=0.25, Kb=0.101MPa)             # elasticity of air
+        # el_air   = SetConstantElasticity(; ν=0.25, Kb=0.101MPa)             # elasticity of air
+        el_air   = SetConstantElasticity(; ν=0.25, G=G_magma)             # elasticity of air
         β_rock    = inv(get_Kb(el))
         β_magma = inv(get_Kb(el_magma))
         Kb = get_Kb(el)
@@ -38,8 +40,8 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
         creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
         g           = 9.81m / s^2
     else # nonlinear
-        creep_rock  = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
-        # creep_rock  = SetDislocationCreep(Dislocation.mafic_granulite_Wilks_1990) # viscosity of lithosphere
+        creep_rock  = SetDislocationCreep(Dislocation.mafic_granulite_Wilks_1990) # viscosity of lithosphere
+        # creep_rock  = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
         creep_magma = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of magma
         creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
         g           = 9.81m / s^2
@@ -109,9 +111,11 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
             Conductivity        = ConstantConductivity(k=15Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=0.0J/kg),
             ShearHeat           = ConstantShearheating(0.0NoUnits),
-            # CompositeRheology = CompositeRheology((creep_air,el_air)),
-            CompositeRheology   = CompositeRheology((creep_air,el)),
-            Elasticity          = el,
+            CompositeRheology   = CompositeRheology((creep_air,el_air)),
+            Elasticity          = el_air,
+            # CompositeRheology   = CompositeRheology((creep_air, el)),
+            # Elasticity          = el,
+            # CompositeRheology   = CompositeRheology((creep_air, )),
             CharDim             = CharDim
             ),
         )

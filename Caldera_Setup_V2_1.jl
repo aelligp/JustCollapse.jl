@@ -1,4 +1,4 @@
-const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -267,7 +267,7 @@ end
 # [...]
 
 
-# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -372,8 +372,8 @@ end
     if shear == true && DisplacementFormulation == true
         BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
         flow_bcs = DisplacementBoundaryConditions(;
-        free_slip=(left=true, right=true, top=true, bot=true),
-        free_surface =true,
+            free_slip=(left=true, right=true, top=true, bot=true),
+            free_surface =true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         displacement2velocity!(stokes, dt) # convert displacement to velocity
@@ -381,15 +381,15 @@ end
     elseif shear == true && DisplacementFormulation == false
         BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
         flow_bcs = VelocityBoundaryConditions(;
-        free_slip=(left=true, right=true, top=true, bot=true),
-        free_surface =true,
+            free_slip=(left=true, right=true, top=true, bot=true),
+            free_surface =true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
     else
         flow_bcs = VelocityBoundaryConditions(;
-        free_slip=(left=true, right=true, top=true, bot=true),
-        free_surface =true,
+            free_slip    = (left=true, right=true, top=true, bot=true),
+            free_surface =true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
@@ -516,12 +516,15 @@ end
             dt,
             igg;
             kwargs = (;
-                iterMax          = 250e3,#250e3,
-                free_surface     = true,
+                iterMax          = 125e3,#250e3,
+                free_surface     = false,
                 nout             = 2e3,#5e3,
                 viscosity_cutoff = cutoff_visc,
             )
         )
+        dt_new = compute_dt(stokes, di, dt_diff, igg) #/ 9.81
+        dt     = dt_new
+        
         tensor_invariant!(stokes.ε)
 
         ## Save the checkpoint file before a possible thermal solver blow up
@@ -575,8 +578,8 @@ end
 
         # Advection --------------------
         # advect particles in space
-        advection!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
-        # advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        # advection!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
@@ -600,9 +603,10 @@ end
         temperature2center!(thermal)
         vertex2center!(thermal.ΔTc, thermal.ΔT)
 
+        # dt_new =  compute_dt(stokes, di, dt_diff, igg) #/ 9.81
+
         @show it += 1
         t += dt
-        dt_new =  compute_dt(stokes, di, dt_diff, igg)
 
         ## Plotting -------------------------------------------------------
         if it == 1 || rem(it, 1) == 0
@@ -915,9 +919,9 @@ figname = "debug_viscosity"
 do_vtk = true
 ar = 2 # aspect ratio
 n = 64
-nx = n * ar - 2
-ny = n - 2
-nz = n - 2
+nx = n * ar
+ny = n
+nz = n
 igg = if !(JustRelax.MPI.Initialized())
     IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
 else
@@ -943,3 +947,43 @@ Caldera_2D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
 # p =scatter!(ax,ustrip.(dimensionalize(Array(pxv[idxv]),km,CharDim)), ustrip.(dimensionalize(Array(pyv[idxv]),km,CharDim)), color=Array(clr[idxv]), colormap=:roma, markersize=1)
 # Colorbar(f[1,2], h)
 # Colorbar(f[1,3], p)
+
+# grav   = rheology[1].Gravity[1].g.val
+# grav_d = dimensionalize(rheology[1].Gravity[1].g.val, m/s^2, CharDim).val
+
+# Vxmax = maximum(abs.(stokes.V.Vx))
+# Vymax = maximum(abs.(stokes.V.Vy))
+
+# Vxmax_d = dimensionalize(maximum(abs.(stokes.V.Vx)), m/s, CharDim)
+# Vymax_d = dimensionalize(maximum(abs.(stokes.V.Vy)), m/s, CharDim)
+# dx_d    = dimensionalize(di[1], m, CharDim)
+# dy_d    = dimensionalize(di[2], m, CharDim)
+
+# inv(Vxmax  / di[1]^2)
+
+# inv(Vxmax * grav / di[1])
+# inv(Vymax * grav / di[2])
+
+
+# dimensionalize(inv(Vxmax * grav / di[1]), s, CharDim)
+# dimensionalize(inv(Vxmax / di[1]), s, CharDim)
+
+
+# inv(Vxmax_d / dx_d)
+# inv(Vxmax_d * grav_d / dx_d)
+
+# nondimensionalize(inv(Vxmax_d / dx_d), CharDim)
+# nondimensionalize(inv(Vxmax_d * grav_d / dx_d), CharDim)
+
+# inv(Vymax_d * grav_d / dy_d)
+
+# @inline function foo(V::NTuple, di, dt_diff)
+#     n = inv(length(V) + 0.1)
+#     dt_adv = mapreduce(x -> x[1] * inv(n*maximum(abs.(x[2]))), min, zip(di, V)) 
+#     # dt_adv = mapreduce(x -> x[1] * inv(maximum(abs.(x[2]))), min, zip(di, V)) *n
+#     return min(dt_diff, dt_adv)
+# end
+
+# foo(@velocity(stokes), di, dt_diff)
+
+# @edit compute_dt(stokes, di, dt_diff)
