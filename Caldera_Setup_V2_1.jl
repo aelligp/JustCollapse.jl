@@ -284,7 +284,7 @@ end
     toy = true                                  #specify if you want to use the toy model or the Toba model
 
     shear = true                                #specify if you want to use pure shear boundary conditions
-    εbg_dim   = 1e-14 / s * shear                                 #specify the background strain rate
+    εbg_dim   = 5e-14 / s * shear                                 #specify the background strain rate
 
     # IO --------------------------------------------------
     # if it does not exist, make folder where figures are stored
@@ -497,8 +497,19 @@ end
         end
 
         if it > 1 && ustrip(dimensionalize(t,yr,CharDim)) >= (ustrip.(1.5e3yr)*interval)
-
-            add_thermal_anomaly!(pPhases, particles, interval, lx, CharDim, thermal, T_buffer, Told_buffer, Tsurf, xvi, phase_ratios, grid, pT)
+            # add_thermal_anomaly!(pPhases, particles, interval, lx, CharDim, thermal, T_buffer, Told_buffer, Tsurf, xvi, phase_ratios, grid, pT)
+            new_thermal_anomaly!(pPhases, particles, lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim))
+            circular_perturbation!(thermal.T, 30.0, nondimensionalize(1250C, CharDim), lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim), xvi)
+            for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
+                copyinn_x!(dst, src)
+            end
+            @views T_buffer[:,end] .= Tsurf
+            @views thermal.T[2:end-1, :] .= T_buffer
+            temperature2center!(thermal)
+            # grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
+            grid2particle!(pT, xvi, T_buffer, particles)
+            phase_ratios_center!(phase_ratios, particles, grid, pPhases)
+            interval += 1.0
         end
 
         args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
@@ -524,20 +535,20 @@ end
         )
         dt_new = compute_dt(stokes, di, dt_diff, igg) #/ 9.81
         dt     = dt_new
-        
+
         tensor_invariant!(stokes.ε)
 
         ## Save the checkpoint file before a possible thermal solver blow up
         checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
 
         # ------------------------------
-        compute_shear_heating!(
-            thermal,
-            stokes,
-            phase_ratios,
-            rheology, # needs to be a tuple
-            dt,
-        )
+        # compute_shear_heating!(
+        #     thermal,
+        #     stokes,
+        #     phase_ratios,
+        #     rheology, # needs to be a tuple
+        #     dt,
+        # )
         # Thermal solver ---------------
         iter_count, norm_ResT =
         heatdiffusion_PT!(
@@ -914,7 +925,7 @@ end
     end
 end
 
-figname = "debug_viscosity"
+figname = "no_SH_Ueda_debug_viscosity"
 # mkdir(figname)
 do_vtk = true
 ar = 2 # aspect ratio
@@ -979,7 +990,7 @@ Caldera_2D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
 
 # @inline function foo(V::NTuple, di, dt_diff)
 #     n = inv(length(V) + 0.1)
-#     dt_adv = mapreduce(x -> x[1] * inv(n*maximum(abs.(x[2]))), min, zip(di, V)) 
+#     dt_adv = mapreduce(x -> x[1] * inv(n*maximum(abs.(x[2]))), min, zip(di, V))
 #     # dt_adv = mapreduce(x -> x[1] * inv(maximum(abs.(x[2]))), min, zip(di, V)) *n
 #     return min(dt_diff, dt_adv)
 # end

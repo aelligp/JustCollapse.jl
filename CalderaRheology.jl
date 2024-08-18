@@ -15,7 +15,7 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
     soft_C  = NonLinearSoftening(; ξ₀=ustrip(Coh), Δ=ustrip(Coh) / 9999)       # nonlinear softening law
 
     pl      = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C=soft_C)
-    
+
     if is_compressible == true
         el       = SetConstantElasticity(; G=G0, ν=0.25)                    # elasticity of lithosphere
         el_magma = SetConstantElasticity(; G=G_magma, ν=0.25)               # elasticity of magma
@@ -40,8 +40,8 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
         creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
         g           = 9.81m / s^2
     else # nonlinear
-        creep_rock  = SetDislocationCreep(Dislocation.mafic_granulite_Wilks_1990) # viscosity of lithosphere
-        # creep_rock  = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
+        # creep_rock  = SetDislocationCreep(Dislocation.mafic_granulite_Wilks_1990) # viscosity of lithosphere
+        creep_rock  = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
         creep_magma = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of magma
         creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
         g           = 9.81m / s^2
