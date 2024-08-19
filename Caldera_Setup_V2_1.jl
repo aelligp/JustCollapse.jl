@@ -373,7 +373,7 @@ end
         BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
         flow_bcs = DisplacementBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface =true,
+            free_surface =false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         displacement2velocity!(stokes, dt) # convert displacement to velocity
@@ -382,14 +382,14 @@ end
         BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
         flow_bcs = VelocityBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface =true,
+            free_surface =false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
     else
         flow_bcs = VelocityBoundaryConditions(;
             free_slip    = (left=true, right=true, top=true, bot=true),
-            free_surface =true,
+            free_surface =false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
@@ -487,7 +487,7 @@ end
         fig
     end
 
-    while it < 2500 #nt
+    while it < 25000 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -904,32 +904,32 @@ end
                     fig
                 end
 
-                let
-                    p = particles.coords
-                    # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
-                    ppx, ppy = p
-                    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-                    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
-                    pxv = ppx.data[:]
-                    pyv = ppy.data[:]
-                    clr = pPhases.data[:]
-                    # clrT = pT.data[:]
-                    idxv = particles.index.data[:]
-                    f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
-                    Colorbar(f[1,2], h)
-                    save(joinpath(figdir, "particles_$it.png"), f)
-                    f
-                end
+                # let
+                #     p = particles.coords
+                #     # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+                #     ppx, ppy = p
+                #     # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
+                #     # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
+                #     pxv = ppx.data[:]
+                #     pyv = ppy.data[:]
+                #     clr = pPhases.data[:]
+                #     # clrT = pT.data[:]
+                #     idxv = particles.index.data[:]
+                #     f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
+                #     Colorbar(f[1,2], h)
+                #     save(joinpath(figdir, "particles_$it.png"), f)
+                #     f
+                # end
             end
         end
     end
 end
 
-figname = "no_SH_Ueda_debug_viscosity"
+figname = "ALW24_highres_test_180824"
 # mkdir(figname)
 do_vtk = true
 ar = 2 # aspect ratio
-n = 64
+n = 480
 nx = n * ar
 ny = n
 nz = n
