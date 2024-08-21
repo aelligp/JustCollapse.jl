@@ -217,16 +217,16 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
         T = HalfspaceCoolingTemp(Age=20)
     )
 
-    # add_volcano!(Phases, Temp, Grid;
-    # volcanic_phase  = 1,
-    # center          = (mean(Grid.x.val),  0.0),
-    # height          = 4,
-    # radius          = 5,
-    # crater          = 0.5,
-    # base            = 0.0,
-    # background      = nothing,
-    # T               = HalfspaceCoolingTemp(Age=20)
-    # )
+    add_volcano!(Phases, Temp, Grid;
+    volcanic_phase  = 1,
+    center          = (mean(Grid.x.val),  0.0),
+    height          = 3,
+    radius          = 5,
+    crater          = 0.5,
+    base            = 0.0,
+    background      = nothing,
+    T               = HalfspaceCoolingTemp(Age=20)
+    )
 
     add_ellipsoid!(Phases, Temp, Grid;
         cen    = (mean(Grid.x.val), 0,-5.0),
@@ -240,13 +240,15 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
     phase  = ConstantPhase(3),
     T      = ConstantTemp(T=1200)
     )
-    # add_cylinder!(Phases, Temp, Grid;
-    # base = (mean(Grid.x.val), 0, -3.9),
-    # cap  = (mean(Grid.x.val), 0, 0.0),
-    # radius = 0.5,
-    # phase  = ConstantPhase(2),
+    add_cylinder!(Phases, Temp, Grid;
+    base = (mean(Grid.x.val), 0, -3.25),
+    cap  = (mean(Grid.x.val), 0, 3.00),
+    radius = 0.05,
+    phase  = ConstantPhase(2),
     # T      = LinearTemp(Ttop=20, Tbot=1000),
-    # )
+    # T      = ConstantTemp(T=800),
+    T      = ConstantTemp(T=850),
+    )
 
     Grid = addfield(Grid,(; Phases, Temp))
 

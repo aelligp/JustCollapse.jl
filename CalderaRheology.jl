@@ -42,8 +42,9 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
     else # nonlinear
         # creep_rock  = SetDislocationCreep(Dislocation.mafic_granulite_Wilks_1990) # viscosity of lithosphere
         creep_rock  = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
+        # creep_rock  = DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
         creep_magma = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of magma
-        creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
+        creep_air   = LinearViscous(; η=1e18 * Pa * s)                         # viscosity of air
         g           = 9.81m / s^2
         # linear_viscosity_rhy      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e1Pa*s))
         # linear_viscosity_bas      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -9.6012, B = 1.3374e+04K, T0 = 307.8043K, η0=1e1Pa*s))
@@ -55,7 +56,7 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
         # #Name="UpperCrust"
         SetMaterialParams(;
             Phase               = 1,
-            Density             = PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),
+            Density             = PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),
             # Density           = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
             # HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
@@ -72,7 +73,7 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
         #Name="Magma"
         SetMaterialParams(;
             Phase               = 2,
-            Density             = PT_Density(ρ0=2900kg/m^3, β=β_magma/Pa),
+            Density             = PT_Density(ρ0=2700kg/m^3, β=β_magma/Pa),
             # Density           = MeltDependent_Density(ρsolid=PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2800kg / m^3, β=β_rock/Pa)),
             # HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
@@ -89,7 +90,7 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
         #Name="Thermal Anomaly"
         SetMaterialParams(;
             Phase               = 3,
-            Density             = PT_Density(ρ0=2900kg/m^3, β=β_magma/Pa),
+            Density             = PT_Density(ρ0=2700kg/m^3, β=β_magma/Pa),
             # Density           = MeltDependent_Density(ρsolid=PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2800kg / m^3, β=β_rock/Pa)),
             # HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
