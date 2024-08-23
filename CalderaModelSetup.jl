@@ -196,10 +196,10 @@ end
 
 
 function volcano_setup2D(nx,ny,nz;sticky_air=5)
-    Lx = Ly = 40
+    Lx = Ly = 50
     x = range(0.0, Lx, nx);
     y = range(0.0, Ly, 2);
-    z = range(-20, sticky_air, nz);
+    z = range(-25, sticky_air, nz);
     Grid = CartData(xyz_grid(x,y,z));
 
 
@@ -247,7 +247,7 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
     phase  = ConstantPhase(2),
     # T      = LinearTemp(Ttop=20, Tbot=1000),
     # T      = ConstantTemp(T=800),
-    T      = ConstantTemp(T=850),
+    T      = ConstantTemp(T=1000),
     )
 
     Grid = addfield(Grid,(; Phases, Temp))

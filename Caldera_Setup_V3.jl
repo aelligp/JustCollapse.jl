@@ -34,7 +34,7 @@ end
 
 using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
 import GeoParams.Dislocation
-using StaticArrays, GeophysicalModelGenerator, WriteVTK, Interpolations, JLD2
+using StaticArrays, GeophysicalModelGenerator, WriteVTK, JLD2
 
 # -----------------------------------------------------
 include("CalderaModelSetup.jl")
@@ -277,11 +277,10 @@ end
     #-----------------------------------------------------
     # Define model to be run
     nt              = 500                       # number of timesteps
-    DisplacementFormulation = false              #specify if you want to use the displacement formulation
+    DisplacementFormulation = false             #specify if you want to use the displacement formulation
     Topography      = false;                    #specify if you want topography plotted in the figures
     Freesurface     = true                      #specify if you want to use freesurface
         sticky_air  = 5                         #specify the thickness of the sticky air layer in km
-    toy = true                                  #specify if you want to use the toy model or the Toba model
 
     shear = true                                #specify if you want to use pure shear boundary conditions
     εbg_dim   = 5e-14 / s * shear                                 #specify the background strain rate
@@ -325,8 +324,10 @@ end
 
     # Physical Parameters
     rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
+    rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
     cutoff_visc  = nondimensionalize((1e16Pa*s, 1e24Pa*s),CharDim)
-    κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
+    κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
+    # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
     dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
 
@@ -369,27 +370,18 @@ end
         backend_JR, rheology, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=0.98 / √2.1
     )
     # Boundary conditions of the flow
-    if shear == true && DisplacementFormulation == true
-        BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
+    if DisplacementFormulation == true
         flow_bcs = DisplacementBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface =false,
+            free_surface=true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         displacement2velocity!(stokes, dt) # convert displacement to velocity
         update_halo!(@velocity(stokes)...) # update halo cells
-    elseif shear == true && DisplacementFormulation == false
-        BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
+    elseif DisplacementFormulation == false
         flow_bcs = VelocityBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface =false,
-        )
-        flow_bcs!(stokes, flow_bcs) # apply boundary conditions
-        update_halo!(@velocity(stokes)...) # update halo cells
-    else
-        flow_bcs = VelocityBoundaryConditions(;
-            free_slip    = (left=true, right=true, top=true, bot=true),
-            free_surface =false,
+            free_surface=true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
@@ -425,7 +417,7 @@ end
     ϕ_viz     = Array{Float64}(undef,ni_viz...)                                   # Melt fraction with ni_viz .-2
     ρg_viz    = Array{Float64}(undef,ni_viz...)                                   # Buoyancy force with ni_viz .-2
 
-    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt,#= ΔTc=thermal.ΔTc, =#perturbation_C = perturbation_C)
 
     for _ in 1:5
         compute_ρg!(ρg[end], phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
@@ -433,7 +425,7 @@ end
     end
 
     @parallel (@idx ni) compute_melt_fraction!(
-        ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
+        ϕ, phase_ratios.center, rheology, (T=thermal.T, P=stokes.P)
     )
     compute_viscosity!(stokes, phase_ratios, args, rheology, cutoff_visc)
 
@@ -442,7 +434,7 @@ end
 
     t, it      = 0.0, 0
     interval   = 1.0
-    dt_new     = dt *0.1
+    dt_new     = dt
     iterMax_stokes = 250e3
     iterMax_thermal = 10e3
     local Vx_v, Vy_v
@@ -488,7 +480,75 @@ end
         fig
     end
 
-    while it < 2500 #nt
+    ## Do a incompressible stokes solve, to get a better initial guess for the compressible stokes
+    ## solver. And after that apply the extension/compression BCs. This is done to avoid the
+    ## incompressible stokes solver to blow up.
+    println("Starting incompressible stokes solve")
+    solve!(
+        stokes,
+        pt_stokes,
+        di,
+        flow_bcs,
+        ρg,
+        phase_ratios,
+        rheology_incomp,
+        args,
+        dt*0.1,
+        igg;
+        kwargs = (;
+            iterMax          = 150e3,#250e3,
+            free_surface     = true,
+            nout             = 2e3,#5e3,
+            viscosity_cutoff = cutoff_visc,
+            verbose          = false,
+        )
+    )
+    tensor_invariant!(stokes.ε)
+    heatdiffusion_PT!(
+        thermal,
+        pt_thermal,
+        thermal_bc,
+        rheology_incomp,
+        args,
+        dt,
+        di;
+        kwargs =(;
+            igg     = igg,
+            phase   = phase_ratios,
+            iterMax = 150e3,
+            nout    = 1e3,
+            verbose = true,
+        )
+    )
+
+    if shear == true && DisplacementFormulation == true
+        BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
+        flow_bcs = DisplacementBoundaryConditions(;
+            free_slip   =(left=true, right=true, top=true, bot=true),
+            free_surface=true,
+        )
+        flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+        displacement2velocity!(stokes, dt) # convert displacement to velocity
+        update_halo!(@velocity(stokes)...) # update halo cells
+    elseif shear == true && DisplacementFormulation == false
+        BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
+        flow_bcs = VelocityBoundaryConditions(;
+            free_slip   =(left=true, right=true, top=true, bot=true),
+            free_surface=true,
+        )
+        flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+        update_halo!(@velocity(stokes)...) # update halo cells
+    else
+        flow_bcs = VelocityBoundaryConditions(;
+            free_slip    = (left=true, right=true, top=true, bot=true),
+            free_surface =true,
+        )
+        flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+        update_halo!(@velocity(stokes)...) # update halo cells
+    end
+    println("Starting main loop")
+
+    while it < 500 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -513,9 +573,8 @@ end
             interval += 1.0
         end
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt,#= ΔTc=thermal.ΔTc,=# perturbation_C = perturbation_C)
         ## Stokes solver -----------------------------------
-        iter, err_evo1 =
         solve!(
             stokes,
             pt_stokes,
@@ -535,11 +594,11 @@ end
             )
         )
 
-        # do this after solve!
-        air_phase  = 4 # or whatever the phase number is for the air
-        isthereair = [p[air_phase] != 0 for p in phase_ratios.center]
-        Pshift     = minimum(stokes.P[isthereair])
-        stokes.P .-= Pshift
+        # # do this after solve!
+        # air_phase  = 4 # or whatever the phase number is for the air
+        # isthereair = [p[air_phase] != 0 for p in phase_ratios.center]
+        # Pshift     = minimum(stokes.P[isthereair])
+        # stokes.P .-= Pshift
 
         dt_new = compute_dt(stokes, di, dt_diff, igg) #/ 9.81
         dt     = dt_new
@@ -558,7 +617,6 @@ end
         #     dt,
         # )
         # Thermal solver ---------------
-        iter_count, norm_ResT =
         heatdiffusion_PT!(
             thermal,
             pt_thermal,
@@ -933,11 +991,11 @@ end
     end
 end
 
-figname = "Volcano_testing_larger_box"
+figname = "testing_Danis_method"
 # mkdir(figname)
-do_vtk = true
+do_vtk = false
 ar = 2 # aspect ratio
-n = 96
+n = 64
 nx = n * ar
 ny = n
 nz = n
@@ -948,61 +1006,3 @@ else
 end
 
 Caldera_2D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
-
-# p = particles.coords
-# # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
-# ppx, ppy = p
-# # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-# # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
-# pxv = ppx.data[:]
-# pyv = ppy.data[:]
-# clr = pPhases.data[:]
-# # clr = pϕ.data[:]
-# idxv = particles.index.data[:]
-
-# f,ax, h = heatmap(ustrip.(dimensionalize(xvi[1],km, CharDim)),ustrip.(dimensionalize(xvi[2],km, CharDim)),stokes.V.Vx, colormap=:inferno)
-# # f,ax, h = heatmap(ustrip.(dimensionalize(xvi[1],km, CharDim)),ustrip.(dimensionalize(xvi[2],km, CharDim)),Grid.fields.Phases[:,1,:], colormap=:inferno)
-# # p= scatter(ustrip.(dimensionalize(xvi[1],km, CharDim)),ustrip.(dimensionalize(xvi[2],km, CharDim)),thermal.T[2:end-1,:], colormap=:inferno)
-# p =scatter!(ax,ustrip.(dimensionalize(Array(pxv[idxv]),km,CharDim)), ustrip.(dimensionalize(Array(pyv[idxv]),km,CharDim)), color=Array(clr[idxv]), colormap=:roma, markersize=1)
-# Colorbar(f[1,2], h)
-# Colorbar(f[1,3], p)
-
-# grav   = rheology[1].Gravity[1].g.val
-# grav_d = dimensionalize(rheology[1].Gravity[1].g.val, m/s^2, CharDim).val
-
-# Vxmax = maximum(abs.(stokes.V.Vx))
-# Vymax = maximum(abs.(stokes.V.Vy))
-
-# Vxmax_d = dimensionalize(maximum(abs.(stokes.V.Vx)), m/s, CharDim)
-# Vymax_d = dimensionalize(maximum(abs.(stokes.V.Vy)), m/s, CharDim)
-# dx_d    = dimensionalize(di[1], m, CharDim)
-# dy_d    = dimensionalize(di[2], m, CharDim)
-
-# inv(Vxmax  / di[1]^2)
-
-# inv(Vxmax * grav / di[1])
-# inv(Vymax * grav / di[2])
-
-
-# dimensionalize(inv(Vxmax * grav / di[1]), s, CharDim)
-# dimensionalize(inv(Vxmax / di[1]), s, CharDim)
-
-
-# inv(Vxmax_d / dx_d)
-# inv(Vxmax_d * grav_d / dx_d)
-
-# nondimensionalize(inv(Vxmax_d / dx_d), CharDim)
-# nondimensionalize(inv(Vxmax_d * grav_d / dx_d), CharDim)
-
-# inv(Vymax_d * grav_d / dy_d)
-
-# @inline function foo(V::NTuple, di, dt_diff)
-#     n = inv(length(V) + 0.1)
-#     dt_adv = mapreduce(x -> x[1] * inv(n*maximum(abs.(x[2]))), min, zip(di, V))
-#     # dt_adv = mapreduce(x -> x[1] * inv(maximum(abs.(x[2]))), min, zip(di, V)) *n
-#     return min(dt_diff, dt_adv)
-# end
-
-# foo(@velocity(stokes), di, dt_diff)
-
-# @edit compute_dt(stokes, di, dt_diff)
