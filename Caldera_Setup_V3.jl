@@ -283,7 +283,7 @@ end
         sticky_air  = 5                         #specify the thickness of the sticky air layer in km
 
     shear = true                                #specify if you want to use pure shear boundary conditions
-    εbg_dim   = 5e-14 / s * shear                                 #specify the background strain rate
+    εbg_dim   = 5e-13 / s * shear                                 #specify the background strain rate
 
     # IO --------------------------------------------------
     # if it does not exist, make folder where figures are stored
@@ -325,8 +325,8 @@ end
     # Physical Parameters
     rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
     rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
-    cutoff_visc  = nondimensionalize((1e16Pa*s, 1e24Pa*s),CharDim)
-    κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
+    cutoff_visc  = nondimensionalize((1e15Pa*s, 1e24Pa*s),CharDim)
+    κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
     dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
@@ -548,7 +548,7 @@ end
     end
     println("Starting main loop")
 
-    while it < 500 #nt
+    while it < 250 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -587,7 +587,7 @@ end
             dt,
             igg;
             kwargs = (;
-                iterMax          = 250e3,#250e3,
+                iterMax          = 150e3,#250e3,
                 free_surface     = false,
                 nout             = 2e3,#5e3,
                 viscosity_cutoff = cutoff_visc,
@@ -970,32 +970,32 @@ end
                     fig
                 end
 
-                let
-                    p = particles.coords
-                    # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
-                    ppx, ppy = p
-                    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-                    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
-                    pxv = ppx.data[:]
-                    pyv = ppy.data[:]
-                    clr = pPhases.data[:]
-                    # clrT = pT.data[:]
-                    idxv = particles.index.data[:]
-                    f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
-                    Colorbar(f[1,2], h)
-                    save(joinpath(figdir, "particles_$it.png"), f)
-                    f
-                end
-            end
+            #     let
+            #         p = particles.coords
+            #         # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+            #         ppx, ppy = p
+            #         # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
+            #         # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
+            #         pxv = ppx.data[:]
+            #         pyv = ppy.data[:]
+            #         clr = pPhases.data[:]
+            #         # clrT = pT.data[:]
+            #         idxv = particles.index.data[:]
+            #         f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
+            #         Colorbar(f[1,2], h)
+            #         save(joinpath(figdir, "particles_$it.png"), f)
+            #         f
+            #     end
+             end
         end
     end
 end
 
-figname = "testing_Danis_method"
+figname = "Systematics_initial_Setup_test_v1"
 # mkdir(figname)
-do_vtk = false
+do_vtk = true
 ar = 2 # aspect ratio
-n = 64
+n = 256
 nx = n * ar
 ny = n
 nz = n
