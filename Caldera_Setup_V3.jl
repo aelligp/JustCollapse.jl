@@ -35,6 +35,7 @@ end
 using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
 import GeoParams.Dislocation
 using StaticArrays, GeophysicalModelGenerator, WriteVTK, JLD2
+using Dates
 
 # -----------------------------------------------------
 include("CalderaModelSetup.jl")
@@ -270,7 +271,7 @@ end
 # [...]
 
 
-@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -499,7 +500,7 @@ end
         dt*0.1,
         igg;
         kwargs = (;
-            iterMax          = 150e3,#250e3,
+            iterMax          = 100e3,#250e3,
             free_surface     = true,
             nout             = 2e3,#5e3,
             viscosity_cutoff = cutoff_visc,
@@ -551,7 +552,7 @@ end
     end
     println("Starting main loop")
 
-    while it < 250 #nt
+    while it < 500 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -917,7 +918,7 @@ end
                 p1 = heatmap!(ax1, x_c, y_c, T_d; colormap=:batlow, colorrange=(000, 1200))
                 contour!(ax1, x_c, y_c, T_d, ; color=:white, levels=600:200:1200)
                 p2 = heatmap!(ax2, x_c, y_c, log10.(η_vep_d); colormap=:glasgow)#, colorrange= (log10(1e16), log10(1e22)))
-                contour!(ax2, x_c, y_c, T_d, ; color=:white, levels=600:200:1200, labels = true)
+                contour!(ax2, x_c, y_c, T_d, ; color=:white, levels=600:200:1200)
                 p3 = heatmap!(ax3, x_v, y_v, Vy_d; colormap=:vik)
                 p4 = heatmap!(ax4, x_c, y_c, log10.(εII_d); colormap=:glasgow, colorrange= (log10(5e-15), log10(5e-12)))
                 p5 = heatmap!(ax5, x_c, y_c, EII_pl_d; colormap=:glasgow)
@@ -994,7 +995,7 @@ end
     end
 end
 
-figname = "Systematics_initial_Setup_test_v1"
+figname = "Systematics_initial_Setup_test_v1_Hirth2001_$(today())"
 # mkdir(figname)
 do_vtk = true
 ar = 2 # aspect ratio
