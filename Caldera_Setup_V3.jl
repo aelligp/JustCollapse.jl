@@ -66,7 +66,8 @@ function BC_velo!(Vx,Vy, εbg, xvi, lx,ly, phases)
         yi = min(yv[j],0.0)
 
         # Vx[i, j + 1] = yi < 0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
-        Vx[i, j + 1] = phases[i,j] < 4.0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
+        # Vx[i, j + 1] = phases[i,j] < 4.0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
+        Vx[i, j + 1] = (εbg * (xi - lx * 0.5) * (lx)/2)
         return nothing
     end
     # @parallel_indices (i, j) function pure_shear_x!(Vx)
@@ -271,7 +272,7 @@ end
 # [...]
 
 
-# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -552,7 +553,7 @@ end
     end
     println("Starting main loop")
 
-    while it < 500 #nt
+    while it < 1500 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -564,7 +565,9 @@ end
         if it > 1 && ustrip(dimensionalize(t,yr,CharDim)) >= (ustrip.(1.5e3yr)*interval)
             # add_thermal_anomaly!(pPhases, particles, interval, lx, CharDim, thermal, T_buffer, Told_buffer, Tsurf, xvi, phase_ratios, grid, pT)
             new_thermal_anomaly!(pPhases, particles, lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim))
-            circular_perturbation!(thermal.T, 30.0, nondimensionalize(1250C, CharDim), lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim), xvi)
+            ## rhyolite
+            circular_perturbation!(thermal.T, 30.0, nondimensionalize(1150C, CharDim), lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim), xvi)
+            # circular_perturbation!(thermal.T, 30.0, nondimensionalize(1250C, CharDim), lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim), xvi)
             for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
                 copyinn_x!(dst, src)
             end
@@ -995,11 +998,11 @@ end
     end
 end
 
-figname = "Systematics_initial_Setup_test_v1_Hirth2001_$(today())"
+figname = "Systematics_initial_Setup_test_v1_rhyolite_$(today())"
 # mkdir(figname)
 do_vtk = true
 ar = 2 # aspect ratio
-n = 256
+n = 320
 nx = n * ar
 ny = n
 nz = n

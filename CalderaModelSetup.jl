@@ -238,7 +238,7 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
     cen = (mean(Grid.x.val), 0,-5.0),
     radius = 0.5,
     phase  = ConstantPhase(3),
-    T      = ConstantTemp(T=1200)
+    T      = ConstantTemp(T=1100)
     )
     add_cylinder!(Phases, Temp, Grid;
     base = (mean(Grid.x.val), 0, -3.25),
