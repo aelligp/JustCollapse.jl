@@ -57,14 +57,15 @@ function copyinn_x!(A, B)
     @parallel f_x(A, B)
 end
 
-
-function BC_velo!(Vx,Vy, εbg, xvi, lx,ly)
+function BC_velo!(Vx,Vy, εbg, xvi, lx,ly, phases)
     xv, yv = xvi
 
-    @parallel_indices (i, j) function pure_shear_x!(Vx)
+    @parallel_indices (i, j) function pure_shear_x!(Vx, εbg, lx, phases)
         xi = xv[i]
         yi = min(yv[j],0.0)
-        Vx[i, j + 1] = yi < 0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
+
+        # Vx[i, j + 1] = yi < 0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
+        Vx[i, j + 1] = phases[i,j] < 4.0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
         return nothing
     end
     # @parallel_indices (i, j) function pure_shear_x!(Vx)
@@ -73,16 +74,18 @@ function BC_velo!(Vx,Vy, εbg, xvi, lx,ly)
     #     return nothing
     # end
 
-    @parallel_indices (i, j) function pure_shear_y!(Vy)
-        yi = min(yv[j],0.0)
-        Vy[i + 1, j] = (abs(yi) * εbg / ly) / 2
+    @parallel_indices (i, j) function pure_shear_y!(Vy, εbg, ly, phases)
+        # yi = min(yv[j],0.0)
+        # Vy[i + 1, j] = (abs(yi) * εbg / ly) / 2
+        yi = yv[j]
+        Vy[i + 1, j] = phases[i,j] < 4.0 ? (abs(yi) * εbg / ly) / 2 : 0.0
         return nothing
     end
 
     nx, ny = size(Vx)
-    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx)
+    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx, εbg,lx, phases)
     nx, ny = size(Vy)
-    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy)
+    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy,εbg, ly, phases)
 
     return nothing
 end
@@ -531,7 +534,7 @@ end
         displacement2velocity!(stokes, dt) # convert displacement to velocity
         update_halo!(@velocity(stokes)...) # update halo cells
     elseif shear == true && DisplacementFormulation == false
-        BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
+        BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz, phases_dev)
         flow_bcs = VelocityBoundaryConditions(;
             free_slip   =(left=true, right=true, top=true, bot=true),
             free_surface=true,
@@ -901,15 +904,15 @@ end
                 hidexdecorations!(ax3; grid=false)
                 hidexdecorations!(ax2; grid=false)
                 # hidexdecorations!(ax4; grid=false)
-                # pp = [argmax(p) for p in phase_ratios.center];
-                # @views pp = pp[2:end-1,2:end-1]
-                # @views T_d[pp.==4.0] .= NaN
-                # @views η_vep_d[pp.==4.0] .= NaN
-                # @views τII_d[pp.==4.0] .= NaN
-                # @views εII_d[pp.==4.0] .= NaN
-                # @views EII_pl_d[pp.==4.0] .= NaN
-                # @views ϕ_d[pp.==4.0] .= NaN
-                # @views Vy_d[1:end-1, 1:end-1][pp.==4.0] .=NaN
+                pp = [argmax(p) for p in phase_ratios.center];
+                @views pp = pp[2:end-1,2:end-1]
+                @views T_d[pp.==4.0] .= NaN
+                @views η_vep_d[pp.==4.0] .= NaN
+                @views τII_d[pp.==4.0] .= NaN
+                @views εII_d[pp.==4.0] .= NaN
+                @views EII_pl_d[pp.==4.0] .= NaN
+                @views ϕ_d[pp.==4.0] .= NaN
+                @views Vy_d[1:end-1, 1:end-1][pp.==4.0] .=NaN
 
                 p1 = heatmap!(ax1, x_c, y_c, T_d; colormap=:batlow, colorrange=(000, 1200))
                 contour!(ax1, x_c, y_c, T_d, ; color=:white, levels=600:200:1200)
