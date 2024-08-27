@@ -792,6 +792,7 @@ end
                     P   = Array(P_d),
                     τII = Array(τII_d),
                     η   = Array(η_d),
+                    η_vep   = Array(η_vep_d),
                     ϕ   = Array(ϕ_d),
                     ρ  = Array(ρ_d),
                 )
