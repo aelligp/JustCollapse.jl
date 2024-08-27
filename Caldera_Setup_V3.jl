@@ -127,15 +127,6 @@ end
     return nothing
 end
 
-@parallel_indices (I...) function compute_melt_fraction!(ϕ, phase_ratios, rheology, args)
-    ϕ[I...] = compute_melt_frac(rheology, (;T=args.T[I...]), phase_ratios[I...])
-    return nothing
-end
-
-@inline function compute_melt_frac(rheology, args, phase_ratios)
-    return GeoParams.compute_meltfraction_ratio(phase_ratios, rheology, args)
-end
-
 function phase_change!(phases, particles)
     ni = size(phases)
     @parallel_indices (I...) function _phase_change!(phases, px, py, index)
@@ -234,22 +225,6 @@ function new_thermal_anomaly!(phases, particles, xc_anomaly, yc_anomaly, r_anoma
         return nothing
     end
     @parallel (@idx ni) new_anomlay_particles(phases, particles.coords..., particles.index, xc_anomaly, yc_anomaly, r_anomaly)
-end
-
-
-## quick and dirty function
-function add_thermal_anomaly!(pPhases, particles, interval, lx, CharDim, thermal, T_buffer, Told_buffer, Tsurf, xvi, phase_ratios, grid, pT)
-    new_thermal_anomaly!(pPhases, particles, lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim))
-    circular_perturbation!(thermal.T, 30.0, nondimensionalize(1250C, CharDim), lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim), xvi)
-    for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
-        copyinn_x!(dst, src)
-    end
-    @views T_buffer[:,end] .= Tsurf
-    @views thermal.T[2:end-1, :] .= T_buffer
-    temperature2center!(thermal)
-    grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
-    phase_ratios_center!(phase_ratios, particles, grid, pPhases)
-    interval += 1.0
 end
 
 function plot_particles(particles, pPhases)
@@ -429,7 +404,7 @@ end
         @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
     end
 
-    @parallel (@idx ni) compute_melt_fraction!(
+    compute_melt_fraction!(
         ϕ, phase_ratios.center, rheology, (T=thermal.T, P=stokes.P)
     )
     compute_viscosity!(stokes, phase_ratios, args, rheology, cutoff_visc)
@@ -651,7 +626,7 @@ end
         subgrid_diffusion!(
             pT, T_buffer, thermal.ΔT[2:end-1, :], subgrid_arrays, particles, xvi,  di, dt
         )
-        @parallel (@idx ni) compute_melt_fraction!(
+        compute_melt_fraction!(
             ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
         )
         # ------------------------------
@@ -1000,10 +975,9 @@ end
 end
 
 figname = "Systematics_initial_Setup_test_v1_rhyolite_$(today())"
-# mkdir(figname)
 do_vtk = true
 ar = 2 # aspect ratio
-n = 320
+n = 128
 nx = n * ar
 ny = n
 nz = n
