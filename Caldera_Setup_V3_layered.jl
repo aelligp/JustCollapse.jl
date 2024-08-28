@@ -1,4 +1,4 @@
-const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -309,7 +309,7 @@ end
     cutoff_visc  = nondimensionalize((1e15Pa*s, 1e24Pa*s),CharDim)
     κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
-    # κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
+    κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
     dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
 
     # Initalize particles ----------------------------------
@@ -975,10 +975,10 @@ end
     end
 end
 
-figname = "Systematics_initial_Setup_test_v1_rhyolite_$(today())"
+figname = "Systematics_initial_Setup_test_v1_layered_$(today())"
 do_vtk = true
 ar = 2 # aspect ratio
-n = 320
+n = 128
 nx = n * ar
 ny = n
 nz = n
