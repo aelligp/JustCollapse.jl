@@ -39,8 +39,8 @@ using StaticArrays, GeophysicalModelGenerator, WriteVTK, JLD2
 using Dates
 
 # -----------------------------------------------------
-include("CalderaModelSetup.jl")
-include("CalderaRheology.jl")
+include("CalderaModelSetup_layered.jl")
+include("CalderaRheology_layered.jl")
 # -----------------------------------------------------
 ## SET OF HELPER FUNCTIONS PARTICULAR FOR THIS SCRIPT --------------------------------
 
