@@ -247,7 +247,7 @@ end
 # [...]
 
 
-@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -311,7 +311,7 @@ end
     # κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
     dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
 
-    # Initalize particles ----------------------------------
+    # Initialize particles ----------------------------------
     nxcell           = 30
     max_xcell        = 40
     min_xcell        = 20
@@ -397,7 +397,7 @@ end
     ϕ_viz     = Array{Float64}(undef,ni_viz...)                                   # Melt fraction with ni_viz .-2
     ρg_viz    = Array{Float64}(undef,ni_viz...)                                   # Buoyancy force with ni_viz .-2
 
-    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt,#= ΔTc=thermal.ΔTc,=# perturbation_C = perturbation_C)
+    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
     for _ in 1:5
         compute_ρg!(ρg[end], phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
@@ -887,6 +887,7 @@ end
                 pp = [argmax(p) for p in phase_ratios.center];
                 @views pp = pp[2:end-1,2:end-1]
                 @views T_d[pp.==4.0] .= NaN
+                @views ρ_d[pp.==4.0] .= NaN
                 @views η_vep_d[pp.==4.0] .= NaN
                 @views τII_d[pp.==4.0] .= NaN
                 @views εII_d[pp.==4.0] .= NaN
@@ -953,28 +954,28 @@ end
                     fig
                 end
 
-            #     let
-            #         p = particles.coords
-            #         # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
-            #         ppx, ppy = p
-            #         # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-            #         # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
-            #         pxv = ppx.data[:]
-            #         pyv = ppy.data[:]
-            #         clr = pPhases.data[:]
-            #         # clrT = pT.data[:]
-            #         idxv = particles.index.data[:]
-            #         f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
-            #         Colorbar(f[1,2], h)
-            #         save(joinpath(figdir, "particles_$it.png"), f)
-            #         f
-            #     end
+                let
+                    p = particles.coords
+                    # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+                    ppx, ppy = p
+                    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
+                    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
+                    pxv = ppx.data[:]
+                    pyv = ppy.data[:]
+                    clr = pPhases.data[:]
+                    # clrT = pT.data[:]
+                    idxv = particles.index.data[:]
+                    f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
+                    Colorbar(f[1,2], h)
+                    save(joinpath(figdir, "particles_$it.png"), f)
+                    f
+                end
              end
         end
     end
 end
 
-figname = "Systematics_initial_Setup_test_v1_rhyolite_$(today())"
+figname = "Systematics_initial_Setup_test_v2_rhyolite_$(today())"
 do_vtk = true
 ar = 2 # aspect ratio
 n = 128

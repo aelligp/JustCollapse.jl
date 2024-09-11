@@ -330,7 +330,7 @@ end
     # κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
     dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
 
-    # Initalize particles ----------------------------------
+    # Initialize particles ----------------------------------
     nxcell           = 30
     max_xcell        = 40
     min_xcell        = 20

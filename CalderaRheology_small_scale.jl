@@ -12,10 +12,10 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
 
     ## Strain softening law
     # soft_C = LinearSoftening((ustrip(Coh)/2, ustrip(Coh)), (0e0, 1e-1))   # linear softening law
+    soft_ϕ = LinearSoftening((0.0, 30.0), (0e0, 1e-1))   # linear softening law
     soft_C  = NonLinearSoftening(; ξ₀=ustrip(Coh), Δ=ustrip(Coh) / 9999)       # nonlinear softening law
 
-    pl      = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C=soft_C)
-    pl_volc = DruckerPrager_regularised(; C=5MPa, ϕ=0.0, η_vp=η_reg, Ψ=0.0, softening_C=soft_C)
+    pl      = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C=soft_C, softening_ϕ = soft_ϕ)
 
     if is_compressible == true
         el       = SetConstantElasticity(; G=G0, ν=0.25)                    # elasticity of lithosphere
@@ -37,21 +37,17 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
 
     ## Viscosity setup
     if linear == true
-        creep_lithosphere  = LinearViscous(; η=1e23 * Pa * s)                         # viscosity of lithosphere
+        creep_rock  = LinearViscous(; η=1e23 * Pa * s)                         # viscosity of lithosphere
         creep_magma = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of magma
         creep_air   = LinearViscous(; η=1e20 * Pa * s)                         # viscosity of air
         g           = 9.81m / s^2
     else # nonlinear
-        # creep_lithosphere  = SetDislocationCreep(Dislocation.mafic_granulite_Wilks_1990) # viscosity of lithosphere
-        creep_lithosphere  = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
-        creep_volcano_1      = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
-        creep_volcano_2      = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
-        # creep_volcano_1      = SetDislocationCreep(Dislocation.wet_anorthite_Rybacki_2006) # viscosity of lithosphere
-        # creep_volcano_2      = SetDislocationCreep(Dislocation.wet_quartzite_Rutter_2004) # viscosity of lithosphere
-        # creep_lithosphere  = DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
+        # creep_rock  = SetDislocationCreep(Dislocation.mafic_granulite_Wilks_1990) # viscosity of lithosphere
+        creep_rock  = SetDislocationCreep(Dislocation.wet_quartzite_Ueda_2008) # viscosity of lithosphere
+        # creep_rock  = DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
         # creep_magma = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of magma
         # creep_magma = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -9.6012, B = 1.3374e+04K, T0 = 307.8043K, η0=1e8Pa*s))                         # viscosity of magma
-        creep_magma = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e6Pa*s))                         # viscosity of magma
+        creep_magma = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e4Pa*s))                         # viscosity of magma
         creep_air   = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of air
         g           = 9.81m / s^2
         # linear_viscosity_rhy      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e1Pa*s))
@@ -61,94 +57,65 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
     ## Rheology setup
     # Set material parameters
     return rheology = (
-        # #Name="Lithosphere"
+        # #Name="UpperCrust"
         SetMaterialParams(;
             Phase               = 1,
-            # Density             = PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),
-            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
-            # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
-            Conductivity        = ConstantConductivity(k=3.0Watt/K/m),
-            LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
-            ShearHeat           = ConstantShearheating(1.0NoUnits),
-            CompositeRheology   = CompositeRheology((creep_lithosphere, el, pl, )),
-            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
-            # Melting             = MeltingParam_Caricchi(),
-            Elasticity          = el,
-            CharDim             = CharDim,
-            ),
-        # #Name="Volcanic_Cone_1"
-        SetMaterialParams(;
-            Phase               = 2,
             Density             = PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),
             # Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
-            # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
+            # HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
+            HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
             Conductivity        = ConstantConductivity(k=3.0Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat           = ConstantShearheating(1.0NoUnits),
-            CompositeRheology   = CompositeRheology((creep_volcano_1, el, pl_volc, )),
-            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            CompositeRheology   = CompositeRheology((creep_rock, el, pl, )),
+            # Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
             # Melting             = MeltingParam_Caricchi(),
-            Elasticity          = el,
-            CharDim             = CharDim,
-            ),
-        # #Name="Volcanic_Cone_2"
-        SetMaterialParams(;
-            Phase               = 3,
-            Density             = PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),
-            # Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
-            # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
-            Conductivity        = ConstantConductivity(k=3.0Watt/K/m),
-            LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
-            ShearHeat           = ConstantShearheating(1.0NoUnits),
-            CompositeRheology   = CompositeRheology((creep_volcano_2, el, pl_volc, )),
             Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
-            # Melting             = MeltingParam_Caricchi(),
             Elasticity          = el,
             CharDim             = CharDim,
             ),
 
         #Name="Magma"
         SetMaterialParams(;
-            Phase               = 4,
-            # Density             = PT_Density(ρ0=2700kg/m^3, β=β_magma/Pa),
+            Phase               = 2,
+            Density             = PT_Density(ρ0=2300kg/m^3, β=β_magma/Pa),
             # Density           = MeltDependent_Density(ρsolid=PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2800kg / m^3, β=β_rock/Pa)),
-            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
-            # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
+            # Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
+            # HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
+            HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
             Conductivity        = ConstantConductivity(k=1.5Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat           = ConstantShearheating(0.0NoUnits),
             CompositeRheology   = CompositeRheology((creep_magma, el_magma)),
-            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            # Melting             = MeltingParam_Smooth3rdOrder(),
             # Melting             = MeltingParam_Caricchi(),
+            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
             Elasticity          = el_magma,
             CharDim             = CharDim,
             ),
 
         #Name="Thermal Anomaly"
         SetMaterialParams(;
-            Phase               = 5,
-            # Density             = PT_Density(ρ0=2700kg/m^3, β=β_magma/Pa),
+            Phase               = 3,
+            Density             = PT_Density(ρ0=2100kg/m^3, β=β_magma/Pa),
             # Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2800kg / m^3, β=β_rock/Pa)),
-            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
-            # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
+            # Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2100kg / m^3, β=β_rock/Pa)),
+            # HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
+            HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
             Conductivity        = ConstantConductivity(k=1.5Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat           = ConstantShearheating(0.0NoUnits),
             CompositeRheology   = CompositeRheology((creep_magma, el_magma)),
-            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            # Melting             = MeltingParam_Smooth3rdOrder(),
             # Melting             = MeltingParam_Caricchi(),
+            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
             Elasticity          = el_magma,
             CharDim             = CharDim,
             ),
 
         #Name="Sticky Air"
         SetMaterialParams(;
-            Phase               = 6,
+            Phase               = 4,
             Density             = ConstantDensity(ρ=1.225kg/m^3,),
             HeatCapacity        = ConstantHeatCapacity(; Cp=7.5e2),
             # Conductivity        = ConstantConductivity(k=15Watt/K/m),
