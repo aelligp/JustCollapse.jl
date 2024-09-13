@@ -247,7 +247,7 @@ end
 # [...]
 
 
-@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Casldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -397,7 +397,7 @@ end
     ϕ_viz     = Array{Float64}(undef,ni_viz...)                                   # Melt fraction with ni_viz .-2
     ρg_viz    = Array{Float64}(undef,ni_viz...)                                   # Buoyancy force with ni_viz .-2
 
-    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, #=ΔTc=thermal.ΔTc, =#perturbation_C = perturbation_C)
 
     for _ in 1:5
         compute_ρg!(ρg[end], phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
@@ -555,7 +555,7 @@ end
             interval += 1.0
         end
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, #=ΔTc=thermal.ΔTc,=# perturbation_C = perturbation_C)
         ## Stokes solver -----------------------------------
         solve!(
             stokes,
