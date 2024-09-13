@@ -247,7 +247,7 @@ end
 # [...]
 
 
-@views function Casldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -528,7 +528,7 @@ end
     end
     println("Starting main loop")
 
-    while it < 250 #nt
+    while it < 2500 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -978,7 +978,7 @@ end
 figname = "Weak_lithosphere_v2_$(today())"
 do_vtk = true
 ar = 2 # aspect ratio
-n = 128
+n = 256
 nx = n * ar
 ny = n
 nz = n
