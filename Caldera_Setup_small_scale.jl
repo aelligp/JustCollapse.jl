@@ -247,7 +247,7 @@ end
 # [...]
 
 
-# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -484,22 +484,22 @@ end
         )
     )
     tensor_invariant!(stokes.ε)
-    # heatdiffusion_PT!(
-    #     thermal,
-    #     pt_thermal,
-    #     thermal_bc,
-    #     rheology_incomp,
-    #     args,
-    #     dt,
-    #     di;
-    #     kwargs =(;
-    #         igg     = igg,
-    #         phase   = phase_ratios,
-    #         iterMax = 150e3,
-    #         nout    = 1e3,
-    #         verbose = true,
-    #     )
-    # )
+    heatdiffusion_PT!(
+        thermal,
+        pt_thermal,
+        thermal_bc,
+        rheology_incomp,
+        args,
+        dt,
+        di;
+        kwargs =(;
+            igg     = igg,
+            phase   = phase_ratios,
+            iterMax = 150e3,
+            nout    = 1e3,
+            verbose = true,
+        )
+    )
 
     if shear == true && DisplacementFormulation == true
         BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
@@ -528,7 +528,7 @@ end
     end
     println("Starting main loop")
 
-    while it < 150 #nt
+    while it < 250 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -591,30 +591,30 @@ end
         checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
 
         # ------------------------------
-        # compute_shear_heating!(
-        #     thermal,
-        #     stokes,
-        #     phase_ratios,
-        #     rheology, # needs to be a tuple
-        #     dt,
-        # )
+        compute_shear_heating!(
+            thermal,
+            stokes,
+            phase_ratios,
+            rheology, # needs to be a tuple
+            dt,
+        )
         # Thermal solver ---------------
-        # heatdiffusion_PT!(
-        #     thermal,
-        #     pt_thermal,
-        #     thermal_bc,
-        #     rheology,
-        #     args,
-        #     dt,
-        #     di;
-        #     kwargs =(;
-        #         igg     = igg,
-        #         phase   = phase_ratios,
-        #         iterMax = 150e3,
-        #         nout    = 1e3,
-        #         verbose = true,
-        #     )
-        # )
+        heatdiffusion_PT!(
+            thermal,
+            pt_thermal,
+            thermal_bc,
+            rheology,
+            args,
+            dt,
+            di;
+            kwargs =(;
+                igg     = igg,
+                phase   = phase_ratios,
+                iterMax = 150e3,
+                nout    = 1e3,
+                verbose = true,
+            )
+        )
 
         for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
             copyinn_x!(dst, src)
@@ -975,7 +975,7 @@ end
     end
 end
 
-figname = "NoDIFF_Small_scale_setup_flat_topo_outflow"
+figname = "Weak_lithosphere_v2_$(today())"
 do_vtk = true
 ar = 2 # aspect ratio
 n = 128
