@@ -136,10 +136,10 @@ function Inject_dike_particles2D!(phases, pT, particles::Particles, dike::Dike)
     px, py = coords
     ni     = size(px)
     @parallel_indices (I...) function Inject_dike_particles!(phases, pT, px, py, index, dike)
-        for ip in JustRelax.cellaxes(px)
-            !(JustRelax.@cell(index[ip, I...])) && continue
-            px_ip = JustRelax.@cell   px[ip, I...]
-            py_ip = JustRelax.@cell   py[ip, I...]
+        for ip in cellaxes(px)
+            !(@index(index[ip, I...])) && continue
+            px_ip = @index   px[ip, I...]
+            py_ip = @index   py[ip, I...]
 
             (;Angle, Center, H, W, Phase, T) = dike
             α = Angle[1]
@@ -158,14 +158,14 @@ function Inject_dike_particles2D!(phases, pT, particles::Particles, dike::Dike)
             # Define displacement before the if blocks
             displacement = [0.0, 0.0]
             if on
-                JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
-                JustRelax.@cell pT[ip, I...] = T
+                @index phases[ip, I...] = Float64(Phase) # magma
+                @index pT[ip, I...] = T
                 displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
                 displacement .= displacement*H
             end
             if in
-                JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
-                JustRelax.@cell pT[ip, I...] = T
+                @index phases[ip, I...] = Float64(Phase) # magma
+                @index pT[ip, I...] = T
                 displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
                 displacement .= displacement*H
             end
@@ -179,8 +179,8 @@ function Inject_dike_particles2D!(phases, pT, particles::Particles, dike::Dike)
             px_ip = pt_rot[1] .+ Center[1]
             py_ip = pt_rot[2] .+ Center[2]
 
-            JustRelax.@cell px[ip, I...] = px_ip
-            JustRelax.@cell py[ip, I...] = py_ip
+            @index px[ip, I...] = px_ip
+            @index py[ip, I...] = py_ip
         end
 
         return nothing
@@ -195,11 +195,11 @@ function Inject_dike_particles3D!(phases, pT, particles::Particles, dike::Dike)
     px, py = coords
     ni     = size(px)
     @parallel_indices (I...) function Inject_dike_particles!(phases, pT, px, py, pz, index, dike)
-        for ip in JustRelax.cellaxes(px)
-            !(JustRelax.@cell(index[ip, I...])) && continue
-            px_ip = JustRelax.@cell   px[ip, I...]
-            py_ip = JustRelax.@cell   py[ip, I...]
-            pz_ip = JustRelax.@cell   pz[ip, I...]
+        for ip in cellaxes(px)
+            !(@index(index[ip, I...])) && continue
+            px_ip = @index   px[ip, I...]
+            py_ip = @index   py[ip, I...]
+            pz_ip = @index   pz[ip, I...]
 
             (;Angle, Center, H, W, Phase, T) = dike
             Δ = H
@@ -223,14 +223,14 @@ function Inject_dike_particles3D!(phases, pT, particles::Particles, dike::Dike)
             # Define displacement before the if blocks
             displacement = [0.0, 0.0, 0.0]
             if on
-                JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
-                JustRelax.@cell pT[ip, I...] = T
+                @index phases[ip, I...] = Float64(Phase) # magma
+                @index pT[ip, I...] = T
                 displacement, Bmax, overpressure = DisplacementAroundPennyShapedDike(dike, SA[px_rot,  py_rot],2)
                 displacement .= displacement*Bmax   # not necessary anymore
             end
             if in
-                JustRelax.@cell phases[ip, I...] = Float64(Phase) # magma
-                JustRelax.@cell pT[ip, I...] = T
+                @index phases[ip, I...] = Float64(Phase) # magma
+                @index pT[ip, I...] = T
             end
 
             px_ip = px_rot + displacement[1]
@@ -243,9 +243,9 @@ function Inject_dike_particles3D!(phases, pT, particles::Particles, dike::Dike)
             py_ip = pt_rot[2] .+ Center[2]
             pz_ip = pt_rot[3] .+ Center[3]
 
-            JustRelax.@cell px[ip, I...] = px_ip
-            JustRelax.@cell py[ip, I...] = py_ip
-            JustRelax.@cell pz[ip, I...] = pz_ip
+            @index px[ip, I...] = px_ip
+            @index py[ip, I...] = py_ip
+            @index pz[ip, I...] = pz_ip
 
         end
 
@@ -362,13 +362,13 @@ function init_dike_phase!(phases, particles)
     ni = size(phases)
 
     @parallel_indices (I...) function init_dike_phase(phases, px, py, index)
-    @inbounds for ip in JustRelax.JustRelax.cellaxes(phases)
+    @inbounds for ip in JustRelax.cellaxes(phases)
         # quick escape
-        # JustRelax.@cell(index[ip, i, j]) == 0 && continue
+        # @index(index[ip, i, j]) == 0 && continue
 
-        x = JustRelax.@cell px[ip, i, j]
-        y = -(JustRelax.@cell py[ip, i, j])
-        JustRelax.@cell phases[ip, i, j] = 2.0 # magma
+        x = @index px[ip, i, j]
+        y = -(@index py[ip, i, j])
+        @index phases[ip, i, j] = 2.0 # magma
         end
         return nothing
     end

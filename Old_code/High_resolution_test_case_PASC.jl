@@ -2,7 +2,7 @@ using CUDA
 # CUDA.allowscalar(false) # for safety
 CUDA.allowscalar(true) # for safety
 using JustRelax, JustRelax.DataIO, JustPIC
-import JustRelax.@cell
+# import @index
 
 ## NOTE: need to run one of the lines below if one wishes to switch from one backend to another
 # set_backend("Threads_Float64_2D")
@@ -53,30 +53,30 @@ function init_phases!(phases, particles, phases_topo, xc, yc, a, b, r, xc_anomal
     @parallel_indices (i, j) function init_phases!(
         phases, px, py, index, phases_topo, xc, yc, a, b, r, xc_anomaly, yc_anomaly, r_anomaly,xc_conduit, yc_conduit, r_conduit
     )
-        @inbounds for ip in JustRelax.JustRelax.cellaxes(phases)
+        @inbounds for ip in JustRelax.cellaxes(phases)
             # quick escape
-            JustRelax.@cell(index[ip, i, j]) == 0 && continue
+            @index(index[ip, i, j]) == 0 && continue
 
-            x = JustRelax.@cell px[ip, i, j]
-            y = -(JustRelax.@cell py[ip, i, j])
-            @cell phases[ip, i, j] = 1.0 # crust
+            x = @index px[ip, i, j]
+            y = -(@index py[ip, i, j])
+            @index phases[ip, i, j] = 1.0 # crust
 
             if ((x - xc_conduit)^2 ≤ r_conduit^2) && (0.25*(y - yc_conduit)^2 ≤ r_conduit^2)
-                JustRelax.@cell phases[ip, i, j] = 1.0
+                @index phases[ip, i, j] = 1.0
             end
 
             # # chamber - elliptical
             if (((x - xc)^2 / ((a)^2)) + ((y + yc)^2 / ((b)^2)) ≤ r^2)
-                JustRelax.@cell phases[ip, i, j] = 2.0
+                @index phases[ip, i, j] = 2.0
             end
 
             # thermal anomaly - circular
             if ((x - xc_anomaly)^2 + (y + yc_anomaly)^2 ≤ r_anomaly^2)
-                JustRelax.@cell phases[ip, i, j] = 3.0
+                @index phases[ip, i, j] = 3.0
             end
 
             if y < 0.0 && phases_topo[i, j] > 1.0
-                @cell phases[ip, i, j] = 4.0
+                @index phases[ip, i, j] = 4.0
             end
 
         end
@@ -123,14 +123,14 @@ end
 
 @parallel_indices (i, j) function init_T_particles!(temperature, phases, py, index, geotherm, tempoffset)
 
-    @inbounds for ip in 1:40 #JustRelax.cellaxes(phases)
+    @inbounds for ip in 1:40 #cellaxes(phases)
         # quick escape
-        JustRelax.@cell(index[ip, i, j]) == 0 && continue
+        @index(index[ip, i, j]) == 0 && continue
 
-        # if @cell(phases[ip, i, j]) == 3.0
-        #     @cell temperature[ip, i, j] = tempoffset
+        # if @index(phases[ip, i, j]) == 3.0
+        #     @index temperature[ip, i, j] = tempoffset
         # else
-            @cell temperature[ip, i, j] = tempoffset + geotherm * abs(@cell(py[ip, i, j]))
+            @index temperature[ip, i, j] = tempoffset + geotherm * abs(@index(py[ip, i, j]))
         # end
     end
     return nothing
@@ -219,12 +219,12 @@ end
 
 @parallel_indices (i, j) function elliptical_anomaly_gradient_particles!(temperature, phases, px, py, index, offset, xc, yc, a, b, r)
 
-    @inbounds for ip in JustRelax.cellaxes(phases)
+    @inbounds for ip in cellaxes(phases)
         # quick escape
-        JustRelax.@cell(index[ip, i, j]) == 0 && continue
+        @index(index[ip, i, j]) == 0 && continue
 
-        @inbounds if (((@cell(px[ip, i, j]) - xc)^2 / a^2) + ((@cell(py[ip, i, j]) + yc)^2 / b^2) ≤ r^2)
-            @cell temperature[ip, i, j] = @cell(temperature[ip, i, j]) + offset
+        @inbounds if (((@index(px[ip, i, j]) - xc)^2 / a^2) + ((@index(py[ip, i, j]) + yc)^2 / b^2) ≤ r^2)
+            @index temperature[ip, i, j] = @index(temperature[ip, i, j]) + offset
         end
     end
     return nothing
@@ -232,12 +232,12 @@ end
 
 @parallel_indices (i, j) function conduit_gradient_particles!(temperature, phases, px, py, index, offset, xc_conduit, yc_conduit, r_conduit)
 
-    @inbounds for ip in JustRelax.cellaxes(phases)
+    @inbounds for ip in cellaxes(phases)
         # quick escape
-        JustRelax.@cell(index[ip, i, j]) == 0 && continue
+        @index(index[ip, i, j]) == 0 && continue
 
-        @inbounds if (((@cell(px[ip, i, j]) - xc_conduit)^2 ≤ r_conduit^2) && (0.25*(@cell(py[ip, i, j]) - yc_conduit)^2) ≤ r_conduit^2)
-            @cell temperature[ip, i, j] = @cell(temperature[ip, i, j]) + offset
+        @inbounds if (((@index(px[ip, i, j]) - xc_conduit)^2 ≤ r_conduit^2) && (0.25*(@index(py[ip, i, j]) - yc_conduit)^2) ≤ r_conduit^2)
+            @index temperature[ip, i, j] = @index(temperature[ip, i, j]) + offset
 
         end
     end
@@ -293,12 +293,12 @@ end
 
 @parallel_indices (i, j) function circular_perturbation_particles!(temperature, phases, px, py, index, δT, xc, yc, r)
 
-    @inbounds for ip in 1:40 #JustRelax.cellaxes(phases)
+    @inbounds for ip in 1:40 #cellaxes(phases)
         # quick escape
-        JustRelax.@cell(index[ip, i, j]) == 0 && continue
+        @index(index[ip, i, j]) == 0 && continue
 
-        @inbounds if (((@cell(px[ip, i, j]) - xc)^2) + ((@cell(py[ip, i, j]) - yc)^2 ) ≤ r^2)
-            @cell temperature[ip, i, j] = @cell(temperature[ip, i, j]) * δT / 100 + 1
+        @inbounds if (((@index(px[ip, i, j]) - xc)^2) + ((@index(py[ip, i, j]) - yc)^2 ) ≤ r^2)
+            @index temperature[ip, i, j] = @index(temperature[ip, i, j]) * δT / 100 + 1
             #     # T[i + 1, j] = rand(0.55:0.001:offset)
         end
     end
@@ -354,15 +354,15 @@ function phase_change!(phases, particles)
     ni = size(phases)
     @parallel_indices (I...) function _phase_change!(phases, px, py, index)
 
-        @inbounds for ip in JustRelax.cellaxes(phases)
+        @inbounds for ip in cellaxes(phases)
             #quick escape
-            JustRelax.@cell(index[ip, I...]) == 0 && continue
+            @index(index[ip, I...]) == 0 && continue
 
-            x = JustRelax.@cell px[ip,I...]
-            y = (JustRelax.@cell py[ip,I...])
-            phase_ij = @cell phases[ip, I...]
+            x = @index px[ip,I...]
+            y = (@index py[ip,I...])
+            phase_ij = @index phases[ip, I...]
             if y > 0.0 && (phase_ij  == 2.0 || phase_ij  == 3.0)
-                @cell phases[ip, I...] = 4.0
+                @index phases[ip, I...] = 4.0
             end
         end
         return nothing
@@ -375,15 +375,15 @@ function open_conduit!(phases, particles, xc_conduit, yc_conduit, r_conduit)
     ni = size(phases)
     @parallel_indices (I...) function _open_conduit!(phases, px, py, index, xc_conduit, yc_conduit, r_conduit)
 
-        @inbounds for ip in JustRelax.cellaxes(phases)
+        @inbounds for ip in cellaxes(phases)
             #quick escape
-            JustRelax.@cell(index[ip, I...]) == 0 && continue
+            @index(index[ip, I...]) == 0 && continue
 
-            x = JustRelax.@cell px[ip,I...]
-            y = -(JustRelax.@cell py[ip,I...])
+            x = @index px[ip,I...]
+            y = -(@index py[ip,I...])
 
             if ((x - xc_conduit)^2 ≤ r_conduit^2) && (0.25*(y - yc_conduit)^2 ≤ r_conduit^2)
-                JustRelax.@cell phases[ip, I...] = 2.0
+                @index phases[ip, I...] = 2.0
             end
 
         end
@@ -402,11 +402,11 @@ function pureshear!(stokes, εbg, xvi)
 end
 
 @parallel_indices (i, j) function air_temperature!(Tc, phases, index, args)
-    @inbounds for ip in JustRelax.cellaxes(phases)
+    @inbounds for ip in cellaxes(phases)
         # quick escape
-        JustRelax.@cell(index[ip, i, j]) == 0 && continue
+        @index(index[ip, i, j]) == 0 && continue
 
-        if @cell phases[ip, i, j] = 4.0
+        if @index phases[ip, i, j] = 4.0
             Tc = args.temp_sticky_air
         end
 
@@ -418,15 +418,15 @@ function new_thermal_anomaly(phases, particles, xc_anomaly, yc_anomaly, r_anomal
     ni = size(phases)
 
     @parallel_indices (I...) function new_anomlay_particles(phases, px, py, index, xc_anomaly, yc_anomaly, r_anomaly)
-        @inbounds for ip in JustRelax.cellaxes(phases)
-            @cell(index[ip, I...]) == 0 && continue
+        @inbounds for ip in cellaxes(phases)
+            @index(index[ip, I...]) == 0 && continue
 
-            x = JustRelax.@cell px[ip, I...]
-            y = -(JustRelax.@cell py[ip, I...])
+            x = @index px[ip, I...]
+            y = -(@index py[ip, I...])
 
             # thermal anomaly - circular
             if ((x - xc_anomaly)^2 + (y + yc_anomaly)^2 ≤ r_anomaly^2)
-                JustRelax.@cell phases[ip, I...] = 3.0
+                @index phases[ip, I...] = 3.0
             end
         end
         return nothing

@@ -6,7 +6,7 @@ const isCUDA = true
 end
 
 using JustRelax, JustRelax.JustRelax2D, JustRelax.DataIO
-import JustRelax.@cell
+# import @index
 
 const backend_JR = @static if isCUDA
     CUDABackend          # Options: CPUBackend, CUDABackend, AMDGPUBackend
@@ -23,6 +23,7 @@ else
 end
 
 using JustPIC, JustPIC._2D
+import JustPIC._2D.cellaxes, JustPIC._2D.phase_ratios_center!
 # Threads is the default backend,
 # to run on a CUDA GPU load CUDA.jl (i.e. "using CUDA") at the beginning of the script,
 # and to run on an AMD GPU load AMDGPU.jl (i.e. "using AMDGPU") at the beginning of the script.
@@ -135,15 +136,15 @@ function phase_change!(phases, particles)
     ni = size(phases)
     @parallel_indices (I...) function _phase_change!(phases, px, py, index)
 
-        @inbounds for ip in JustRelax.cellaxes(phases)
+        @inbounds for ip in cellaxes(phases)
             #quick escape
-            JustRelax.@cell(index[ip, I...]) == 0 && continue
+            @index(index[ip, I...]) == 0 && continue
 
-            x = JustRelax.@cell px[ip,I...]
-            y = (JustRelax.@cell py[ip,I...])
-            phase_ij = @cell phases[ip, I...]
+            x = @index px[ip,I...]
+            y = (@index py[ip,I...])
+            phase_ij = @index phases[ip, I...]
             if y > 0.0 && (phase_ij  == 2.0 || phase_ij  == 3.0)
-                @cell phases[ip, I...] = 4.0
+                @index phases[ip, I...] = 4.0
             end
         end
         return nothing
@@ -156,16 +157,16 @@ function phase_change!(phases, EII_pl, threshold, particles)
     ni = size(phases)
     @parallel_indices (I...) function _phase_change!(phases, EII_pl, threshold, px, py, index)
 
-        @inbounds for ip in JustRelax.cellaxes(phases)
+        @inbounds for ip in cellaxes(phases)
             #quick escape
-            JustRelax.@cell(index[ip, I...]) == 0 && continue
+            @index(index[ip, I...]) == 0 && continue
 
-            x = JustRelax.@cell px[ip,I...]
-            y = (JustRelax.@cell py[ip,I...])
-            phase_ij = @cell phases[ip, I...]
-            EII_pl_ij = @cell EII_pl[ip, I...]
+            x = @index px[ip,I...]
+            y = (@index py[ip,I...])
+            phase_ij = @index phases[ip, I...]
+            EII_pl_ij = @index EII_pl[ip, I...]
             if EII_pl_ij > threshold && (phase_ij < 4.0)
-                @cell phases[ip, I...] = 2.0
+                @index phases[ip, I...] = 2.0
             end
         end
         return nothing
@@ -178,16 +179,16 @@ function phase_change!(phases, melt_fraction, threshold, sticky_air_phase, parti
     ni = size(phases)
     @parallel_indices (I...) function _phase_change!(phases, melt_fraction, threshold, sticky_air_phase, px, py, index)
 
-        @inbounds for ip in JustRelax.cellaxes(phases)
+        @inbounds for ip in cellaxes(phases)
             #quick escape
-            JustRelax.@cell(index[ip, I...]) == 0 && continue
+            @index(index[ip, I...]) == 0 && continue
 
-            x = JustRelax.@cell px[ip,I...]
-            y = (JustRelax.@cell py[ip,I...])
-            phase_ij = @cell phases[ip, I...]
-            melt_fraction_ij = @cell melt_fraction[ip, I...]
+            x = @index px[ip,I...]
+            y = (@index py[ip,I...])
+            phase_ij = @index phases[ip, I...]
+            melt_fraction_ij = @index melt_fraction[ip, I...]
             if melt_fraction_ij < threshold && (phase_ij < sticky_air_phase)
-                @cell phases[ip, I...] = 1.0
+                @index phases[ip, I...] = 1.0
             end
         end
         return nothing
@@ -215,15 +216,15 @@ function new_thermal_anomaly!(phases, particles, xc_anomaly, yc_anomaly, r_anoma
     ni = size(phases)
 
     @parallel_indices (I...) function new_anomlay_particles(phases, px, py, index, xc_anomaly, yc_anomaly, r_anomaly)
-        @inbounds for ip in JustRelax.cellaxes(phases)
-            @cell(index[ip, I...]) == 0 && continue
+        @inbounds for ip in cellaxes(phases)
+            @index(index[ip, I...]) == 0 && continue
 
-            x = JustRelax.@cell px[ip, I...]
-            y = JustRelax.@cell py[ip, I...]
+            x = @index px[ip, I...]
+            y = @index py[ip, I...]
 
             # thermal anomaly - circular
             if ((x - xc_anomaly)^2 + (y - yc_anomaly)^2 ≤ r_anomaly^2)
-                JustRelax.@cell phases[ip, I...] = 3.0
+                @index phases[ip, I...] = 3.0
             end
         end
         return nothing
@@ -243,7 +244,7 @@ function add_thermal_anomaly!(pPhases, particles, interval, lx, CharDim, thermal
     @views thermal.T[2:end-1, :] .= T_buffer
     temperature2center!(thermal)
     grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
-    phase_ratios_center!(phase_ratios, particles, grid, pPhases)
+    phase_ratios_center!(phase_ratios, particles, xci, pPhases)
     interval += 1.0
 end
 
@@ -345,9 +346,9 @@ end
 
     # Assign material phases --------------------------
     phases_dev   = PTArray(backend_JR)(phases_GMG)
-    phase_ratios = PhaseRatio(backend_JR, ni, length(rheology));
+    phase_ratios = PhaseRatios(backend, length(rheology), ni);
     init_phases2D!(pPhases, phases_dev, particles, xvi)
-    phase_ratios_center!(phase_ratios, particles, grid, pPhases)
+    phase_ratios_center!(phase_ratios, particles, xci, pPhases)
 
     thermal         = ThermalArrays(backend_JR, ni)
     @views thermal.T[2:end-1, :] .= PTArray(backend_JR)(nondimensionalize(T_GMG.*C, CharDim))
@@ -509,7 +510,7 @@ end
             temperature2center!(thermal)
             # grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
             grid2particle!(pT, xvi, T_buffer, particles)
-            phase_ratios_center!(phase_ratios, particles, grid, pPhases)
+            phase_ratios_center!(phase_ratios, particles, xci, pPhases)
             interval += 1.0
         end
 
@@ -612,7 +613,7 @@ end
         # phase_change!(pPhases, particles)
 
         # update phase ratios
-        phase_ratios_center!(phase_ratios, particles, grid, pPhases)
+        phase_ratios_center!(phase_ratios, particles, xci, pPhases)
 
         particle2grid!(T_buffer, pT, xvi, particles)
         @views T_buffer[:, end] .= Tsurf;

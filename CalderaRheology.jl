@@ -143,12 +143,12 @@ end
 ) where {N,T}
     ni = size(phases)
 
-    for ip in JustRelax.cellaxes(phases)
+    for ip in cellaxes(phases)
         # quick escape
-        @cell(index[ip, I...]) == 0 && continue
+        @index(index[ip, I...]) == 0 && continue
 
         pᵢ = ntuple(Val(N)) do i
-            @cell pcoords[i][ip, I...]
+            @index pcoords[i][ip, I...]
         end
 
         d = Inf # distance to the nearest particle
@@ -170,7 +170,7 @@ end
             #     particle_phase = 4.0
             # end
         end
-        @cell phases[ip, I...] = Float64(particle_phase)
+        @index phases[ip, I...] = Float64(particle_phase)
     end
 
     return nothing
@@ -188,12 +188,12 @@ end
 ) where {N,T}
     ni = size(phases)
 
-    for ip in JustRelax.cellaxes(phases)
+    for ip in cellaxes(phases)
         # quick escape
-        @cell(index[ip, I...]) == 0 && continue
+        @index(index[ip, I...]) == 0 && continue
 
         pᵢ = ntuple(Val(N)) do i
-            @cell pcoords[i][ip, I...]
+            @index pcoords[i][ip, I...]
         end
 
         d = Inf # distance to the nearest particle
@@ -212,7 +212,7 @@ end
                 particle_phase = phase_grid[ii, jj, kk]
             end
         end
-        JustRelax.@cell phases[ip, I...] = Float64(particle_phase)
+        @index phases[ip, I...] = Float64(particle_phase)
     end
 
     return nothing
