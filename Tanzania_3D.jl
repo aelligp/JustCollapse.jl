@@ -325,7 +325,7 @@ end
     # phase_ratios = PhaseRatio(backend_JR, ni, length(rheology));
     phase_ratios = PhaseRatios(backend, length(rheology), ni);
     init_phases3D!(pPhases, phases_dev, particles, xvi)
-    phase_ratios_center!(phase_ratios, particles, xci, pPhases)
+    update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
 
     thermal         = ThermalArrays(backend_JR, ni)
     @views thermal.T[2:end-1, :] .= PTArray(backend_JR)(nondimensionalize(T_GMG.*C, CharDim))
@@ -548,7 +548,7 @@ end
             temperature2center!(thermal)
             # grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
             grid2particle!(pT, xvi, T_buffer, particles)
-            phase_ratios_center!(phase_ratios, particles, xci, pPhases)
+            update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
             interval += 1.0
         end
 
@@ -649,7 +649,7 @@ end
         # phase_change!(pPhases, particles)
 
         # update phase ratios
-        phase_ratios_center!(phase_ratios, particles, xci, pPhases)
+        update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
 
         particle2grid!(T_buffer, pT, xvi, particles)
         @views T_buffer[:, end] .= Tsurf;

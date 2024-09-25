@@ -858,7 +858,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
     init_phases!(pPhases, particles, phases_topo_v, xc, yc, a, b, radius, x_anomaly, y_anomaly, r_anomaly, x_bottom, y_bottom, width, height)
     phase_ratios = PhaseRatio(backend_JR, ni, length(MatParam))
 
-    phase_ratios_center!(phase_ratios, particles, xci, pPhases)
+    update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
 
     # Physical Parameters
     geotherm = GeoUnit(30K / km)
@@ -1111,7 +1111,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
             temperature2center!(thermal)
             grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
 
-            phase_ratios_center!(phase_ratios, particles, xci, pPhases)
+            update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
             interval += 1
         end
         while Restart
@@ -1228,7 +1228,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         phase_change!(pPhases, pEII, 1e-2, particles)
         phase_change!(pPhases, particles)
         # update phase ratios
-        phase_ratios_center!(phase_ratios, particles, xci, pPhases)
+        update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
         # @parallel (@idx ni) compute_melt_fraction!(
         #     ϕ, phase_ratios.center, MatParam, (T=thermal.Tc, P=stokes.P)
         # )

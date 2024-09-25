@@ -36,7 +36,7 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
         cen    = (mean(Grid.x.val), 0,-6.0),
         axes   = (5.5, 3.0, 3.0),
         phase  = ConstantPhase(5),
-        # T      = HalfspaceCoolingTemp(Age=20)
+        T      = HalfspaceCoolingTemp(Age=5)
     )
     add_ellipsoid!(Phases, Temp, Grid;
         cen    = (mean(Grid.x.val), 0,-5.0),
