@@ -264,7 +264,7 @@ end
         sticky_air  = 5                         #specify the thickness of the sticky air layer in km
 
     shear = true                                #specify if you want to use pure shear boundary conditions
-    εbg_dim   = 5e-13 / s * shear                                 #specify the background strain rate
+    εbg_dim   = 1e-14 / s * shear                                 #specify the background strain rate
 
     # IO --------------------------------------------------
     # if it does not exist, make folder where figures are stored
@@ -355,7 +355,7 @@ end
     if DisplacementFormulation == true
         flow_bcs = DisplacementBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface=true,
+            free_surface=false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         displacement2velocity!(stokes, dt) # convert displacement to velocity
@@ -363,7 +363,7 @@ end
     elseif DisplacementFormulation == false
         flow_bcs = VelocityBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface=true,
+            free_surface=false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
@@ -475,11 +475,12 @@ end
         phase_ratios,
         rheology_incomp,
         args,
-        dt*0.1,
+        # dt*0.1,
+        dt,
         igg;
         kwargs = (;
             iterMax          = 100e3,#250e3,
-            free_surface     = true,
+            free_surface     = false,
             nout             = 2e3,#5e3,
             viscosity_cutoff = cutoff_visc,
             verbose          = false,
@@ -507,7 +508,7 @@ end
         BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
         flow_bcs = DisplacementBoundaryConditions(;
             free_slip   =(left=true, right=true, top=true, bot=true),
-            free_surface=true,
+            free_surface=false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         displacement2velocity!(stokes, dt) # convert displacement to velocity
@@ -516,14 +517,14 @@ end
         BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz, phases_dev)
         flow_bcs = VelocityBoundaryConditions(;
             free_slip   =(left=true, right=true, top=true, bot=true),
-            free_surface=true,
+            free_surface=false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
     else
         flow_bcs = VelocityBoundaryConditions(;
             free_slip    = (left=true, right=true, top=true, bot=true),
-            free_surface =true,
+            free_surface =false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
@@ -557,7 +558,7 @@ end
             interval += 1.0
         end
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt,#= ΔTc=thermal.ΔTc,=# perturbation_C = perturbation_C)
         ## Stokes solver -----------------------------------
         solve!(
             stokes,
@@ -566,7 +567,7 @@ end
             flow_bcs,
             ρg,
             phase_ratios,
-            rheology,
+            rheology_incomp,
             args,
             dt,
             igg;
