@@ -118,15 +118,10 @@ end
 #     return nothing
 # end
 
-# @parallel_indices (i, j) function init_P!(P, ρg, z, phases,sticky_air)
-#     # if phases[i, j] == 4.0
-#     #     @all(P) = 0.0
-#     # else
-#         @all(P) = abs(@all(ρg) * (@all_j(z))) #* <((@all_j(z)), 0.0)
-#         # @all(P) = @all(ρg)
-#     # end
-#     return nothing
-# end
+@parallel_indices (i, j) function init_P!(P, ρg, z)
+    @all(P) = abs(@all(ρg) * (@all_j(z))) #* <((@all_j(z)), 0.0)
+    return nothing
+end
 
 # function phase_change!(phases, particles)
 #     ni = size(phases)
@@ -398,7 +393,7 @@ end
 
     for _ in 1:5
         compute_ρg!(ρg[end], phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
-        @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
+        @parallel (@idx ni) init_P!(stokes.P, ρg[end], xci[end])
     end
 
     compute_melt_fraction!(
