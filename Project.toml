@@ -31,7 +31,7 @@ GMT = "5752ebe1-31b9-557e-87aa-f909b540aa54"
 [compat]
 AMDGPU = "0.8, 0.9, 1"
 Adapt = "4"
-CUDA = "~5.3.5"
+CUDA = "5"
 CairoMakie = "0.12"
 CellArrays = "0.2"
 FileIO = "1"
