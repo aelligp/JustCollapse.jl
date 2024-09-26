@@ -2,17 +2,17 @@
 using GeophysicalModelGenerator
 
 function SillSetup(nx, ny, nz)
-    Lx = Ly = 0.3e3
+    Lx = Ly = 300
     x = range(0.0, Lx, nx)
     y = range(0.0, Ly, 2)
-    z = range(-0.25e3, 0.0, nz)
+    z = range(-250, 0.0, nz)
     Grid = CartData(xyz_grid(x, y, z))
 
     # Now we create an integer array that will hold the `Phases` information (which usually refers to the material or rock type in the simulation)
     Phases = fill(1, nx, 2, nz)
 
     # In many (geodynamic) models, one also has to define the temperature, so lets define it as well
-    Temp = fill(600+273, nx, 2, nz)
+    Temp = fill(400+273, nx, 2, nz)
 
     add_box!(
         Phases,
@@ -20,7 +20,7 @@ function SillSetup(nx, ny, nz)
         Grid;
         xlim=(minimum(Grid.x.val), maximum(Grid.x.val)),
         ylim=(minimum(Grid.y.val), maximum(Grid.y.val)),
-        zlim=(-0.175e3, -0.075e3),
+        zlim=(-175, -75),
         phase=ConstantPhase(2),
         T = ConstantTemp(; T=1200+273),
     )

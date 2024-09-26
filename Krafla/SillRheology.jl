@@ -1,6 +1,6 @@
 # from "Fingerprinting secondary mantle plumes", Cloetingh et al. 2022
 
-function init_rheologies(CharDim)
+function init_rheologies(;CharDim=nothing)
     linear_viscosity_rhy            = LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K)#,η0=1e0Pa*s)
     linear_viscosity_bas            = LinearMeltViscosity(A = -9.6012, B = 1.3374e+04K, T0 = 307.8043K)#, η0=1e3Pa*s)
 

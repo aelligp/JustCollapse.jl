@@ -1,4 +1,4 @@
-const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -32,10 +32,10 @@ else
     JustPIC.CPUBackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 end
 
-using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie
 import GeoParams.Dislocation
 using GeophysicalModelGenerator
-using StaticArrays, WriteVTK, JLD2, Dates
+using WriteVTK, JLD2, Dates
 
 # Load file with all the rheology configurations
 include("SillRheology.jl")
@@ -70,8 +70,8 @@ function plot_particles(particles, pPhases)
     p = particles.coords
     # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
     ppx, ppy = p
-    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
+    # pxv = ustrip.(dimensionalize(ppx.data[:], m, CharDim))
+    # pyv = ustrip.(dimensionalize(ppy.data[:], m, CharDim))
     pxv = ppx.data[:]
     pyv = ppy.data[:]
     clr = pPhases.data[:]
@@ -85,13 +85,13 @@ end
 ## END OF HELPER FUNCTION ------------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
-function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =false)
+# function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =false)
 
     #-----------------------------------------------------
     # USER INPUTS
     #-----------------------------------------------------
     # Characteristic lengths for nondimensionalisation
-    CharDim         = GEO_units(; length=0.3km, viscosity=1e10Pa * s, temperature=(1000+273)K)
+    CharDim         = GEO_units(; length=1km, viscosity=1e10Pa * s, temperature=(1000+273)K)
     #-----------------------------------------------------
 
     # IO --------------------------------------------------
@@ -110,13 +110,13 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
     # -----------------------------------------------------
     # Set up the JustRelax model
     # -----------------------------------------------------
-    lx              = nondimensionalize(li_GMG[1] * km, CharDim)              # nondimensionalize domain length in x-direction
-    lz              = nondimensionalize(li_GMG[end] * km, CharDim)            # nondimensionalize domain length in y-direction
+    lx              = nondimensionalize(li_GMG[1] * m, CharDim)              # nondimensionalize domain length in x-direction
+    lz              = nondimensionalize(li_GMG[end] * m, CharDim)            # nondimensionalize domain length in y-direction
     li              = (lx, lz)                                              # domain length in x- and y-direction
     ni              = (nx, nz)                                              # number of grid points in x- and y-direction
     di              = @. li / ni                                            # grid spacing in x- and y-direction
     origin          = ntuple(Val(2)) do i
-        nondimensionalize(origin_GMG[i] * km,CharDim)                       # origin coordinates of the domain
+        nondimensionalize(origin_GMG[i] * m,CharDim)                       # origin coordinates of the domain
     end
     grid         = Geometry(ni, li; origin=origin)
     (; xci, xvi) = grid                                                     # nodes at the center and vertices of the cells
@@ -124,7 +124,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
     # ----------------------------------------------------
 
     # Physical properties using GeoParams ----------------
-    rheology     = init_rheologies(CharDim)
+    rheology     = init_rheologies(;CharDim)
     cutoff_visc  = (-Inf,Inf)
     # κ            = (4 / (compute_heatcapacity(rheology[1].HeatCapacity[1].Cp) * 2900.0))
     κ            = (4 / (compute_heatcapacity(rheology[1].HeatCapacity[1].Cp) * rheology[1].Density[1].ρ))
@@ -211,12 +211,12 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
         scatter!(
             ax1,
             Array(ustrip.(dimensionalize(thermal.T[2:(end - 1), :][:], K, CharDim))),
-            ustrip.(dimensionalize(Yv, km, CharDim)),
+            ustrip.(dimensionalize(Yv, m, CharDim)),
         )
         scatter!(
             ax2,
             log10.(Array(ustrip.(dimensionalize(stokes.viscosity.η[:],Pas,CharDim)))),
-            ustrip.(dimensionalize(Y, km, CharDim)),)
+            ustrip.(dimensionalize(Y, m, CharDim)),)
         hideydecorations!(ax2)
         save(joinpath(figdir, "initial_profile.png"), fig)
         fig
@@ -293,7 +293,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
 
                 # Advection --------------------
         # advect particles in space
-        advection!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
         # check if we need to inject particles
@@ -424,14 +424,14 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
             # Plot temperature
             h1  = heatmap!(
                 ax1,
-                ustrip.(dimensionalize(xvi[1],km,CharDim)),
-                ustrip.(dimensionalize(xvi[2],km,CharDim)),
+                ustrip.(dimensionalize(xvi[1],m,CharDim)),
+                ustrip.(dimensionalize(xvi[2],m,CharDim)),
                 ustrip.(dimensionalize((Array(thermal.T[2:(end - 1), :])),K,CharDim)); colormap=:lipari, colorrange=(600+273, 1000+273))
 
             h2  = heatmap!(
                 ax2,
-                ustrip.(dimensionalize(xci[1],km,CharDim)),
-                ustrip.(dimensionalize(xci[2],km,CharDim)),
+                ustrip.(dimensionalize(xci[1],m,CharDim)),
+                ustrip.(dimensionalize(xci[2],m,CharDim)),
                 Array(ustrip.(dimensionalize(ρg[end], kg / m^3 * m / s^2, CharDim))./9.81);
                 colormap=:batlowW)
 
@@ -441,8 +441,8 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
             # Plot vy velocity
             h3  = heatmap!(
                 ax3,
-                ustrip.(dimensionalize(xvi[1],km,CharDim)),
-                ustrip.(dimensionalize(xvi[2],km,CharDim)),
+                ustrip.(dimensionalize(xvi[1],m,CharDim)),
+                ustrip.(dimensionalize(xvi[2],m,CharDim)),
                 Array(ustrip.(dimensionalize(stokes.V.Vy, m/s, CharDim))); colormap=:batlow)
 
             # Plot effective viscosity
@@ -450,8 +450,8 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
 
             # Plot melt fraction
             h4  = heatmap!(ax4,
-                ustrip.(dimensionalize(xci[1],km,CharDim)),
-                ustrip.(dimensionalize(xci[2],km,CharDim)),
+                ustrip.(dimensionalize(xci[1],m,CharDim)),
+                ustrip.(dimensionalize(xci[2],m,CharDim)),
                 Array(ϕ);
                 colormap=:lipari)
 

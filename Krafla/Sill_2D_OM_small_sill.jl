@@ -20,7 +20,7 @@ model = PS_Setup(:CUDA, Float64, 2) #or (:CUDA, Float64, 2) or (:AMDGPU, Float64
 environment!(model)
 
 # Load script dependencies
-using Printf, LinearAlgebra, GeoParams, CairoMakie, CellArrays, WriteVTK, Statistics
+using Printf, LinearAlgebra, GeoParams, CairoMakie, WriteVTK, Statistics
 
 # Load file with all the rheology configurations
 include("Sill_rheology_small_sill.jl")
