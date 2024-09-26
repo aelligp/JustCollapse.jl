@@ -1,4 +1,4 @@
-const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -23,7 +23,7 @@ else
 end
 
 using JustPIC, JustPIC._2D
-import JustPIC._2D.cellaxes#, JustPIC._2D.phase_ratios_center!
+import JustPIC._2D.cellaxes
 # Threads is the default backend,
 # to run on a CUDA GPU load CUDA.jl (i.e. "using CUDA") at the beginning of the script,
 # and to run on an AMD GPU load AMDGPU.jl (i.e. "using AMDGPU") at the beginning of the script.
@@ -33,9 +33,9 @@ else
     JustPIC.CPUBackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 end
 
-using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
+using Printf, Statistics, LinearAlgebra, GeoParams, GLMakie
 import GeoParams.Dislocation
-using StaticArrays, GeophysicalModelGenerator, WriteVTK, JLD2
+using GeophysicalModelGenerator#, WriteVTK, JLD2
 using Dates
 
 # -----------------------------------------------------
@@ -248,7 +248,7 @@ end
 # [...]
 
 
-# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -304,8 +304,9 @@ end
     perturbation_C = @rand(ni...);                                          # perturbation of the cohesion
 
     # Physical Parameters
-    rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
-    rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
+    rheology     = init_rheology(CharDim; is_compressible=true, linear = true)
+    # rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
+    # rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
     cutoff_visc  = nondimensionalize((1e15Pa*s, 1e24Pa*s),CharDim)
     κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
@@ -402,13 +403,14 @@ end
     args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
     for _ in 1:5
-        compute_ρg!(ρg[end], phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
-        @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
+        compute_ρg!(ρg[end], phase_ratios, rheology, args)
+        # @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
+        stokes.P .= PTArray(backend)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
+        compute_melt_fraction!(
+            ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
+        )
     end
 
-    compute_melt_fraction!(
-        ϕ, phase_ratios.center, rheology, (T=thermal.T, P=stokes.P)
-    )
     compute_viscosity!(stokes, phase_ratios, args, rheology, cutoff_visc)
 
     @copy stokes.P0 stokes.P
@@ -441,7 +443,7 @@ end
     pT0.data    .= pT.data
 
     ## Plot initial T and P profile
-    let
+    fig = let
         Yv = [y for x in xvi[1], y in xvi[2]][:]
         Y = [y for x in xci[1], y in xci[2]][:]
         fig = Figure(; size=(1200, 900))
@@ -461,11 +463,11 @@ end
         save(joinpath(figdir, "initial_profile.png"), fig)
         fig
     end
-
     ## Do a incompressible stokes solve, to get a better initial guess for the compressible stokes
     ## solver. And after that apply the extension/compression BCs. This is done to avoid the
     ## incompressible stokes solver to blow up.
     println("Starting incompressible stokes solve")
+
     solve!(
         stokes,
         pt_stokes,
@@ -473,7 +475,7 @@ end
         flow_bcs,
         ρg,
         phase_ratios,
-        rheology_incomp,
+        rheology,
         args,
         # dt*0.1,
         dt,
@@ -970,8 +972,8 @@ end
                     idxv = particles.index.data[:]
                     f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
                     Colorbar(f[1,2], h)
-                    save(joinpath(figdir, "particles_$it.png"), f)
                     f
+                    save(joinpath(figdir, "particles_$it.png"), f)
                 end
              end
         end
@@ -992,4 +994,13 @@ else
     igg
 end
 
-Caldera_2D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
+# Caldera_2D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
+
+
+# pc = [argmax(p) for p in Array(phase_ratios.center)]
+# pv = [argmax(p) for p in Array(phase_ratios.vertex)]
+
+# heatmap(xci..., pc)
+scatter!(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=3)
+
+# heatmap(pv)
