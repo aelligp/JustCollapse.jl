@@ -1,4 +1,4 @@
-const isCUDA = true
+const isCUDA = false
 
 @static if isCUDA
     using CUDA
@@ -33,7 +33,7 @@ else
     JustPIC.CPUBackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 end
 
-using Printf, Statistics, LinearAlgebra, GeoParams, GLMakie
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie
 import GeoParams.Dislocation
 using GeophysicalModelGenerator#, WriteVTK, JLD2
 using Dates
@@ -304,7 +304,7 @@ end
     perturbation_C = @rand(ni...);                                          # perturbation of the cohesion
 
     # Physical Parameters
-    rheology     = init_rheology(CharDim; is_compressible=true, linear = true)
+    rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
     # rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
     # rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
     cutoff_visc  = nondimensionalize((1e15Pa*s, 1e24Pa*s),CharDim)
@@ -405,7 +405,7 @@ end
     for _ in 1:5
         compute_ρg!(ρg[end], phase_ratios, rheology, args)
         # @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
-        stokes.P .= PTArray(backend)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
+        stokes.P .= PTArray(backend_JR)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
         compute_melt_fraction!(
             ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
         )
