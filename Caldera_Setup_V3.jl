@@ -1,4 +1,4 @@
-const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -35,7 +35,7 @@ end
 
 using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie
 import GeoParams.Dislocation
-using GeophysicalModelGenerator#, WriteVTK, JLD2
+using GeophysicalModelGenerator, WriteVTK, JLD2
 using Dates
 
 # -----------------------------------------------------
@@ -244,6 +244,19 @@ function plot_particles(particles, pPhases)
     f
 end
 
+function extract_topography!(grid, air_phase)
+
+        phases = grid.fields.Phases
+        topography = zeros(Float64, size(grid.z.val[:,1,1]))
+        for i in eachindex(topography)
+            ind = findfirst(x -> x == air_phase, phases[i,1,:])
+            topography[i] = grid.z.val[i,1,ind] - 0.5 * (grid.z.val[i,1,ind] - grid.z.val[i,1,ind-1])
+        end
+
+    return topography
+end
+
+# topo = extract_topography!(Grid, 4)
 
 # [...]
 
@@ -264,7 +277,7 @@ end
         sticky_air  = 5                         #specify the thickness of the sticky air layer in km
 
     shear = true                                #specify if you want to use pure shear boundary conditions
-    εbg_dim   = 1e-14 / s * shear                                 #specify the background strain rate
+    εbg_dim   = 1e-13 / s * shear                                 #specify the background strain rate
 
     # IO --------------------------------------------------
     # if it does not exist, make folder where figures are stored
@@ -305,8 +318,7 @@ end
 
     # Physical Parameters
     rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
-    # rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
-    # rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
+    rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
     cutoff_visc  = nondimensionalize((1e15Pa*s, 1e24Pa*s),CharDim)
     κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
@@ -314,9 +326,9 @@ end
     dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
 
     # Initialize particles ----------------------------------
-    nxcell           = 30
-    max_xcell        = 40
-    min_xcell        = 20
+    nxcell           = 40
+    max_xcell        = 50
+    min_xcell        = 30
     particles        = init_particles(backend, nxcell, max_xcell, min_xcell, xvi...);
 
     subgrid_arrays   = SubgridDiffusionCellArrays(particles);
@@ -332,6 +344,10 @@ end
     phase_ratios = PhaseRatios(backend, length(rheology), ni);
     init_phases2D!(pPhases, phases_dev, particles, xvi)
     update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
+
+    initial_elevation = PTArray(backend_JR)(nondimensionalize(extract_topography!(Grid, 4) .*km, CharDim))
+
+    chain             = init_markerchain(backend, nxcell, min_xcell, max_xcell, xvi[1], initial_elevation);
 
     thermal         = ThermalArrays(backend_JR, ni)
     @views thermal.T[2:end-1, :] .= PTArray(backend_JR)(nondimensionalize(T_GMG.*C, CharDim))
@@ -475,7 +491,7 @@ end
         flow_bcs,
         ρg,
         phase_ratios,
-        rheology,
+        rheology_incomp,
         args,
         # dt*0.1,
         dt,
@@ -533,7 +549,7 @@ end
     end
     println("Starting main loop")
 
-    while it < 1500 #nt
+    while it < 150 #nt
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -569,7 +585,7 @@ end
             flow_bcs,
             ρg,
             phase_ratios,
-            rheology_incomp,
+            rheology,
             args,
             dt,
             igg;
@@ -591,6 +607,7 @@ end
         dt     = dt_new
 
         tensor_invariant!(stokes.ε)
+        tensor_invariant!(stokes.ε_pl)
 
         ## Save the checkpoint file before a possible thermal solver blow up
         checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
@@ -981,7 +998,7 @@ end
 end
 
 # figname = "Systematics_initial_Setup_test_v2_rhyolite_$(today())"
-figname = "New_JP_testing"
+figname = "$(today())_V3_testing_new_stress_calc"
 do_vtk = true
 ar = 2 # aspect ratio
 n = 64
