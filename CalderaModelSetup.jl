@@ -58,7 +58,7 @@ function Toba_setup2D(nx,ny,nz; sticky_air=5)
         # ylim=(minimum(Grid3D_cart.y.val), maximum(Grid3D_cart.y.val)),
         zlim=(minimum(Grid3D_cart.z.val), maximum(Grid3D_cart.z.val)),
         phase = lith,
-        T = HalfspaceCoolingTemp(Age=20)
+        T = HalfspaceCoolingTemp(Age=11)
     )
 
     for k in axes(Grid3D_cart.z.val, 3), j in axes(topo_toba, 2), i in axes(topo_toba,1)
@@ -146,7 +146,7 @@ function Toba_setup3D(nx,ny,nz; sticky_air=5)
         # ylim=(minimum(Grid3D_cart.y.val), maximum(Grid3D_cart.y.val)),
         zlim=(minimum(Grid3D_cart.z.val), maximum(Grid3D_cart.z.val)),
         phase = lith,
-        T = HalfspaceCoolingTemp(Age=20)
+        T = HalfspaceCoolingTemp(Age=11)
     )
 
     # add_volcano!(Phases, Temp, Grid3D_cart;
@@ -157,7 +157,7 @@ function Toba_setup3D(nx,ny,nz; sticky_air=5)
     #     crater     = 0.5,
     #     base       = 0.0,
     #     # background = topo_toba,
-    #     T = HalfspaceCoolingTemp(Age=20)
+    #     T = HalfspaceCoolingTemp(Age=11)
     # )
 
     add_ellipsoid!(Phases, Temp, Grid3D_cart;
@@ -214,7 +214,7 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
         ylim=(minimum(Grid.y.val), maximum(Grid.y.val)),
         zlim=(minimum(Grid.z.val), 0.0),
         phase = LithosphericPhases(Layers=[30], Phases=[1]),
-        T = HalfspaceCoolingTemp(Age=20)
+        T = HalfspaceCoolingTemp(Age=11)
     )
 
     add_volcano!(Phases, Temp, Grid;
@@ -283,7 +283,7 @@ function volcano_setup3D(nx,ny,nz;sticky_air=5)
         ylim=(-400, 400.0),
         zlim=(-110.0, 0.0),
         phase = lith,
-        T = HalfspaceCoolingTemp(Age=20)
+        T = HalfspaceCoolingTemp(Age=11)
     )
 
     # add_volcano!(Phases, Temp, Grid;
@@ -294,7 +294,7 @@ function volcano_setup3D(nx,ny,nz;sticky_air=5)
     #     crater          = 0.5,
     #     base            = 0.0,
     #     background      = nothing,
-    #     T               = HalfspaceCoolingTemp(Age=20)
+    #     T               = HalfspaceCoolingTemp(Age=11)
     # )
 
     add_ellipsoid!(Phases, Temp, Grid;
@@ -360,7 +360,7 @@ function simple_setup_no_FS2D(nx,ny,nz)
         xlim=(minimum(Grid.x.val), maximum(Grid.x.val)),
         zlim=(minimum(Grid.z.val), maximum(Grid.z.val)),
         phase = LithosphericPhases(Layers=[30], Phases=[1]),
-        T = HalfspaceCoolingTemp(Age=20)
+        T = HalfspaceCoolingTemp(Age=11)
     )
 
     add_ellipsoid!(Phases, Temp, Grid;
@@ -421,7 +421,7 @@ function simple_setup_no_FS3D(nx,ny,nz)
         ylim=(-400, 400.0),
         zlim=(-110.0, 0.0),
         phase = lith,
-        T = HalfspaceCoolingTemp(Age=20)
+        T = HalfspaceCoolingTemp(Age=11)
     )
 
     add_ellipsoid!(Phases, Temp, Grid;

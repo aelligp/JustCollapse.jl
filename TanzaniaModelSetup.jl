@@ -69,7 +69,7 @@ function Tanzania_setup3D(nx,ny,nz; sticky_air=5)
         # ylim=(minimum(Grid3D_cart.y.val), maximum(Grid3D_cart.y.val)),
         zlim=(minimum(Grid3D_cart.z.val), maximum(Grid3D_cart.z.val)),
         phase = lith,
-        T = HalfspaceCoolingTemp(Age=20)
+        T = HalfspaceCoolingTemp(Age=11)
     )
 
     # add_volcano!(Phases, Temp, Grid3D_cart;
@@ -80,7 +80,7 @@ function Tanzania_setup3D(nx,ny,nz; sticky_air=5)
     #     crater     = 0.5,
     #     base       = 0.0,
     #     # background = topo_tanzania,
-    #     T = HalfspaceCoolingTemp(Age=20)
+    #     T = HalfspaceCoolingTemp(Age=11)
     # )
 
     # add_ellipsoid!(Phases, Temp, Grid3D_cart;
@@ -143,7 +143,7 @@ end
 #         # ylim=(minimum(Grid3D_cart.y.val), maximum(Grid3D_cart.y.val)),
 #         zlim=(minimum(Grid3D_cart.z.val), maximum(Grid3D_cart.z.val)),
 #         phase = lith,
-#         T = HalfspaceCoolingTemp(Age=20)
+#         T = HalfspaceCoolingTemp(Age=11)
 #     )
 
 #     for k in axes(Grid3D_cart.z.val, 3), j in axes(topo_tanzania, 2), i in axes(topo_tanzania,1)

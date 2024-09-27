@@ -1,4 +1,4 @@
-const isCUDA = true
+const isCUDA = false
 
 @static if isCUDA
     using CUDA
@@ -23,7 +23,6 @@ else
 end
 
 using JustPIC, JustPIC._2D
-import JustPIC._2D.cellaxes, JustPIC._2D.phase_ratios_center!
 # Threads is the default backend,
 # to run on a CUDA GPU load CUDA.jl (i.e. "using CUDA") at the beginning of the script,
 # and to run on an AMD GPU load AMDGPU.jl (i.e. "using AMDGPU") at the beginning of the script.
@@ -39,8 +38,8 @@ using StaticArrays, GeophysicalModelGenerator, WriteVTK, JLD2
 using Dates
 
 # -----------------------------------------------------
-include("CalderaModelSetup_small_scale.jl")
-include("CalderaRheology_small_scale.jl")
+include("CalderaModelSetup_PipeFlow.jl")
+include("CalderaRheology_PipeFlow.jl")
 # -----------------------------------------------------
 ## SET OF HELPER FUNCTIONS PARTICULAR FOR THIS SCRIPT --------------------------------
 
@@ -248,7 +247,7 @@ end
 # [...]
 
 
-# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(igg, init_rheology(), ; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -401,13 +400,14 @@ end
     args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, #=ΔTc=thermal.ΔTc, =#perturbation_C = perturbation_C)
 
     for _ in 1:5
-        compute_ρg!(ρg[end], phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
-        @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
+        compute_ρg!(ρg[end], phase_ratios, rheology, args)
+        # @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
+        stokes.P .= PTArray(backend_JR)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
+        compute_melt_fraction!(
+            ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
+        )
     end
 
-    compute_melt_fraction!(
-        ϕ, phase_ratios.center, rheology, (T=thermal.T, P=stokes.P)
-    )
     compute_viscosity!(stokes, phase_ratios, args, rheology, cutoff_visc)
 
     @copy stokes.P0 stokes.P
@@ -620,13 +620,13 @@ end
         for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
             copyinn_x!(dst, src)
         end
-        # subgrid_characteristic_time!(
-        #     subgrid_arrays, particles, dt₀, phase_ratios, rheology, thermal, stokes, xci, di
-        # )
-        # centroid2particle!(subgrid_arrays.dt₀, xci, dt₀, particles)
-        # subgrid_diffusion!(
-        #     pT, T_buffer, thermal.ΔT[2:end-1, :], subgrid_arrays, particles, xvi,  di, dt
-        # )
+        subgrid_characteristic_time!(
+            subgrid_arrays, particles, dt₀, phase_ratios, rheology, thermal, stokes, xci, di
+        )
+        centroid2particle!(subgrid_arrays.dt₀, xci, dt₀, particles)
+        subgrid_diffusion!(
+            pT, T_buffer, thermal.ΔT[2:end-1, :], subgrid_arrays, particles, xvi,  di, dt
+        )
         compute_melt_fraction!(
             ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
         )
@@ -936,8 +936,9 @@ end
                     Yv = [y for x in xvi[1], y in xvi[2]][:]
                     Y = [y for x in xci[1], y in xci[2]][:]
                     fig = Figure(; size=(1200, 900))
-                    ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
-                    ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Pressure")
+                    ax1 = Axis(fig[1, 1]; aspect=DataAspect(), title="T")
+                    ax2 = Axis(fig[1, 2]; aspect=DataAspect(), title="Pressure")
+                    ax3 = Axis(fig[1, 2]; aspect=DataAspect(), title="Pressure")
 
                     scatter!(
                         ax1,
@@ -949,6 +950,10 @@ end
                         Array(ustrip.(dimensionalize(stokes.P[:], MPa, CharDim))),
                         ustrip.(dimensionalize(Y, km, CharDim)),
                     )
+                    # lines!(
+                    #     ax2,
+                    #     x_v, y_v, Vy_d
+                    # )
 
                     hideydecorations!(ax2)
                     save(joinpath(figdir, "pressure_profile_$it.png"), fig)
