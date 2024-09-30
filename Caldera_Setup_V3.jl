@@ -244,7 +244,7 @@ function plot_particles(particles, pPhases)
     f
 end
 
-function extract_topography!(grid, air_phase)
+function extract_topography2D!(grid, air_phase)
 
         phases = grid.fields.Phases
         topography = zeros(Float64, size(grid.z.val[:,1,1]))
@@ -255,9 +255,23 @@ function extract_topography!(grid, air_phase)
 
     return topography
 end
+topo = extract_topography3D!(Grid, 4)
 
-# topo = extract_topography!(Grid, 4)
+function extract_topography3D!(grid, air_phase)
+    phases = grid.fields.Phases
+    topography = zeros(Float64, size(grid.z.val, 1), size(grid.z.val, 2))
 
+    for i in axes(topography, 1)
+        for j in axes(topography, 2)
+            ind = findfirst(x -> x == air_phase, phases[i, j, :])
+            if ind !== nothing && ind > 1
+                topography[i, j] = grid.z.val[i, j, ind] - 0.5 * (grid.z.val[i, j, ind] - grid.z.val[i, j, ind-1])
+            end
+        end
+    end
+
+    return topography
+end
 # [...]
 
 
