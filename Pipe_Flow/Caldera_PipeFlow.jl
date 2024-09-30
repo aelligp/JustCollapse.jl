@@ -117,15 +117,15 @@ function BC_displ!(Ux,Uy, εbg, xvi, lx,ly, dt)
     return nothing
 end
 
-@parallel_indices (i, j) function init_P!(P, ρg, z, phases,sticky_air)
-    # if phases[i, j] == 4.0
-    #     @all(P) = 0.0
-    # else
-        @all(P) = abs(@all(ρg) * (@all_j(z))) #* <((@all_j(z)), 0.0)
-        # @all(P) = @all(ρg)
-    # end
-    return nothing
-end
+# @parallel_indices (i, j) function init_P!(P, ρg, z, phases,sticky_air)
+#     # if phases[i, j] == 4.0
+#     #     @all(P) = 0.0
+#     # else
+#         @all(P) = abs(@all(ρg) * (@all_j(z))) #* <((@all_j(z)), 0.0)
+#         # @all(P) = @all(ρg)
+#     # end
+#     return nothing
+# end
 
 function phase_change!(phases, particles)
     ni = size(phases)
@@ -243,11 +243,42 @@ function plot_particles(particles, pPhases)
     f
 end
 
+px = chain.coords[1].data[:];
+py = chain.coords[2].data[:];
+scatter!(ax,px, py, color=:black)
 
 # [...]
 
+function phase_change!(phases, particles, chain)
+    ni = size(phases)
+    @parallel_indices (I...) function _phase_change!(phases,pcoords::NTuple{N,T}, index, chain) where {N,T}
+    # ni = size(phases)
+        @inbounds for ip in cellaxes(phases)
+            # quick escape
+            @index(index[ip, I...]) == 0 && continue
 
-@views function Caldera_2D(igg, init_rheology(), ; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+            pᵢ = ntuple(Val(N)) do i
+                @index pcoords[i][ip, I...]
+            end
+
+            # x = @index px[ip, I...]
+            # y = (@index py[ip, I...])
+            phase_ij = @index phases[ip, I...]
+            chain_y  = @index chain.coords[2][ip, I...]
+
+            if (phase_ij == 2.0 || phase_ij == 3.0 || phase_ij == 1.0) && pᵢ[2] > chain_y[ip]
+                @index phases[ip, I...] = 4.0
+            elseif phase_ij == 4.0 && pᵢ[2] < chain_y[ip]
+                @index phases[ip, I...] = 1.0
+            end
+        end
+        return nothing
+    end
+
+    @parallel (@idx ni) _phase_change!(phases, particles.coords, particles.index, chain)
+end
+
+# @views function Caldera_2D(igg, init_rheology(), ; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -258,7 +289,6 @@ end
     # Define model to be run
     nt              = 500                       # number of timesteps
     DisplacementFormulation = false             #specify if you want to use the displacement formulation
-    Topography      = false;                    #specify if you want topography plotted in the figures
     Freesurface     = true                      #specify if you want to use freesurface
         sticky_air  = 2.5                         #specify the thickness of the sticky air layer in km
 
@@ -277,13 +307,7 @@ end
     # ----------------------------------------------------
     # Set up the grid
     # ----------------------------------------------------
-    if Topography == true
-        li_GMG, origin_GMG, phases_GMG, T_GMG = Toba_setup2D(nx+1,ny+1,nz+1; sticky_air=sticky_air)
-    elseif Freesurface == true
-        li_GMG, origin_GMG, phases_GMG, T_GMG, Grid = volcano_setup2D(nx+1,ny+1,nz+1; sticky_air=sticky_air)
-    else
-        li_GMG, origin_GMG, phases_GMG, T_GMG = simple_setup_no_FS2D(nx+1,ny+1,nz+1)
-    end
+    li_GMG, origin_GMG, phases_GMG, T_GMG, Grid = volcano_setup2D(nx+1,ny+1,nz+1; sticky_air=sticky_air)
     # -----------------------------------------------------
     # Set up the JustRelax model
     # -----------------------------------------------------
@@ -316,6 +340,9 @@ end
     max_xcell        = 40
     min_xcell        = 20
     particles        = init_particles(backend, nxcell, max_xcell, min_xcell, xvi...);
+
+    initial_elevation = nondimensionalize(0.0km, CharDim)
+    chain             = init_markerchain(backend, nxcell, min_xcell, max_xcell, xvi[1], initial_elevation);
 
     subgrid_arrays   = SubgridDiffusionCellArrays(particles);
     # velocity grids
@@ -647,11 +674,13 @@ end
         # check if we need to inject particles
         inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer, ), xvi)
 
+        advect_markerchain!(chain,  RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+
         # phase change for particles
         # phase_change!(pPhases, pϕ, 0.05, 4.0, particles)
         # phase_change!(pPhases, pEII, 1e-2, particles)
-        # phase_change!(pPhases, particles)
 
+        phase_change!(pPhases, particles, chain)
         # update phase ratios
         update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
 
@@ -996,3 +1025,9 @@ else
 end
 
 Caldera_2D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
+
+
+
+px = chain.coords[1].data[:];
+py = chain.coords[2].data[:];
+scatter!(px, py, color=:black)
