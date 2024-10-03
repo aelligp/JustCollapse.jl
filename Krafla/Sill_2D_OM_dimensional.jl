@@ -132,7 +132,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
     @show dt
     # ----------------------------------------------------
     # Weno model -----------------------------------------
-    weno = WENO5(Val{2}(), ni.+1) # ni.+1 for Temp
+    weno = WENO5(backend_JR, Val(2), ni.+1) # ni.+1 for Temp
 
     # Initialize particles -------------------------------
     nxcell, max_xcell, min_xcell = 30, 40, 20
