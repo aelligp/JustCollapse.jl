@@ -85,7 +85,7 @@ end
 ## END OF HELPER FUNCTION ------------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
-# function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =false)
+function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -132,7 +132,7 @@ end
     @show dt
     # ----------------------------------------------------
     # Weno model -----------------------------------------
-    weno = WENO5(ni=(nx,ny).+1, method=Val{2}()) # ni.+1 for Temp
+    weno = WENO5(Val{2}(), ni.+1) # ni.+1 for Temp
 
     # Initialize particles -------------------------------
     nxcell, max_xcell, min_xcell = 30, 40, 20
@@ -229,7 +229,7 @@ end
 
 
     # while it < 30e3
-    while it < 100e3
+    while it < 100e4
         # Update buoyancy and viscosity -
         args = (; T = thermal.Tc, P = stokes.P,  dt=dt, ϕ= ϕ)
         compute_melt_fraction!(
@@ -303,7 +303,7 @@ end
         any(isnan.(thermal.T)) && break
 
         # Data I/O and plotting ---------------------
-        if it == 1 || rem(it, 10) == 0
+        if it == 1 || rem(it, 100) == 0
             if igg.me == 0 && it == 1
                 metadata(pwd(), checkpoint, basename(@__FILE__), "SillModelSetup.jl", "SillRheology.jl")
             end
@@ -495,9 +495,9 @@ figname   = "$(today())_Krafla_Sill_Geometry"
 do_vtk = true
 ar = 1 # aspect ratio
 n = 64
-nx = n * ar
-ny = n
-nz = n
+nx = 608 #n * ar
+ny = 512 #n
+nz = 512 #n
 igg = if !(JustRelax.MPI.Initialized())
     IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
 else
