@@ -9,7 +9,7 @@ using JustPIC
 using JustPIC._2D
 # using JustPIC._3D
 using JustRelax
-using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie
 using StaticArrays
 using ImplicitGlobalGrid#, MPI: MPI
 const backend = CPUBackend # Options: CPUBackend, CUDABackend, AMDGPUBackend

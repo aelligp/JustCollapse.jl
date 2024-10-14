@@ -19,7 +19,7 @@ else
 end
 environment!(model)
 
-using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie
 using StaticArrays
 # using ParallelStencil.FiniteDifferences2D   #specify Dimension
 using ImplicitGlobalGrid

@@ -33,9 +33,9 @@ else
     JustPIC.CPUBackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 end
 
-using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie
 import GeoParams.Dislocation
-using StaticArrays, GeophysicalModelGenerator, WriteVTK, Interpolations, JLD2
+using GeophysicalModelGenerator, WriteVTK, Interpolations, JLD2
 
 # -----------------------------------------------------
 include("CalderaModelSetup.jl")

@@ -33,10 +33,10 @@ else
     JustPIC.CPUBackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 end
 
-using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie
 import GeoParams.Dislocation
 import GeoParams.Diffusion
-using StaticArrays, GeophysicalModelGenerator, WriteVTK, JLD2
+using GeophysicalModelGenerator, WriteVTK, JLD2
 using Dates
 
 # -----------------------------------------------------

@@ -2,7 +2,7 @@ const isCUDA = true
 
 @static if isCUDA
     using CUDA
-    CUDA.allowscalar(true)
+    # CUDA.allowscalar(false)
 end
 
 using JustRelax, JustRelax.JustRelax2D, JustRelax.DataIO
@@ -143,8 +143,8 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
     # velocity grids
     grid_vx, grid_vy = velocity_grids(xci, xvi, di)
     # temperature
-    pT, pPhases      = init_cell_arrays(particles, Val(2))
-    particle_args    = (pT, pPhases)
+    pT, pPhases      = init_cell_arrays(particles, Val(2));
+    particle_args    = (pT, pPhases);
 
     # Assign material phases --------------------------
     phases_dev   = PTArray(backend_JR)(phases_GMG)
@@ -184,7 +184,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
     end
     # Rheology
     compute_melt_fraction!(
-        ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
+        ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
     )
     compute_viscosity!(stokes, phase_ratios, args, rheology, cutoff_visc)
 
@@ -223,7 +223,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
     Vx_v = @zeros(ni.+1...)
     Vy_v = @zeros(ni.+1...)
 
-    local Vx_v, Vy_v
+    local Vx_v, Vy_v, T_WENO
     # Time loop
     t, it = 0.0, 0
 
@@ -232,9 +232,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
     while it < 100e4
         # Update buoyancy and viscosity -
         args = (; T = thermal.Tc, P = stokes.P,  dt=dt, ϕ= ϕ)
-        compute_melt_fraction!(
-            ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
-        )
+        compute_melt_fraction!(ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
         compute_viscosity!(stokes, phase_ratios, args, rheology, cutoff_visc)
         # ------------------------------
 
@@ -283,7 +281,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
         )
         # ------------------------------
 
-        T_WENO .= thermal.T[2:end-1, :]
+        T_WENO .= @views thermal.T[2:end-1, :]
         velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
         WENO_advection!(T_WENO, (Vx_v, Vy_v), weno, di, dt)
         thermal.T[2:end-1, :] .= T_WENO
@@ -303,7 +301,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
         any(isnan.(thermal.T)) && break
 
         # Data I/O and plotting ---------------------
-        if it == 1 || rem(it, 100) == 0
+        if it == 1 || rem(it, 50) == 0
             if igg.me == 0 && it == 1
                 metadata(pwd(), checkpoint, basename(@__FILE__), "SillModelSetup.jl", "SillRheology.jl")
             end
@@ -495,9 +493,9 @@ figname   = "$(today())_Krafla_Sill_Geometry"
 do_vtk = true
 ar = 1 # aspect ratio
 n = 64
-nx = 608 #n * ar
-ny = 512 #n
-nz = 512 #n
+nx = n * ar #608
+ny = n #512
+nz = n #512
 igg = if !(JustRelax.MPI.Initialized())
     IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
 else

@@ -14,7 +14,7 @@ import JustPIC._2D.cellaxes, JustPIC._2D.phase_ratios_center!
 const backend = CUDABackend # Options: CPUBackend, CUDABackend, AMDGPUBackend
 
 # Load script dependencies
-using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie, CellArrays
+using Printf, Statistics, LinearAlgebra, GeoParams, CairoMakie
 import GeoParams.Dislocation
 using StaticArrays
 # using ParallelStencil.FiniteDifferences2D   #specify Dimension
