@@ -243,9 +243,9 @@ function plot_particles(particles, pPhases)
     f
 end
 
-px = chain.coords[1].data[:];
-py = chain.coords[2].data[:];
-scatter!(ax,px, py, color=:black)
+# px = chain.coords[1].data[:];
+# py = chain.coords[2].data[:];
+# scatter!(ax,px, py, color=:black)
 
 # [...]
 
@@ -266,9 +266,9 @@ function phase_change!(phases, particles, chain)
             phase_ij = @index phases[ip, I...]
             chain_y  = @index chain.coords[2][ip, I...]
 
-            if (phase_ij == 2.0 || phase_ij == 3.0 || phase_ij == 1.0) && pᵢ[2] > chain_y[ip]
-                @index phases[ip, I...] = 4.0
-            elseif phase_ij == 4.0 && pᵢ[2] < chain_y[ip]
+            if (phases_ij==1.0 || phase_ij == 2.0 || phase_ij == 3.0 || phase_ij == 4.0) && pᵢ[2] > chain_y[ip]
+                @index phases[ip, I...] = 5.0
+            elseif phase_ij == 5.0 && pᵢ[2] < chain_y[ip]
                 @index phases[ip, I...] = 1.0
             end
         end
@@ -278,7 +278,7 @@ function phase_change!(phases, particles, chain)
     @parallel (@idx ni) _phase_change!(phases, particles.coords, particles.index, chain)
 end
 
-# @views function Caldera_2D(igg, init_rheology(), ; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(igg, init_rheology(), ; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -293,7 +293,7 @@ end
         sticky_air  = 2.5                         #specify the thickness of the sticky air layer in km
 
     shear = false                                #specify if you want to use pure shear boundary conditions
-    εbg_dim   = 5e-13 / s * shear                                 #specify the background strain rate
+    εbg_dim   = 1e-15 / s * shear                                 #specify the background strain rate
 
     # IO --------------------------------------------------
     # if it does not exist, make folder where figures are stored
@@ -369,7 +369,7 @@ end
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes          = StokesArrays(backend_JR, ni)
-    pt_stokes       = PTStokesCoeffs(li, di; ϵ=1e-4, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes       = PTStokesCoeffs(li, di; ϵ=1e-4, CFL=0.8 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
     # -----------------------------------------------------
     args = (; T=thermal.Tc, P=stokes.P, dt=dt)#,  ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
@@ -380,7 +380,7 @@ end
     if DisplacementFormulation == true
         flow_bcs = DisplacementBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface=true,
+            free_surface=false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         displacement2velocity!(stokes, dt) # convert displacement to velocity
@@ -388,7 +388,7 @@ end
     elseif DisplacementFormulation == false
         flow_bcs = VelocityBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface=true,
+            free_surface=false,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
@@ -398,7 +398,7 @@ end
     ϕ = @zeros(ni...)
 
     # Buoyancy force
-    ρg = @zeros(ni...), @zeros(ni...)                      # ρg[1] is the buoyancy force in the x direction, ρg[2] is the buoyancy force in the y direction
+    ρg               = ntuple(_ -> @zeros(ni...), Val(2))                  # ρg[1] is the buoyancy force in the x direction, ρg[2] is the buoyancy force in the y direction
 
     # Preparation for Visualisation
     ni_v_viz  = nx_v_viz, ny_v_viz = (ni[1] - 1) * igg.dims[1], (ni[2] - 1) * igg.dims[2]      # size of the visualisation grid on the vertices according to MPI dims
@@ -431,7 +431,7 @@ end
         # @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
         stokes.P .= PTArray(backend_JR)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
         compute_melt_fraction!(
-            ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
+            ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
         )
     end
 
@@ -505,35 +505,35 @@ end
         igg;
         kwargs = (;
             iterMax          = 100e3,#250e3,
-            free_surface     = true,
+            free_surface     = false,
             nout             = 2e3,#5e3,
             viscosity_cutoff = cutoff_visc,
             verbose          = false,
         )
     )
     tensor_invariant!(stokes.ε)
-    heatdiffusion_PT!(
-        thermal,
-        pt_thermal,
-        thermal_bc,
-        rheology_incomp,
-        args,
-        dt,
-        di;
-        kwargs =(;
-            igg     = igg,
-            phase   = phase_ratios,
-            iterMax = 150e3,
-            nout    = 1e3,
-            verbose = true,
-        )
-    )
+    # heatdiffusion_PT!(
+    #     thermal,
+    #     pt_thermal,
+    #     thermal_bc,
+    #     rheology_incomp,
+    #     args,
+    #     dt,
+    #     di;
+    #     kwargs =(;
+    #         igg     = igg,
+    #         phase   = phase_ratios,
+    #         iterMax = 150e3,
+    #         nout    = 1e3,
+    #         verbose = true,
+    #     )
+    # )
 
     if shear == true && DisplacementFormulation == true
         BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
         flow_bcs = DisplacementBoundaryConditions(;
             free_slip   =(left=true, right=true, top=true, bot=true),
-            free_surface=true,
+            # free_surface=true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         displacement2velocity!(stokes, dt) # convert displacement to velocity
@@ -542,14 +542,14 @@ end
         BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz, phases_dev)
         flow_bcs = VelocityBoundaryConditions(;
             free_slip   =(left=true, right=true, top=true, bot=true),
-            free_surface=true,
+            # free_surface=true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
     else
         flow_bcs = VelocityBoundaryConditions(;
             free_slip    = (left=true, right=true, top=true, bot=true),
-            free_surface =true,
+            # free_surface =true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
@@ -614,6 +614,7 @@ end
         dt     = dt_new
 
         tensor_invariant!(stokes.ε)
+        tensor_invariant!(stokes.ε_pl)
 
         ## Save the checkpoint file before a possible thermal solver blow up
         checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
@@ -667,6 +668,9 @@ end
         # advect particles in space
         # advection!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        # update halos
+        update_cell_halo!(particles.coords..., particle_args...);
+        update_cell_halo!(particles.index)
         # advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
@@ -674,13 +678,13 @@ end
         # check if we need to inject particles
         inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer, ), xvi)
 
-        advect_markerchain!(chain,  RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        # advect_markerchain!(chain,  RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
 
         # phase change for particles
         # phase_change!(pPhases, pϕ, 0.05, 4.0, particles)
         # phase_change!(pPhases, pEII, 1e-2, particles)
 
-        phase_change!(pPhases, particles, chain)
+        # phase_change!(pPhases, particles, chain)
         # update phase ratios
         update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
 
@@ -700,7 +704,7 @@ end
         ## Plotting -------------------------------------------------------
         if it == 1 || rem(it, 1) == 0
             if igg.me == 0 && it == 1
-                metadata(pwd(), checkpoint, basename(@__FILE__), "CalderaModelSetup.jl", "CalderaRheology.jl")
+                metadata(pwd(), checkpoint, basename(@__FILE__), "CalderaModelSetup_PipeFlow.jl", "CalderaRheology_PipeFlow.jl")
             end
             checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
             ## Somehow fails to open with load("particles.jld2")
@@ -967,7 +971,6 @@ end
                     fig = Figure(; size=(1200, 900))
                     ax1 = Axis(fig[1, 1]; aspect=DataAspect(), title="T")
                     ax2 = Axis(fig[1, 2]; aspect=DataAspect(), title="Pressure")
-                    ax3 = Axis(fig[1, 2]; aspect=DataAspect(), title="Pressure")
 
                     scatter!(
                         ax1,
@@ -979,10 +982,6 @@ end
                         Array(ustrip.(dimensionalize(stokes.P[:], MPa, CharDim))),
                         ustrip.(dimensionalize(Y, km, CharDim)),
                     )
-                    # lines!(
-                    #     ax2,
-                    #     x_v, y_v, Vy_d
-                    # )
 
                     hideydecorations!(ax2)
                     save(joinpath(figdir, "pressure_profile_$it.png"), fig)
@@ -1002,8 +1001,8 @@ end
                     idxv = particles.index.data[:]
                     f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
                     Colorbar(f[1,2], h)
-                    save(joinpath(figdir, "particles_$it.png"), f)
                     f
+                    save(joinpath(figdir, "particles_$it.png"), f)
                 end
              end
         end
@@ -1013,7 +1012,7 @@ end
 # figname = "Weak_lithosphere_v2_$(today())"
 figname = "$(today())_PipeFlow_Initialisation"
 do_vtk = true
-ar = 2 # aspect ratio
+ar = 1 # aspect ratio
 n = 64
 nx = n * ar
 ny = n

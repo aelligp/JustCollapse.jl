@@ -631,6 +631,10 @@ end
         # advect particles in space
         # advection!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+
+        # update halos
+        update_cell_halo!(particles.coords..., particle_args...);
+        update_cell_halo!(particles.index)
         # advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)

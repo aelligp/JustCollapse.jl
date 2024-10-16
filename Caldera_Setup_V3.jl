@@ -255,7 +255,7 @@ function extract_topography2D!(grid, air_phase)
 
     return topography
 end
-topo = extract_topography3D!(Grid, 4)
+topo = extract_topography2D!(Grid, 4)
 
 function extract_topography3D!(grid, air_phase)
     phases = grid.fields.Phases
@@ -437,7 +437,7 @@ end
         # @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
         stokes.P .= PTArray(backend_JR)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
         compute_melt_fraction!(
-            ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
+            ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
         )
     end
 
@@ -675,6 +675,9 @@ end
         # advect particles in space
         # advection!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        # update halos
+        update_cell_halo!(particles.coords..., particle_args...);
+        update_cell_halo!(particles.index)
         # advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
@@ -1032,6 +1035,6 @@ end
 # pv = [argmax(p) for p in Array(phase_ratios.vertex)]
 
 # heatmap(xci..., pc)
-scatter!(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=3)
+f,ax,h= scatter!(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=3)
 
 # heatmap(pv)

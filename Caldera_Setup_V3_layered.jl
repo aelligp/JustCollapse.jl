@@ -402,13 +402,14 @@ end
     args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt,#= ΔTc=thermal.ΔTc, =#perturbation_C = perturbation_C)
 
     for _ in 1:5
-        compute_ρg!(ρg[end], phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
-        @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
+        compute_ρg!(ρg[end], phase_ratios, rheology, args)
+        # @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
+        stokes.P .= PTArray(backend_JR)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
+        compute_melt_fraction!(
+            ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
+        )
     end
 
-    compute_melt_fraction!(
-        ϕ, phase_ratios.center, rheology, (T=thermal.T, P=stokes.P)
-    )
     compute_viscosity!(stokes, phase_ratios, args, rheology, cutoff_visc)
 
     @copy stokes.P0 stokes.P
@@ -630,7 +631,7 @@ end
             pT, T_buffer, thermal.ΔT[2:end-1, :], subgrid_arrays, particles, xvi,  di, dt
         )
         compute_melt_fraction!(
-            ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
+            ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
         )
         # ------------------------------
         # Update the particles Arguments
@@ -642,6 +643,9 @@ end
         # advect particles in space
         # advection!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        # update halos
+        update_cell_halo!(particles.coords..., particle_args...);
+        update_cell_halo!(particles.index)
         # advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)

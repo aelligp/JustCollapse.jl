@@ -8,7 +8,7 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
 
 
     # Now we create an integer array that will hold the `Phases` information (which usually refers to the material or rock type in the simulation)
-    Phases = fill(4, nx, 2, nz);
+    Phases = fill(5, nx, 2, nz);
 
     # In many (geodynamic) models, one also has to define the temperature, so lets define it as well
     Temp = fill(0.0, nx, 2, nz);
@@ -35,19 +35,19 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
     add_ellipsoid!(Phases, Temp, Grid;
         cen    = (mean(Grid.x.val), 0,-6.0),
         axes   = (5.5, 3.0, 3.0),
-        phase  = ConstantPhase(5),
-        T      = HalfspaceCoolingTemp(Age=5)
+        phase  = ConstantPhase(2),
+        T      = ConstantTemp(T=800)
     )
     add_ellipsoid!(Phases, Temp, Grid;
         cen    = (mean(Grid.x.val), 0,-5.0),
         axes   = (3.5, 2.5, 2.0),
-        phase  = ConstantPhase(2),
+        phase  = ConstantPhase(3),
         T      = ConstantTemp(T=1000)
     )
     add_sphere!(Phases, Temp, Grid;
     cen = (mean(Grid.x.val), 0,-3.75),
     radius = 0.5,
-    phase  = ConstantPhase(3),
+    phase  = ConstantPhase(4),
     T      = ConstantTemp(T=1100)
     )
     add_cylinder!(Phases, Temp, Grid;
@@ -55,7 +55,7 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
     # cap  = (mean(Grid.x.val), 0, 3.00),
     cap  = (mean(Grid.x.val), 0, 0.00),
     radius = 0.3,
-    phase  = ConstantPhase(2),
+    phase  = ConstantPhase(3),
     # T      = LinearTemp(Ttop=20, Tbot=1000),
     # T      = ConstantTemp(T=800),
     T      = ConstantTemp(T=1000),
