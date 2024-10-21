@@ -1,8 +1,8 @@
 # from "Fingerprinting secondary mantle plumes", Cloetingh et al. 2022
 
 function init_rheologies(;CharDim=nothing)
-    linear_viscosity_rhy            = LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K)#,η0=1e0Pa*s)
-    linear_viscosity_bas            = LinearMeltViscosity(A = -9.6012, B = 1.3374e+04K, T0 = 307.8043K)#, η0=1e3Pa*s)
+    linear_viscosity_rhy            = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K))#,η0=1e3Pa*s))
+    linear_viscosity_bas            = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -9.6012, B = 1.3374e+04K, T0 = 307.8043K))#, η0=1e5Pa*s))
 
     # Define rheolgy struct
     rheology = (
@@ -10,7 +10,7 @@ function init_rheologies(;CharDim=nothing)
         SetMaterialParams(;
             Phase             = 1,
             Density           = MeltDependent_Density(ρsolid=ConstantDensity(ρ=2700kg / m^3),ρmelt=T_Density(ρ0=2300kg / m^3)),
-            HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=400e3J/kg),
+            HeatCapacity      = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
             Conductivity      = ConstantConductivity(),
             CompositeRheology = CompositeRheology((linear_viscosity_rhy,)),
             Melting           = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
@@ -20,7 +20,7 @@ function init_rheologies(;CharDim=nothing)
         SetMaterialParams(;
             Phase             = 2,
             Density           = MeltDependent_Density(ρsolid=ConstantDensity(ρ=3000kg/m^3),ρmelt=T_Density(ρ0=2800kg / m^3)),
-            HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=400e3J/kg),
+            HeatCapacity      = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
             Conductivity      = ConstantConductivity(),
             CompositeRheology = CompositeRheology((linear_viscosity_bas,)),
             Melting           = MeltingParam_Smooth3rdOrder(),

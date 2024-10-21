@@ -122,9 +122,10 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
 
     # Physical properties using GeoParams ----------------
     rheology     = init_rheologies(;)
-    cutoff_visc  = (1,2e11)
+    cutoff_visc  = (3e3,6.0e14)
     # κ            = (4 / (compute_heatcapacity(rheology[1].HeatCapacity[1].Cp) * 2900.0))
-    κ            = (4 / (compute_heatcapacity(rheology[1].HeatCapacity[1].Cp) * rheology[1].Density[1].ρ))
+    # κ            = (4 / (compute_heatcapacity(rheology[1].HeatCapacity[1].Cp) * rheology[1].Density[1].ρ))
+    κ            = (4 / (1050 * rheology[1].Density[1].ρ))
     # κ            = (4 / (rheology[1].HeatCapacity[1].Cp * rheology[1].Density[1].ρ))
     dt = dt_diff = (0.5 * min(di...)^2 / κ / 2.01) # diffusive CFL timestep limiter
     # dt = dt_diff = 0.5 * min(di...)^2 / κ / 2.01 / 1000# diffusive CFL timestep limiter
@@ -163,7 +164,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes          = StokesArrays(backend_JR, ni)
-    pt_stokes       = PTStokesCoeffs(li, di; ϵ=1e-4, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes       = PTStokesCoeffs(li, di; Re=3π, ϵ=1e-4, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
     # ----------------------------------------------------
 
     args = (; T=thermal.Tc, P=stokes.P, dt=dt)
@@ -301,7 +302,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
         any(isnan.(thermal.T)) && break
 
         # Data I/O and plotting ---------------------
-        if it == 1 || rem(it, 50) == 0
+        if it == 1 || rem(it, 10) == 0
             if igg.me == 0 && it == 1
                 metadata(pwd(), checkpoint, basename(@__FILE__), "SillModelSetup.jl", "SillRheology.jl")
             end
@@ -415,6 +416,10 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
                     yticklabelsize=25,
                     xticklabelsize=25,
                     xlabelsize=25,)
+            # ax5 = Axis(fig[4, 1][1, 1], aspect = DataAspect(), title = L"log10(\eta)", titlesize=40,
+            #         yticklabelsize=25,
+            #         xticklabelsize=25,
+            #         xlabelsize=25,)
 
             # Plot temperature
             h1  = heatmap!(
@@ -446,6 +451,11 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
                 Array(ϕ);
                 colormap=:lipari)
 
+            # h5  = heatmap!(ax5,
+            #     xci...,
+            #     log10.(Array(stokes.viscosity.η));
+            #     colormap=:lipari)
+
 
             hidexdecorations!(ax1)
             hidexdecorations!(ax2)
@@ -455,6 +465,7 @@ function main2D(igg; figname="SillConvection2D", nx=64, ny=64, nz=64, do_vtk =fa
             Colorbar(fig[2, 2][1, 2], h2, height = Relative(4/4), ticklabelsize=25, ticksize=15)
             Colorbar(fig[3, 1][1, 2], h3, height = Relative(4/4), ticklabelsize=25, ticksize=15)
             Colorbar(fig[3, 2][1, 2], h4, height = Relative(4/4), ticklabelsize=25, ticksize=15)
+            # Colorbar(fig[4, 1][1, 2], h5, height = Relative(4/4), ticklabelsize=25, ticksize=15)
             linkaxes!(ax1, ax2, ax3, ax4)
             fig
             figsave = joinpath(figdir, @sprintf("%06d.png", it))
@@ -489,10 +500,10 @@ end
 
 
 # (Path)/folder where output data and figures are stored
-figname   = "$(today())_Krafla_Sill_Geometry"
+figname   = "$(today())_Krafla_Sill_Geometry_new_rheology"
 do_vtk = true
 ar = 1 # aspect ratio
-n = 64
+n = 256
 nx = n * ar #608
 ny = n #512
 nz = n #512
