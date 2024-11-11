@@ -112,22 +112,53 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
             CharDim             = CharDim,
             ),
 
+        #Name="Border Fault"
+        SetMaterialParams(;
+            Phase               = 4,
+            Density             = ConstantDensity(ρ=2900kg/m3),
+            HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
+            Conductivity        = ConstantConductivity(k=1.5Watt/K/m),
+            LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
+            ShearHeat           = ConstantShearheating(0.0NoUnits),
+            CompositeRheology   = CompositeRheology((LinearViscous(; η=1e16 * Pa * s), el, pl)),
+            # Melting             = MeltingParam_Smooth3rdOrder(),
+            # Melting             = MeltingParam_Caricchi(),
+            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            Elasticity          = el,
+            CharDim             = CharDim,
+            ),
+
         #Name="Sticky Air"
         SetMaterialParams(;
             Phase               = 4,
-            Density             = ConstantDensity(ρ=1.225kg/m^3,),
-            HeatCapacity        = ConstantHeatCapacity(; Cp=7.5e2),
-            # Conductivity        = ConstantConductivity(k=15Watt/K/m),
-            Conductivity        = ConstantConductivity(; k=50),
-            LatentHeat          = ConstantLatentHeat(Q_L=0.0J/kg),
-            ShearHeat           = ConstantShearheating(0.0NoUnits),
-            CompositeRheology   = CompositeRheology((creep_air,el_air)),
-            Elasticity          = el_air,
-            # CompositeRheology   = CompositeRheology((creep_air, el)),
-            # Elasticity          = el,
-            # CompositeRheology   = CompositeRheology((creep_air, )),
-            CharDim             = CharDim
+            # Density             = PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),
+            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
+            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
+            # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
+            Conductivity        = ConstantConductivity(k=3.0Watt/K/m),
+            LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
+            ShearHeat           = ConstantShearheating(1.0NoUnits),
+            CompositeRheology   = CompositeRheology((creep_rock, el, pl, )),
+            # Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            # Melting             = MeltingParam_Caricchi(),
+            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            Elasticity          = el,
+            CharDim             = CharDim,
             ),
+
+            # Density             = ConstantDensity(ρ=1.225kg/m^3,),
+            # HeatCapacity        = ConstantHeatCapacity(; Cp=7.5e2),
+            # # Conductivity        = ConstantConductivity(k=15Watt/K/m),
+            # Conductivity        = ConstantConductivity(; k=50),
+            # LatentHeat          = ConstantLatentHeat(Q_L=0.0J/kg),
+            # ShearHeat           = ConstantShearheating(0.0NoUnits),
+            # CompositeRheology   = CompositeRheology((creep_air,el_air)),
+            # Elasticity          = el_air,
+            # # CompositeRheology   = CompositeRheology((creep_air, el)),
+            # # Elasticity          = el,
+            # # CompositeRheology   = CompositeRheology((creep_air, )),
+            # CharDim             = CharDim
+            # ),
         )
 end
 

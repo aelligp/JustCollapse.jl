@@ -2,7 +2,7 @@ const isCUDA = false
 
 @static if isCUDA
     using CUDA
-    CUDA.allowscalar(true)
+    # CUDA.allowscalar(true)
 end
 
 using JustRelax, JustRelax.JustRelax3D, JustRelax.DataIO
@@ -243,7 +243,7 @@ end
 # [...]
 
 
-# @views function Tanzania_3D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Tanzania_3D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -273,7 +273,7 @@ end
     # ----------------------------------------------------
     # Set up the grid
     # ----------------------------------------------------
-    li_GMG, origin_GMG, phases_GMG, T_GMG, Grid = Tanzania_setup3D(nx+1,ny+1,nz+1; sticky_air=sticky_air)
+    li_GMG, origin_GMG, phases_GMG, T_GMG, Gridm, Topo = Tanzania_setup3D(nx+1,ny+1,nz+1; sticky_air=sticky_air)
     # -----------------------------------------------------
     # Set up the JustRelax model
     # -----------------------------------------------------
@@ -975,7 +975,7 @@ end
 figname = "Tanzania"
 do_vtk = true
 ar = 1 # aspect ratio
-n = 512
+n = 128
 nx = n * ar
 ny = n * ar
 nz = n
@@ -984,5 +984,5 @@ igg = if !(JustRelax.MPI.Initialized())
 else
     igg
 end
-
-Caldera_2D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
+li_GMG, origin_GMG, phases_GMG, T_GMG, Gridm, Topo = Tanzania_setup3D(igg,nx+1,ny+1,nz+1;)
+# Tanzania_3D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
