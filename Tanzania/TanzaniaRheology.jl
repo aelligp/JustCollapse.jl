@@ -13,8 +13,10 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
     ## Strain softening law
     # soft_C = LinearSoftening((ustrip(Coh)/2, ustrip(Coh)), (0e0, 1e-1))   # linear softening law
     soft_C  = NonLinearSoftening(; ξ₀=ustrip(Coh), Δ=ustrip(Coh) / 9999)       # nonlinear softening law
+    soft_ϕ  = LinearSoftening((ϕ_fric/2, ϕ_fric), (0e0, 1e-1))               # linear softening law
 
-    pl      = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C=soft_C)
+    pl      = DruckerPrager_regularised(; C=Coh, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C=soft_C, softening_ϕ=soft_ϕ)
+    pl_border = DruckerPrager_regularised(; C=5MPa, ϕ=ϕ_fric, η_vp=η_reg, Ψ=0.0, softening_C=soft_C)
 
     if is_compressible == true
         el       = SetConstantElasticity(; G=G0, ν=0.25)                    # elasticity of lithosphere
@@ -115,12 +117,12 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
         #Name="Border Fault"
         SetMaterialParams(;
             Phase               = 4,
-            Density             = ConstantDensity(ρ=2900kg/m3),
+            Density             = ConstantDensity(ρ=2900kg/m^3),
             HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
             Conductivity        = ConstantConductivity(k=1.5Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat           = ConstantShearheating(0.0NoUnits),
-            CompositeRheology   = CompositeRheology((LinearViscous(; η=1e16 * Pa * s), el, pl)),
+            CompositeRheology   = CompositeRheology((LinearViscous(; η=1e16 * Pa * s), el, pl_border)),
             # Melting             = MeltingParam_Smooth3rdOrder(),
             # Melting             = MeltingParam_Caricchi(),
             Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
@@ -130,48 +132,45 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
 
         #Name="Sticky Air"
         SetMaterialParams(;
-            Phase               = 4,
-            # Density             = PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),
-            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
-            # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
-            Conductivity        = ConstantConductivity(k=3.0Watt/K/m),
-            LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
-            ShearHeat           = ConstantShearheating(1.0NoUnits),
-            CompositeRheology   = CompositeRheology((creep_rock, el, pl, )),
+            Phase               = 5,
+            # # Density             = PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),
+            # Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
+            # HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
+            # # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
+            # Conductivity        = ConstantConductivity(k=3.0Watt/K/m),
+            # LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
+            # ShearHeat           = ConstantShearheating(1.0NoUnits),
+            # CompositeRheology   = CompositeRheology((creep_rock, el, pl, )),
+            # # Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            # # Melting             = MeltingParam_Caricchi(),
             # Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
-            # Melting             = MeltingParam_Caricchi(),
-            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
-            Elasticity          = el,
-            CharDim             = CharDim,
-            ),
-
-            # Density             = ConstantDensity(ρ=1.225kg/m^3,),
-            # HeatCapacity        = ConstantHeatCapacity(; Cp=7.5e2),
-            # # Conductivity        = ConstantConductivity(k=15Watt/K/m),
-            # Conductivity        = ConstantConductivity(; k=50),
-            # LatentHeat          = ConstantLatentHeat(Q_L=0.0J/kg),
-            # ShearHeat           = ConstantShearheating(0.0NoUnits),
-            # CompositeRheology   = CompositeRheology((creep_air,el_air)),
-            # Elasticity          = el_air,
-            # # CompositeRheology   = CompositeRheology((creep_air, el)),
-            # # Elasticity          = el,
-            # # CompositeRheology   = CompositeRheology((creep_air, )),
-            # CharDim             = CharDim
+            # Elasticity          = el,
+            # CharDim             = CharDim,
             # ),
+
+            Density             = ConstantDensity(ρ=1.225kg/m^3,),
+            HeatCapacity        = ConstantHeatCapacity(; Cp=7.5e2),
+            # Conductivity        = ConstantConductivity(k=15Watt/K/m),
+            Conductivity        = ConstantConductivity(; k=50),
+            LatentHeat          = ConstantLatentHeat(Q_L=0.0J/kg),
+            ShearHeat           = ConstantShearheating(0.0NoUnits),
+            CompositeRheology   = CompositeRheology((creep_air,el_air)),
+            Elasticity          = el_air,
+            # CompositeRheology   = CompositeRheology((creep_air, el)),
+            # Elasticity          = el,
+            # CompositeRheology   = CompositeRheology((creep_air, )),
+            CharDim             = CharDim
+            ),
         )
 end
 
-function init_phases3D!(phases, phase_grid, particles, xvi)
+function init_phases!(phases, phase_grid, particles, xvi)
     ni = size(phases)
-    @parallel (@idx ni) _init_phases3D!(
-        phases, phase_grid, particles.coords, particles.index, xvi
-    )
+    @parallel (@idx ni) _init_phases!(phases, phase_grid, particles.coords, particles.index, xvi)
 end
 
-@parallel_indices (I...) function _init_phases3D!(
-    phases, phase_grid, pcoords::NTuple{N,T}, index, xvi
-) where {N,T}
+@parallel_indices (I...) function _init_phases!(phases, phase_grid, pcoords::NTuple{N, T}, index, xvi) where {N,T}
+
     ni = size(phases)
 
     for ip in cellaxes(phases)
@@ -191,7 +190,12 @@ end
             !(jj ≤ ni[2]) && continue
             !(kk ≤ ni[3]) && continue
 
-            xvᵢ = (xvi[1][ii], xvi[2][jj], xvi[3][kk])
+            xvᵢ = (
+                xvi[1][ii],
+                xvi[2][jj],
+                xvi[3][kk],
+            )
+            # @show xvᵢ ii jj kk
             d_ijk = √(sum((pᵢ[i] - xvᵢ[i])^2 for i in 1:N))
             if d_ijk < d
                 d = d_ijk

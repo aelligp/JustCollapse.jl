@@ -41,17 +41,19 @@ function Tanzania_Topo(nx,ny,nz)
     return surf_interp, cartesian, Lx, Ly
 end
 
-function Tanzania_setup3D(igg,nx,ny,nz; sticky_air=5e0)
-    topo_tanzania, Topo_cartesian, Lx, Ly = Tanzania_Topo(nx,ny,nz)
+function Tanzania_setup3D(xvi,igg,nx,ny,nz; sticky_air=5e0)
+    # topo_tanzania, Topo_cartesian, Lx, Ly = Tanzania_Topo(nx,ny,nz)
 
-    Grid3D = create_CartGrid(;
-        size=(nx, ny, nz),
-        x=((Topo_cartesian.x.val[1, 1, 1])km, (Topo_cartesian.x.val[end, 1, 1])km),
-        y=((Topo_cartesian.y.val[1, 1, 1])km, (Topo_cartesian.y.val[1, end, 1])km),
-        z=(-20km, sticky_air*km),
-    )
-
-    Grid3D_cart = CartData(xyz_grid(Grid3D.coord1D...));
+    # Grid3D = create_CartGrid(;
+    #     size=(nx, ny, nz),
+    #     x=((Topo_cartesian.x.val[1, 1, 1])km, (Topo_cartesian.x.val[end, 1, 1])km),
+    #     y=((Topo_cartesian.y.val[1, 1, 1])km, (Topo_cartesian.y.val[1, end, 1])km),
+    #     z=(-20km, sticky_air*km),
+    # )
+    x = range(minimum(xvi[1]), maximum(xvi[1]), nx);
+    y = range(minimum(xvi[2]), maximum(xvi[2]), ny);
+    z = range(minimum(xvi[3]), maximum(xvi[3]), nz);
+    Grid3D_cart = CartData(xyz_grid(x,y,z));
 
 
 
@@ -98,19 +100,19 @@ function Tanzania_setup3D(igg,nx,ny,nz; sticky_air=5e0)
 
     add_ellipsoid!(Phases, Temp, Grid3D_cart;
         cen    = (-110.1, -62.07, -5.0),
-        axes   = (5, 5, 2.5),
+        axes   = (5, 10, 2.5),
         phase  = ConstantPhase(2),
         T      = ConstantTemp(T=1000),
     )
-    # add_sphere!(Phases, Temp, Grid3D_cart;
-    #     cen = (0, 0, -5.0),
-    #     radius = 0.5,
-    #     phase  = ConstantPhase(3),
-    #     T      = ConstantTemp(T=1200)
-    # )
+    add_sphere!(Phases, Temp, Grid3D_cart;
+        cen =  (-110.1, -62.07, -5.0),
+        radius = 1.5,
+        phase  = ConstantPhase(3),
+        T      = ConstantTemp(T=1200)
+    )
 
     # Other volcanoes
-
+    # to be added
 
     # -----------------------------------
     # for k in axes(Grid3D_cart.z.val, 3), j in axes(topo_tanzania, 2), i in axes(topo_tanzania,1)
@@ -125,15 +127,12 @@ function Tanzania_setup3D(igg,nx,ny,nz; sticky_air=5e0)
     @. Temp               = max(Temp, 0)
     Grid3D_cart = addfield(Grid3D_cart,(; Phases, Temp))
 
-    write_paraview(Grid3D_cart, "Tanzania_3D_$nx")
+    write_paraview(Grid3D_cart, "Tanzania_3D_$(nx)_$(igg.me)")
     # write_paraview(Topo_cartesian, "Tanzania_Topo_$(nx)")
 
 
-    li = (Grid3D.L[1].val, Grid3D.L[2].val, Grid3D.L[3].val)
-    origin = (Grid3D.min[1].val, Grid3D.min[2].val, Grid3D.min[3].val)
+    li = (abs(last(x)-first(x)), abs(last(y)-first(y)), abs(last(z)-first(z)))
+    origin = (x[1], y[1], z[1])
 
-    ph      = Phases
-    T       = Temp
-
-    return li, origin, ph, T, Grid3D_cart, Topo_cartesian
+    return li, origin, Phases, Temp
 end
