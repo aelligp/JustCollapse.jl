@@ -93,37 +93,25 @@ function copyinn_x!(A, B)
     @parallel f_x(A, B)
 end
 
-function BC_velo!(Vx,Vy, εbg, xvi, lx,ly, phases)
+function BC_velo!(Vx,Vy, εbg, xvi, lx,ly)
     xv, yv = xvi
 
-    @parallel_indices (i, j) function pure_shear_x!(Vx, εbg, lx, phases)
+    @parallel_indices (i, j) function pure_shear_x!(Vx, εbg, lx)
         xi = xv[i]
-        yi = min(yv[j],0.0)
-
-        # Vx[i, j + 1] = yi < 0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
-        # Vx[i, j + 1] = phases[i,j] < 4.0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
-        Vx[i, j + 1] = (εbg * (xi - lx * 0.5) * (lx)/2)
+        Vx[i, j + 1] = εbg * (xi - lx * 0.5)
         return nothing
     end
-    # @parallel_indices (i, j) function pure_shear_x!(Vx)
-    #     xi = xv[i]
-    #     Vx[i, j + 1] = εbg * (xi - lx * 0.5) * lx / 2
-    #     return nothing
-    # end
 
-    @parallel_indices (i, j) function pure_shear_y!(Vy, εbg, ly, phases)
-        # yi = min(yv[j],0.0)
-        # Vy[i + 1, j] = (abs(yi) * εbg / ly) / 2
+    @parallel_indices (i, j) function pure_shear_y!(Vy, εbg, ly)
         yi = yv[j]
-        # Vy[i + 1, j] = phases[i,j] < 4.0 ? (abs(yi) * εbg / ly) / 2 : 0.0
-        Vy[i + 1, j] = (abs(yi) * εbg / ly) / 2
+        Vy[i + 1, j] = abs(yi) * εbg
         return nothing
     end
 
     nx, ny = size(Vx)
-    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx, εbg,lx, phases)
+    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx, εbg,lx)
     nx, ny = size(Vy)
-    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy,εbg, ly, phases)
+    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy,εbg, ly)
 
     return nothing
 end
@@ -310,7 +298,7 @@ end
 # [...]
 
 
-@views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Caldera_2D(x_global, z_global,li_GMG, origin_GMG, phases_GMG, T_GMG, Grid,igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false, sticky_air=5.0, εbg_dim= 1e-15 /s, DisplacementFormulation=false, shear=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -319,14 +307,7 @@ end
     CharDim         = GEO_units(; length=40km, viscosity=1e20Pa * s, temperature=1000C)
     #-----------------------------------------------------
     # Define model to be run
-    nt              = 500                       # number of timesteps
-    DisplacementFormulation = false             # specify if you want to use the displacement formulation
-    Topography      = false;                    # specify if you want topography plotted in the figures
-    Freesurface     = true                      # specify if you want to use freesurface
-    sticky_air      = 5                         # specify the thickness of the sticky air layer in km
-    shear           = true                     # specify if you want to use pure shear boundary conditions
-    εbg_dim         = 1e-14 / s * shear         # specify the background strain rate
-
+    # nt              = 500                       # number of timesteps
     # IO --------------------------------------------------
     # if it does not exist, make folder where figures are stored
     figdir = "./fig2D/$figname/"
@@ -336,16 +317,7 @@ end
         take(vtk_dir)
     end
     take(figdir)
-    # ----------------------------------------------------
-    # Set up the grid
-    # ----------------------------------------------------
-    if Topography == true
-        li_GMG, origin_GMG, phases_GMG, T_GMG = Toba_setup2D(nx+1,ny+1,nz+1; sticky_air=sticky_air)
-    elseif Freesurface == true
-        li_GMG, origin_GMG, phases_GMG, T_GMG, Grid = volcano_setup2D(nx_g()+1,ny_g()+1,nz_g()+1; sticky_air=sticky_air)
-    else
-        li_GMG, origin_GMG, phases_GMG, T_GMG = simple_setup_no_FS2D(nx+1,ny+1,nz+1)
-    end
+
     # -----------------------------------------------------
     # Set up the JustRelax model
     # -----------------------------------------------------
@@ -361,7 +333,7 @@ end
     grid         = Geometry(ni, li; origin=origin)
     (; xci, xvi) = grid                                                     # nodes at the center and vertices of the cells
 
-    εbg          = nondimensionalize(εbg_dim, CharDim)                      # background strain rate
+    εbg          = nondimensionalize((εbg_dim * shear), CharDim)                      # background strain rate
     perturbation_C = @rand(ni...);                                          # perturbation of the cohesion
 
     # Physical Parameters
@@ -395,11 +367,8 @@ end
     init_phases2D!(pPhases, phases_dev, particles, xvi)
     update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
 
-    phase_ratio_vx = @fill(0.0, nx+1, ny, celldims = length(rheology))
-    phase_ratio_vy = @fill(0.0, nx, ny+1, celldims = length(rheology))
-
-    phase_ratios_midpoint!(phase_ratio_vx, particles, xci, pPhases, :x)
-    phase_ratios_midpoint!(phase_ratio_vy, particles, xci, pPhases, :y)
+    phase_ratios_midpoint!(phase_ratios.Vx, particles, xci, pPhases, :x)
+    phase_ratios_midpoint!(phase_ratios.Vy, particles, xci, pPhases, :y)
 
     update_cell_halo!(particles.coords..., particle_args...);
     update_cell_halo!(particles.index)
@@ -407,7 +376,7 @@ end
     # RockRatios
     air_phase   = 4
     ϕ_R         = RockRatio(backend_JR, ni)
-    update_rock_ratio!(ϕ_R, phase_ratios, (phase_ratio_vx, phase_ratio_vy), air_phase)
+    update_rock_ratio!(ϕ, phase_ratios, (phase_ratios.Vx, phase_ratios.Vy), air_phase)
     # @parallel (@idx ni.+1) renormalize_phase_ratios(phase_ratios.center, phase_ratios.vertex, air_phase)
     topo = extract_topography2D!(Grid, 4)
 
@@ -597,7 +566,7 @@ end
         displacement2velocity!(stokes, dt) # convert displacement to velocity
         update_halo!(@velocity(stokes)...) # update halo cells
     elseif shear == true && DisplacementFormulation == false
-        BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz, phases_dev)
+        BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
         flow_bcs = VelocityBoundaryConditions(;
             free_slip   =(left=true, right=true, top=true, bot=true),
             free_surface= true,
@@ -745,9 +714,9 @@ end
 
         # update phase ratios
         update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
-        phase_ratios_midpoint!(phase_ratio_vx, particles, xci, pPhases, :x)
-        phase_ratios_midpoint!(phase_ratio_vy, particles, xci, pPhases, :y)
-        update_rock_ratio!(ϕ_R, phase_ratios, (phase_ratio_vx, phase_ratio_vy), air_phase)
+        phase_ratios_midpoint!(phase_ratios.Vx, particles, xci, pPhases, :x)
+        phase_ratios_midpoint!(phase_ratios.Vy, particles, xci, pPhases, :y)
+        update_rock_ratio!(ϕ_R, phase_ratios, (phase_ratios.Vx, phase_ratios.Vy), air_phase)
         # @parallel (@idx ni.+1) renormalize_phase_ratios(phase_ratios.center, phase_ratios.vertex, air_phase)
 
         particle2grid!(T_buffer, pT, xvi, particles)
@@ -756,7 +725,7 @@ end
         @views thermal.T[2:end - 1, :] .= T_buffer;
         thermal_bcs!(thermal, thermal_bc)
         temperature2center!(thermal)
-        vertex2center!(thermal.ΔTc, thermal.ΔT)
+        vertex2center!(thermal.ΔTc, thermal.ΔT[2:end-1, :])
 
         # dt_new =  compute_dt(stokes, di, dt_diff, igg) #/ 9.81
 
@@ -1087,21 +1056,42 @@ end
     end
 end
 
-# figname = "Systematics_initial_Setup_test_v2_rhyolite_$(today())"
-figname = "$(today())_V3_variational_stokes"
-do_vtk = false
-ar = 1 # aspect ratio
-n = 128
-nx = n * ar
-ny = n
-nz = n
-igg = if !(JustRelax.MPI.Initialized())
-    IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
-else
-    igg
-end
+DisplacementFormulation = false             # specify if you want to use the displacement formulation
+Topography      = false;                    # specify if you want topography plotted in the figures
+Freesurface     = true                      # specify if you want to use freesurface
+shear           = true                     # specify if you want to use pure shear boundary conditions
+εbg_dim         = 1e-14 / s * shear         # specify the background strain rate
 
-Caldera_2D(igg; figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk)
+do_vtk          = false
+ar              = 1 # aspect ratio
+n               = 128
+nx              = n * ar
+ny              = n
+nz              = n
+igg             = if !(JustRelax.MPI.Initialized())
+                    IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
+                  else
+                    igg
+                  end
+
+# GLOBAL Physical domain ------------------------------------
+sticky_air = 5.0
+x_global = range(0.0, 50, nx_g());
+z_global      = range(-25e0, sticky_air, ny_g());
+origin = (x_global[1], z_global[1])
+li = (abs(last(x_global)-first(x_global)), abs(last(z_global)-first(z_global)))
+
+ni           = nx, ny           # number of cells
+di           = @. li / (nx_g(), ny_g())           # grid steps
+grid_global  = Geometry(ni, li; origin = origin)
+
+li_GMG, origin_GMG, phases_GMG, T_GMG, Grid = volcano_setup2D(grid_global.xvi, nx+1,ny+1; sticky_air=sticky_air)
+
+figname = "$(today())_V3_variational_stokes_$(nx_g())x$(ny_g())"
+
+Caldera_2D(x_global, z_global,li_GMG, origin_GMG, phases_GMG, T_GMG, Grid, igg;
+           figname=figname, nx=nx, ny=ny, nz=nz, do_vtk=do_vtk, sticky_air=sticky_air,
+           εbg_dim=εbg_dim, DisplacementFormulation=DisplacementFormulation, shear=shear)
 
 
 # # pc = [argmax(p) for p in Array(phase_ratios.center)]

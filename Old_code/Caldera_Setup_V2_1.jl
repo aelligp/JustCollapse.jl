@@ -621,7 +621,7 @@ end
         @views thermal.T[2:end - 1, :] .= T_buffer;
         thermal_bcs!(thermal.T, thermal_bc)
         temperature2center!(thermal)
-        vertex2center!(thermal.ΔTc, thermal.ΔT)
+        vertex2center!(thermal.ΔTc, thermal.ΔT[2:end-1, :])
 
         # dt_new =  compute_dt(stokes, di, dt_diff, igg) #/ 9.81
 

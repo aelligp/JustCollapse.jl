@@ -1240,7 +1240,7 @@ function Caldera_2D(igg; figname=figname, nx=nx, ny=ny, do_vtk=false)
         thermal_bcs!(thermal.T, thermal_bc)
         temperature2center!(thermal)
         # thermal.ΔT .= thermal.T .- thermal.Told
-        vertex2center!(thermal.ΔTc, thermal.ΔT)
+        vertex2center!(thermal.ΔTc, thermal.ΔT[2:end-1, :])
 
         @show it += 1
         t += dt
