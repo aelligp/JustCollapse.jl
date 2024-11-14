@@ -58,40 +58,31 @@ function copyinn_x!(A, B)
     @parallel f_x(A, B)
 end
 
-function BC_velo!(Vx,Vy, εbg, xvi, lx,ly, phases)
+function BC_velo!(Vx,Vy, εbg, xvi, lx,ly)
     xv, yv = xvi
 
-    @parallel_indices (i, j) function pure_shear_x!(Vx, εbg, lx, phases)
+    @parallel_indices (i, j) function pure_shear_x!(Vx, εbg, lx)
         xi = xv[i]
-        yi = min(yv[j],0.0)
-
-        # Vx[i, j + 1] = yi < 0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
-        # Vx[i, j + 1] = phases[i,j] < 4.0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
-        Vx[i, j + 1] = (εbg * (xi - lx * 0.5) * (lx)/2)
+        Vx[i, j + 1] = εbg * (xi - lx * 0.5)
         return nothing
     end
-    # @parallel_indices (i, j) function pure_shear_x!(Vx)
-    #     xi = xv[i]
-    #     Vx[i, j + 1] = εbg * (xi - lx * 0.5) * lx / 2
-    #     return nothing
-    # end
 
-    @parallel_indices (i, j) function pure_shear_y!(Vy, εbg, ly, phases)
-        # yi = min(yv[j],0.0)
-        # Vy[i + 1, j] = (abs(yi) * εbg / ly) / 2
+    @parallel_indices (i, j) function pure_shear_y!(Vy, εbg, ly)
         yi = yv[j]
-        Vy[i + 1, j] = phases[i,j] < 4.0 ? (abs(yi) * εbg / ly) / 2 : 0.0
+        Vy[i + 1, j] = abs(yi) * εbg
         return nothing
     end
 
     nx, ny = size(Vx)
-    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx, εbg,lx, phases)
+    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx, εbg, lx)
     nx, ny = size(Vy)
-    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy,εbg, ly, phases)
+    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy, εbg, ly)
+
 
     return nothing
 end
 
+#not correct i think
 function BC_displ!(Ux,Uy, εbg, xvi, lx,ly, dt)
     xv, yv = xvi
 
@@ -694,7 +685,7 @@ end
         @views thermal.T[2:end - 1, :] .= T_buffer;
         thermal_bcs!(thermal.T, thermal_bc)
         temperature2center!(thermal)
-        vertex2center!(thermal.ΔTc, thermal.ΔT)
+        vertex2center!(thermal.ΔTc, thermal.ΔT[2:end-1, :])
 
         # dt_new =  compute_dt(stokes, di, dt_diff, igg) #/ 9.81
 
