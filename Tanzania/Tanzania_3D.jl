@@ -123,7 +123,7 @@ end
 # [...]
 
 
-# @views function Tanzania_3D(li_GMG, origin_GMG, phases_GMG, T_GMG, εbg_dim, igg; x_global, y_global, z_global, figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+@views function Tanzania_3D(li_GMG, origin_GMG, phases_GMG, T_GMG, εbg_dim, igg; x_global, y_global, z_global, figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
