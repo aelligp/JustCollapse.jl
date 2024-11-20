@@ -1,6 +1,6 @@
 ## Model Setup
 # using GLMakie
-using GeophysicalModelGenerator, GMT
+using GeophysicalModelGenerator#, GMT
 using Interpolations
 
 function Tanzania_Topo(nx,ny,nz)
@@ -61,7 +61,7 @@ function Tanzania_setup3D(xvi,igg,nx,ny,nz; sticky_air=5e0)
     Phases = fill(5, nx, ny, nz);
 
     # In many (geodynamic) models, one also has to define the temperature, so lets define it as well
-    Temp = fill(20.0, nx, ny, nz);
+    Temp = zeros(nx, ny, nz);
 
     lith = LithosphericPhases(Layers=[30], Phases=[1])
 
@@ -90,7 +90,7 @@ function Tanzania_setup3D(xvi,igg,nx,ny,nz; sticky_air=5e0)
     add_volcano!(Phases, Temp, Grid3D_cart;
         volcanic_phase  = 1,
         center     = (-110.1, -62.07, 0.0),
-        height     = 4.0,
+        height     = 3.0,
         radius     = 14.0,
         # crater     = 0.5,
         base       = 0.0,
@@ -100,13 +100,13 @@ function Tanzania_setup3D(xvi,igg,nx,ny,nz; sticky_air=5e0)
 
     add_ellipsoid!(Phases, Temp, Grid3D_cart;
         cen    = (-110.1, -62.07, -5.0),
-        axes   = (5, 10, 2.5),
+        axes   = (15, 20, 3.0),
         phase  = ConstantPhase(2),
         T      = ConstantTemp(T=1000),
     )
     add_sphere!(Phases, Temp, Grid3D_cart;
         cen =  (-110.1, -62.07, -5.0),
-        radius = 1.5,
+        radius = 2.0,
         phase  = ConstantPhase(3),
         T      = ConstantTemp(T=1200)
     )

@@ -1,4 +1,4 @@
-const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -269,7 +269,7 @@ function phase_change!(phases, particles, chain)
     @parallel (@idx ni) _phase_change!(phases, particles.coords, particles.index, chain)
 end
 
-@views function Caldera_2D(igg, init_rheology(), ; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+# @views function Caldera_2D(igg, init_rheology(), ; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -281,7 +281,7 @@ end
     nt              = 500                       # number of timesteps
     DisplacementFormulation = false             #specify if you want to use the displacement formulation
     Freesurface     = true                      #specify if you want to use freesurface
-        sticky_air  = 2.5                         #specify the thickness of the sticky air layer in km
+        sticky_air  = 5.0                         #specify the thickness of the sticky air layer in km
 
     shear = false                                #specify if you want to use pure shear boundary conditions
     εbg_dim   = 1e-15 / s * shear                                 #specify the background strain rate
@@ -321,14 +321,14 @@ end
     rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
     rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
     cutoff_visc  = nondimensionalize((1e15Pa*s, 1e24Pa*s),CharDim)
-    # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
-    κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
+    κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
+    # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
     dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
 
     # Initialize particles ----------------------------------
-    nxcell           = 30
-    max_xcell        = 40
+    nxcell           = 40
+    max_xcell        = 60
     min_xcell        = 20
     particles        = init_particles(backend, nxcell, max_xcell, min_xcell, xvi...);
 
@@ -360,9 +360,9 @@ end
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes          = StokesArrays(backend_JR, ni)
-    pt_stokes       = PTStokesCoeffs(li, di; ϵ=1e-4, CFL=0.8 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes       = PTStokesCoeffs(li, di; Re=3.0,  ϵ=1e-4, CFL=0.8 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
     # -----------------------------------------------------
-    args = (; T=thermal.Tc, P=stokes.P, dt=dt)#,  ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+    args = (; T=thermal.Tc, P=stokes.P, dt=dt,  ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
     pt_thermal = PTThermalCoeffs(
         backend_JR, rheology, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=0.98 / √2.1
@@ -574,7 +574,7 @@ end
             interval += 1.0
         end
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, #=ΔTc=thermal.ΔTc,=# perturbation_C = perturbation_C)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
         ## Stokes solver -----------------------------------
         solve!(
             stokes,
@@ -594,12 +594,6 @@ end
                 viscosity_cutoff = cutoff_visc,
             )
         )
-
-        # # do this after solve!
-        # air_phase  = 4 # or whatever the phase number is for the air
-        # isthereair = [p[air_phase] != 0 for p in phase_ratios.center]
-        # Pshift     = minimum(stokes.P[isthereair])
-        # stokes.P .-= Pshift
 
         dt_new = compute_dt(stokes, di, dt_diff, igg) #/ 9.81
         dt     = dt_new
@@ -647,7 +641,7 @@ end
             pT, T_buffer, thermal.ΔT[2:end-1, :], subgrid_arrays, particles, xvi,  di, dt
         )
         compute_melt_fraction!(
-            ϕ, phase_ratios.center, rheology, (T=thermal.Tc, P=stokes.P)
+            ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
         )
         # ------------------------------
         # Update the particles Arguments
@@ -806,7 +800,8 @@ end
                     (x_c,y_c),
                     data_v,
                     data_c,
-                    velocity_v
+                    velocity_v,
+                    t=ustrip(t_Kyrs),
                 )
             end
 
@@ -960,9 +955,8 @@ end
                     Yv = [y for x in xvi[1], y in xvi[2]][:]
                     Y = [y for x in xci[1], y in xci[2]][:]
                     fig = Figure(; size=(1200, 900))
-                    ax1 = Axis(fig[1, 1]; aspect=DataAspect(), title="T")
-                    ax2 = Axis(fig[1, 2]; aspect=DataAspect(), title="Pressure")
-
+                    ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
+                    ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Pressure")
                     scatter!(
                         ax1,
                         Array(ustrip.(dimensionalize(thermal.T[2:(end - 1), :][:], C, CharDim))),
@@ -973,7 +967,6 @@ end
                         Array(ustrip.(dimensionalize(stokes.P[:], MPa, CharDim))),
                         ustrip.(dimensionalize(Y, km, CharDim)),
                     )
-
                     hideydecorations!(ax2)
                     save(joinpath(figdir, "pressure_profile_$it.png"), fig)
                     fig
@@ -1004,7 +997,7 @@ end
 figname = "$(today())_PipeFlow_Initialisation"
 do_vtk = true
 ar = 1 # aspect ratio
-n = 64
+n = 128
 nx = n * ar
 ny = n
 nz = n

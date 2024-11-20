@@ -1,14 +1,14 @@
 ## Model Setup
 function volcano_setup2D(nx,ny,nz;sticky_air=5)
-    Lx = Ly = 15
+    Lx = Ly = 30.0;
     x = range(0.0, Lx, nx);
     y = range(0.0, Ly, 2);
-    z = range(-10, sticky_air, nz);
+    z = range(-20, sticky_air, nz);
     Grid = CartData(xyz_grid(x,y,z));
 
 
     # Now we create an integer array that will hold the `Phases` information (which usually refers to the material or rock type in the simulation)
-    Phases = fill(5, nx, 2, nz);
+    Phases = fill(6, nx, 2, nz);
 
     # In many (geodynamic) models, one also has to define the temperature, so lets define it as well
     Temp = fill(0.0, nx, 2, nz);
@@ -21,16 +21,16 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
         T = HalfspaceCoolingTemp(Age=11)
     )
 
-    # add_volcano!(Phases, Temp, Grid;
-    # volcanic_phase  = 1,
-    # center          = (mean(Grid.x.val),  0.0),
-    # height          = 3,
-    # radius          = 5,
+    add_volcano!(Phases, Temp, Grid;
+    volcanic_phase  = 1,
+    center          = (mean(Grid.x.val),0.0, 0.0),
+    height          = 3,
+    radius          = 5,
     # crater          = 0.5,
-    # base            = 0.0,
-    # background      = nothing,
-    # T               = HalfspaceCoolingTemp(Age=11)
-    # )
+    base            = 0.0,
+    background      = nothing,
+    T               = HalfspaceCoolingTemp(Age=11)
+    )
 
     add_ellipsoid!(Phases, Temp, Grid;
         cen    = (mean(Grid.x.val), 0,-6.0),
@@ -51,11 +51,11 @@ function volcano_setup2D(nx,ny,nz;sticky_air=5)
     T      = ConstantTemp(T=1100)
     )
     add_cylinder!(Phases, Temp, Grid;
-    base = (mean(Grid.x.val), 0, -3.25),
-    # cap  = (mean(Grid.x.val), 0, 3.00),
-    cap  = (mean(Grid.x.val), 0, 0.00),
+    base = (mean(Grid.x.val), 0, -3.00),
+    cap  = (mean(Grid.x.val), 0, 3.00),
+    # cap  = (mean(Grid.x.val), 0, 0.00),
     radius = 0.3,
-    phase  = ConstantPhase(3),
+    phase  = ConstantPhase(5),
     # T      = LinearTemp(Ttop=20, Tbot=1000),
     # T      = ConstantTemp(T=800),
     T      = ConstantTemp(T=1000),
