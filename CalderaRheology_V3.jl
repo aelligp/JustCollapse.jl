@@ -25,10 +25,10 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
         β_magma = inv(get_Kb(el_magma))
         Kb = get_Kb(el)
     else
-        el       = SetConstantElasticity(; G=G0, ν=0.45)                     # elasticity of lithosphere
-        el_magma = SetConstantElasticity(; G=G_magma, ν=0.45)                # elasticity of magma
+        el       = SetConstantElasticity(; G=G0, ν=0.5)                     # elasticity of lithosphere
+        el_magma = SetConstantElasticity(; G=G_magma, ν=0.5)                # elasticity of magma
         # el_air   = SetConstantElasticity(; ν=0.5, Kb=0.101MPa)              # elasticity of air
-        el_air   = SetConstantElasticity(; ν=0.45, G=G_magma)              # elasticity of air
+        el_air   = SetConstantElasticity(; ν=0.5, G=G_magma)              # elasticity of air
         β_rock = inv(get_Kb(el))
         β_magma = inv(get_Kb(el_magma))
         Kb = get_Kb(el)
@@ -46,7 +46,7 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
         # creep_rock  = DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
         # creep_magma = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of magma
         # creep_magma = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -9.6012, B = 1.3374e+04K, T0 = 307.8043K, η0=1e8Pa*s))                         # viscosity of magma
-        creep_magma = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e1Pa*s))                         # viscosity of magma
+        creep_magma = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e6Pa*s))                         # viscosity of magma
         creep_air   = LinearViscous(; η=1e16 * Pa * s)                         # viscosity of air
         g           = 9.81m / s^2
         # linear_viscosity_rhy      = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e1Pa*s))
@@ -56,32 +56,19 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
     ## Rheology setup
     # Set material parameters
     return rheology = (
-        # Name="UpperCrust"
+        # #Name="UpperCrust"
         SetMaterialParams(;
             Phase               = 1,
             # Density             = PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),
-            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, T0=273.15K, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, T0=273.15K, β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
+            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
+            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
-            Conductivity        = T_Conductivity_Whittington(),
+            Conductivity        = ConstantConductivity(k=3.0Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat           = ConstantShearheating(1.0NoUnits),
             CompositeRheology   = CompositeRheology((creep_rock, el, pl, )),
-            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
-            Elasticity          = el,
-            CharDim             = CharDim,
-            ),
-
-        # Name = "LowerCrust"
-        SetMaterialParams(;
-            Phase               = 2,
-            # Density             = PT_Density(ρ0=2900kg/m^3, T0=273.15K, β=β_rock/Pa),
-            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, T0=273.15K, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, T0=273.15K, β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
-            Conductivity        = T_Conductivity_Whittington(),
-            LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
-            ShearHeat           = ConstantShearheating(1.0NoUnits),
-            CompositeRheology   = CompositeRheology((creep_rock, el, pl, )),
+            # Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            # Melting             = MeltingParam_Caricchi(),
             Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
             Elasticity          = el,
             CharDim             = CharDim,
@@ -89,16 +76,18 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
 
         #Name="Magma"
         SetMaterialParams(;
-            Phase               = 3,
+            Phase               = 2,
             # Density             = PT_Density(ρ0=2700kg/m^3, β=β_magma/Pa),
             # Density           = MeltDependent_Density(ρsolid=PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2800kg / m^3, β=β_rock/Pa)),
-            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, T0=273.15K, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, T0=273.15K, β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
+            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
+            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
-            Conductivity        = T_Conductivity_Whittington(),
+            Conductivity        = ConstantConductivity(k=1.5Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat           = ConstantShearheating(0.0NoUnits),
             CompositeRheology   = CompositeRheology((creep_magma, el_magma)),
+            # Melting             = MeltingParam_Smooth3rdOrder(),
+            # Melting             = MeltingParam_Caricchi(),
             Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
             Elasticity          = el_magma,
             CharDim             = CharDim,
@@ -106,16 +95,18 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
 
         #Name="Thermal Anomaly"
         SetMaterialParams(;
-            Phase               = 4,
+            Phase               = 3,
             # Density             = PT_Density(ρ0=2700kg/m^3, β=β_magma/Pa),
             # Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2900kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2800kg / m^3, β=β_rock/Pa)),
-            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, T0=273.15K, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, T0=273.15K,β=β_rock/Pa)),
-            HeatCapacity        = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
+            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
+            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
-            Conductivity        = T_Conductivity_Whittington(),
+            Conductivity        = ConstantConductivity(k=1.5Watt/K/m),
             LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
             ShearHeat           = ConstantShearheating(0.0NoUnits),
             CompositeRheology   = CompositeRheology((creep_magma, el_magma)),
+            # Melting             = MeltingParam_Smooth3rdOrder(),
+            # Melting             = MeltingParam_Caricchi(),
             Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
             Elasticity          = el_magma,
             CharDim             = CharDim,
@@ -123,25 +114,31 @@ function init_rheology(CharDim; is_compressible=false, linear=true)
 
         #Name="Sticky Air"
         SetMaterialParams(;
-            Phase               = 5,
-            Density             = ConstantDensity(; ρ=0e0),
-            HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
-            Conductivity        = ConstantConductivity(; k  = 15.0),
-            CompositeRheology   = CompositeRheology( (LinearViscous(; η=1e22), el, pl)),
-            Gravity             = ConstantGravity(; g=9.81),
+            Phase               = 4,
+            Density             = MeltDependent_Density(ρsolid=PT_Density(ρ0=2700kg/m^3, β=β_rock/Pa),ρmelt=PT_Density(ρ0=2300kg / m^3, β=β_rock/Pa)),
+            HeatCapacity        = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
+            # HeatCapacity        = ConstantHeatCapacity(Cp=1050J/kg/K),
+            Conductivity        = ConstantConductivity(k=3.0Watt/K/m),
+            LatentHeat          = ConstantLatentHeat(Q_L=350e3J/kg),
+            ShearHeat           = ConstantShearheating(1.0NoUnits),
+            CompositeRheology   = CompositeRheology((creep_rock, el, pl, )),
+            # Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            # Melting             = MeltingParam_Caricchi(),
+            Melting             = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
+            Elasticity          = el,
             CharDim             = CharDim,
-        ),
-    )
+            ),
+        )
 end
 
-function init_phases!(phases, phase_grid, particles, xvi)
+function init_phases2D!(phases, phase_grid, particles, xvi)
     ni = size(phases)
-    @parallel (@idx ni) _init_phases!(
+    @parallel (@idx ni) _init_phases2D!(
         phases, phase_grid, particles.coords, particles.index, xvi
     )
 end
 
-@parallel_indices (I...) function _init_phases!(
+@parallel_indices (I...) function _init_phases2D!(
     phases, phase_grid, pcoords::NTuple{N,T}, index, xvi
 ) where {N,T}
     ni = size(phases)
@@ -172,6 +169,48 @@ end
             # if pᵢ[end] > 0.0 && phase_grid[ii, jj] > 1.0
             #     particle_phase = 4.0
             # end
+        end
+        @index phases[ip, I...] = Float64(particle_phase)
+    end
+
+    return nothing
+end
+
+function init_phases3D!(phases, phase_grid, particles, xvi)
+    ni = size(phases)
+    @parallel (@idx ni) _init_phases3D!(
+        phases, phase_grid, particles.coords, particles.index, xvi
+    )
+end
+
+@parallel_indices (I...) function _init_phases3D!(
+    phases, phase_grid, pcoords::NTuple{N,T}, index, xvi
+) where {N,T}
+    ni = size(phases)
+
+    for ip in cellaxes(phases)
+        # quick escape
+        @index(index[ip, I...]) == 0 && continue
+
+        pᵢ = ntuple(Val(N)) do i
+            @index pcoords[i][ip, I...]
+        end
+
+        d = Inf # distance to the nearest particle
+        particle_phase = -1
+        for offi in 0:1, offj in 0:1, offk in 0:1
+            ii, jj, kk = I[1] + offi, I[2] + offj, I[3] + offk
+
+            !(ii ≤ ni[1]) && continue
+            !(jj ≤ ni[2]) && continue
+            !(kk ≤ ni[3]) && continue
+
+            xvᵢ = (xvi[1][ii], xvi[2][jj], xvi[3][kk])
+            d_ijk = √(sum((pᵢ[i] - xvᵢ[i])^2 for i in 1:N))
+            if d_ijk < d
+                d = d_ijk
+                particle_phase = phase_grid[ii, jj, kk]
+            end
         end
         @index phases[ip, I...] = Float64(particle_phase)
     end

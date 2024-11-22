@@ -173,7 +173,7 @@ end
     particles        = init_particles(backend, nxcell, max_xcell, min_xcell, xvi, di, ni);
     subgrid_arrays   = SubgridDiffusionCellArrays(particles);
     # velocity grids
-    grid_vxi = velocity_grids(xci, xvi, di);
+    grid_vxi         = velocity_grids(xci, xvi, di);
     # temperature
     pT, pT0, pPhases = init_cell_arrays(particles, Val(3));
     particle_args       = (pT, pT0, pPhases);
@@ -495,10 +495,6 @@ end
             t_Kyrs = t_yrs / 1e3
             t_Myrs = t_Kyrs / 1e3
 
-            origin          = ntuple(Val(3)) do i
-                nondimensionalize(origin_GMG[i] * km,CharDim)                       # origin coordinates of the domain
-            end
-
             xci_dim = ntuple(Val(3)) do i
                 ustrip.(dimensionalize(xci_v[i], km, CharDim))
             end
@@ -558,7 +554,9 @@ x_global = range(Topo_cartesian.x.val[1, 1, 1], Topo_cartesian.x.val[end, 1, 1],
 y_global = range(Topo_cartesian.y.val[1, 1, 1], Topo_cartesian.y.val[1, end, 1], ny_g())
 z_global = range(-40, sticky_air, nz_g())
 origin = (x_global[1], y_global[1], z_global[1])
-li = (abs(last(x_global)-first(x_global)), abs(last(y_global)-first(y_global)), abs(last(z_global)-first(z_global)))
+li = (abs(last(x_global)-first(x_global)),
+      abs(last(y_global)-first(y_global)),
+      abs(last(z_global)-first(z_global)))
 ni           = nx, ny, nz           # number of cells
 di           = @. li / (nx_g(), ny_g(), nz_g())           # grid steps
 grid_global  = Geometry(ni, li; origin = origin)
