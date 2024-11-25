@@ -83,6 +83,98 @@ function apply_pure_shear(Vx,Vy, εbg, xvi, lx, ly)
 
     return nothing
 end
+
+
+function phase_change!(phases, particles)
+    ni = size(phases)
+    @parallel_indices (I...) function _phase_change!(phases, px, py, index)
+
+        @inbounds for ip in cellaxes(phases)
+            #quick escape
+            @index(index[ip, I...]) == 0 && continue
+
+            x = @index px[ip,I...]
+            y = (@index py[ip,I...])
+            phase_ij = @index phases[ip, I...]
+            if y > 0.0 && (phase_ij  == 2.0 || phase_ij  == 3.0)
+                @index phases[ip, I...] = 4.0
+            end
+        end
+        return nothing
+    end
+
+    @parallel (@idx ni) _phase_change!( phases, particles.coords..., particles.index)
+end
+
+function phase_change!(phases, particles, chain, air_phase; init=true)
+    ni = size(phases)
+    @parallel_indices (I...) function _phase_change!(phases, px, py , index, cx, cy, air_phase, init)
+
+        @inbounds for ip in cellaxes(phases)
+            # quick escape
+            @index(index[ip, I...]) == 0 && continue
+
+            x = @index px[ip, I...]
+            y = @index py[ip, I...]
+            chain_x = @index cx[ip, I[1]]
+            chain_y = @index cy[ip, I[1]]
+
+
+            phase_ij = @index phases[ip, I...]
+
+            if init== true && (phase_ij > air_phase || phase_ij < air_phase) && y > chain_y
+                @index phases[ip, I...] = Float64(air_phase)
+            elseif phase_ij == 1.0 && y > chain_y
+                @index phases[ip, I...] = Float64(air_phase)
+            elseif phase_ij == air_phase && y < chain_y
+                @index phases[ip, I...] = 1.0
+            end
+        end
+        return nothing
+    end
+
+    @parallel (@idx ni) _phase_change!(phases, particles.coords..., particles.index, chain.coords..., air_phase, init)
+end
+
+
+function smooth(data, window_size::Int)
+    smoothed_data = similar(data)
+    half_window = div(window_size, 2)
+    n = length(data)
+
+    for i in 1:n
+        start_idx = max(1, i - half_window)
+        end_idx = min(n, i + half_window)
+        smoothed_data[i] = mean(data[start_idx:end_idx])
+    end
+
+    return smoothed_data
+end
+
+function extract_topo_particles2D!(particles, air_phase, phase_ratios::JustPIC.PhaseRatios; smoothing_factor=Int64(7))
+    ni = size(phase_ratios.center)
+    topo = @fill(NaN, ni[1])
+    py = particles.coords[2]
+
+    for i in 1:ni[1]
+        for j in 1:ni[2]
+            phase_i = phase_ratios.center[i, j]
+            if phase_i[air_phase] > 0.0
+                if isnan(topo[i])
+                    y = mean(filter(!isnan, py[i, j]))  # Extract the first element of the vector
+                    topo[i] = y
+                end
+                break
+            end
+        end
+    end
+
+    # Apply smoothing filter
+    topo = smooth(topo, smoothing_factor)
+
+    return topo
+end
+
 ## END OF HELPER FUNCTION ------------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
