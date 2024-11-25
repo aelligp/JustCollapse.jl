@@ -72,7 +72,7 @@ function apply_pure_shear(Vx,Vy, εbg, xvi, lx, ly)
 
     @parallel_indices (i, j) function pure_shear_y!(Vy, εbg, ly)
         yi = yv[j]
-        Vy[i + 1, j] = abs(yi) * εbg 
+        Vy[i + 1, j] = abs(yi) * εbg
         return nothing
     end
 
@@ -148,8 +148,8 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
     )
     thermal_bcs!(thermal, thermal_bc)
     temperature2center!(thermal)
-    Ttop             = thermal.T[2:end-1, end] 
-    Tbot             = thermal.T[2:end-1, 1]   
+    Ttop             = thermal.T[2:end-1, end]
+    Tbot             = thermal.T[2:end-1, 1]
     # ----------------------------------------------------
 
     # Buoyancy forces
@@ -180,7 +180,7 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
     # flow_bcs!(stokes, flow_bcs) # apply boundary conditions
     # displacement2velocity!(stokes, dt)
 
-    εbg          = 1e-15 * 1 
+    εbg          = 1e-15 * 1
     apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
 
     flow_bcs!(stokes, flow_bcs) # apply boundary conditions
@@ -248,7 +248,7 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
         @views thermal.T[2:end-1, :] .= T_buffer
         thermal_bcs!(thermal, thermal_bc)
         temperature2center!(thermal)
-       
+
         # args = (; T=thermal.Tc, P=stokes.P, dt=Inf, ΔTc=thermal.ΔTc)
         args = (; T=thermal.Tc, P=stokes.P, dt=Inf)
 
@@ -266,7 +266,7 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
             igg;
             kwargs = (;
                 iterMax          = 100e3,
-                nout             = 2e3, 
+                nout             = 2e3,
                 viscosity_cutoff = viscosity_cutoff,
             )
         )
@@ -284,7 +284,7 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
         tensor_invariant!(stokes.ε_pl)
         dtmax = 8e2 * 3600 * 24 * 365.25
         dt    = compute_dt(stokes, di, dtmax)
-        
+
         println("dt = $(dt/(3600 * 24 *365.25)) years")
         # ------------------------------
 
@@ -325,9 +325,9 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
         # check if we need to inject particles
         # inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer, ), xvi)
         inject_particles_phase!(
-            particles, 
-            pPhases, 
-            particle_args_reduced, 
+            particles,
+            pPhases,
+            particle_args_reduced,
             (T_buffer, τxx_v, τyy_v, stokes.τ.xy, stokes.ω.xy),
             xvi
         )
@@ -336,13 +336,13 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
         update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
         update_rock_ratio!(ϕ, phase_ratios, (phase_ratios.Vx, phase_ratios.Vy), air_phase)
 
-        particle2centroid!(stokes.τ_o.xx, pτxx, xci, particles)
-        particle2centroid!(stokes.τ_o.yy, pτyy, xci, particles)
-        particle2grid!(stokes.τ_o.xy, pτxy, xvi, particles)
+        particle2centroid!(stokes.τ.xx, pτxx, xci, particles)
+        particle2centroid!(stokes.τ.yy, pτyy, xci, particles)
+        particle2grid!(stokes.τ.xy, pτxy, xvi, particles)
 
         @show it += 1
         t        += dt
-        
+
         # Data I/O and plotting ---------------------
         if it == 1 || rem(it, 1) == 0
             # checkpointing(figdir, stokes, thermal.T, η, t)
@@ -449,9 +449,9 @@ figdir   = "Caldera2D"
 n        = 128
 nx, ny   = n, n >>> 1
 li, origin, phases_GMG, T_GMG = setup2D(
-    nx+1, ny+1; 
-    sticky_air     = 4, 
-    flat           = false, 
+    nx+1, ny+1;
+    sticky_air     = 4,
+    flat           = false,
     chimney        = true,
     chamber_T      = 1e3,
     chamber_depth  = 7e0,
