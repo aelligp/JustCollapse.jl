@@ -2,7 +2,6 @@ const isCUDA = true
 
 @static if isCUDA
     using CUDA
-    CUDA.allowscalar(true)
 end
 
 using JustRelax, JustRelax.JustRelax2D, JustRelax.DataIO
@@ -38,8 +37,8 @@ using StaticArrays, GeophysicalModelGenerator, WriteVTK, JLD2
 using Dates
 
 # -----------------------------------------------------
-include("CalderaModelSetup_PipeFlow.jl")
-include("CalderaRheology_PipeFlow.jl")
+include("LaMEMModelSetup_PipeFlow.jl")
+include("LaMEMRheology_PipeFlow.jl")
 # -----------------------------------------------------
 ## SET OF HELPER FUNCTIONS PARTICULAR FOR THIS SCRIPT --------------------------------
 
@@ -58,31 +57,41 @@ function copyinn_x!(A, B)
     @parallel f_x(A, B)
 end
 
-function BC_velo!(Vx,Vy, εbg, xvi, lx,ly)
+function BC_velo!(Vx,Vy, εbg, xvi, lx,ly, phases)
     xv, yv = xvi
 
-    @parallel_indices (i, j) function pure_shear_x!(Vx, εbg, lx)
+    @parallel_indices (i, j) function pure_shear_x!(Vx, εbg, lx, phases)
         xi = xv[i]
-        Vx[i, j + 1] = εbg * (xi - lx * 0.5)
+        yi = min(yv[j],0.0)
+
+        # Vx[i, j + 1] = yi < 0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
+        # Vx[i, j + 1] = phases[i,j] < 4.0 ? (εbg * (xi - lx * 0.5) * (lx)/2) : 0.0
+        Vx[i, j + 1] = (εbg * (xi - lx * 0.5) * (lx)/2)
         return nothing
     end
+    # @parallel_indices (i, j) function pure_shear_x!(Vx)
+    #     xi = xv[i]
+    #     Vx[i, j + 1] = εbg * (xi - lx * 0.5) * lx / 2
+    #     return nothing
+    # end
 
-    @parallel_indices (i, j) function pure_shear_y!(Vy, εbg, ly)
+    @parallel_indices (i, j) function pure_shear_y!(Vy, εbg, ly, phases)
+        # yi = min(yv[j],0.0)
+        # Vy[i + 1, j] = (abs(yi) * εbg / ly) / 2
         yi = yv[j]
-        Vy[i + 1, j] = abs(yi) * εbg
+        Vy[i + 1, j] = (abs(yi) * εbg / ly) / 2
+        # Vy[i + 1, j] = phases[i,j] < 4.0 ? (abs(yi) * εbg / ly) / 2 : 0.0
         return nothing
     end
 
     nx, ny = size(Vx)
-    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx, εbg, lx)
+    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx, εbg,lx, phases)
     nx, ny = size(Vy)
-    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy, εbg, ly)
-
+    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy,εbg, ly, phases)
 
     return nothing
 end
 
-#not correct i think
 function BC_displ!(Ux,Uy, εbg, xvi, lx,ly, dt)
     xv, yv = xvi
 
@@ -108,15 +117,15 @@ function BC_displ!(Ux,Uy, εbg, xvi, lx,ly, dt)
     return nothing
 end
 
-# @parallel_indices (i, j) function init_P!(P, ρg, z, phases,sticky_air)
-#     # if phases[i, j] == 4.0
-#     #     @all(P) = 0.0
-#     # else
-#         @all(P) = abs(@all(ρg) * (@all_j(z))) #* <((@all_j(z)), 0.0)
-#         # @all(P) = @all(ρg)
-#     # end
-#     return nothing
-# end
+@parallel_indices (i, j) function init_P!(P, ρg, z, phases,sticky_air)
+    # if phases[i, j] == 4.0
+    #     @all(P) = 0.0
+    # else
+        @all(P) = abs(@all(ρg) * (@all_j(z))) * <((@all_j(z)), 0.0)
+        # @all(P) = @all(ρg)
+    # end
+    return nothing
+end
 
 function phase_change!(phases, particles)
     ni = size(phases)
@@ -129,8 +138,8 @@ function phase_change!(phases, particles)
             x = @index px[ip,I...]
             y = (@index py[ip,I...])
             phase_ij = @index phases[ip, I...]
-            if y > 0.0 && (phase_ij  == 2.0 || phase_ij  == 3.0)
-                @index phases[ip, I...] = 4.0
+            if y > 0.0 && (phase_ij == 2.0 || phase_ij == 3.0 || phase_ij == 4.0)
+                @index phases[ip, I...] = 5.0
             end
         end
         return nothing
@@ -210,7 +219,7 @@ function new_thermal_anomaly!(phases, particles, xc_anomaly, yc_anomaly, r_anoma
 
             # thermal anomaly - circular
             if ((x - xc_anomaly)^2 + (y - yc_anomaly)^2 ≤ r_anomaly^2)
-                @index phases[ip, I...] = 3.0
+                @index phases[ip, I...] = 4.0
             end
         end
         return nothing
@@ -257,8 +266,8 @@ function phase_change!(phases, particles, chain)
             phase_ij = @index phases[ip, I...]
             chain_y  = @index chain.coords[2][ip, I...]
 
-            if (phases_ij==1.0 || phase_ij == 2.0 || phase_ij == 3.0 || phase_ij == 4.0) && pᵢ[2] > chain_y[ip]
-                @index phases[ip, I...] = 5.0
+            if (phases_ij==1.0 || phase_ij == 2.0 || phase_ij == 3.0 || phase_ij == 4.0 || phase_ij == 5.0) && pᵢ[2] > chain_y[ip]
+                @index phases[ip, I...] = 6.0
             elseif phase_ij == 5.0 && pᵢ[2] < chain_y[ip]
                 @index phases[ip, I...] = 1.0
             end
@@ -269,7 +278,7 @@ function phase_change!(phases, particles, chain)
     @parallel (@idx ni) _phase_change!(phases, particles.coords, particles.index, chain)
 end
 
-# @views function Caldera_2D(igg, init_rheology(), ; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
+# @views function Caldera_2D(igg; figname=figname, nx=64, ny=64, nz=64, do_vtk=false)
 
     #-----------------------------------------------------
     # USER INPUTS
@@ -290,11 +299,11 @@ end
     # if it does not exist, make folder where figures are stored
     figdir = "./fig2D/$figname/"
     checkpoint = joinpath(figdir, "checkpoint")
+    take(figdir)
     if do_vtk
         vtk_dir      = joinpath(figdir,"vtk")
         take(vtk_dir)
     end
-    take(figdir)
     # ----------------------------------------------------
     # Set up the grid
     # ----------------------------------------------------
@@ -318,18 +327,19 @@ end
     perturbation_C = @rand(ni...);                                          # perturbation of the cohesion
 
     # Physical Parameters
-    rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
-    rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
+    rheology     = init_rheology(CharDim; is_compressible=false, linear = true)
+    # rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = true)
     cutoff_visc  = nondimensionalize((1e15Pa*s, 1e24Pa*s),CharDim)
-    κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
+    # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
+    κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
     dt           = dt_diff = 0.5 * min(di...)^2 / κ / 2.01
 
     # Initialize particles ----------------------------------
-    nxcell           = 40
-    max_xcell        = 60
-    min_xcell        = 20
+    nxcell           = 60
+    max_xcell        = 80
+    min_xcell        = 40
     particles        = init_particles(backend, nxcell, max_xcell, min_xcell, xvi...);
 
     initial_elevation = nondimensionalize(0.0km, CharDim)
@@ -341,6 +351,17 @@ end
     # temperature
     pT, pT0, pPhases, pη_vep, pEII, pϕ    = init_cell_arrays(particles, Val(6));
     particle_args       = (pT, pT0, pPhases, pη_vep, pEII, pϕ);
+
+    # Assign material phases --------------------------
+    phases_dev   = PTArray(backend_JR)(phases_GMG)
+    phase_ratios = PhaseRatios(backend, length(rheology), ni);
+    init_phases2D!(pPhases, phases_dev, particles, xvi)
+    update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
+
+    # RockRatios
+    air_phase = 5
+    ϕ_R         = RockRatio(backend_JR, ni...)
+    update_rock_ratio!(ϕ_R, phase_ratios, air_phase)
 
     # Assign material phases --------------------------
     phases_dev   = PTArray(backend_JR)(phases_GMG)
@@ -360,9 +381,9 @@ end
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes          = StokesArrays(backend_JR, ni)
-    pt_stokes       = PTStokesCoeffs(li, di; Re=3.0,  ϵ=1e-4, CFL=0.8 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes = PTStokesCoeffs(li, di; ϵ=1e-4, Re = 3e0, r=0.7, CFL = 0.9 / √2.1) # Re=3π, r=0.7
     # -----------------------------------------------------
-    args = (; T=thermal.Tc, P=stokes.P, dt=dt,  ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+    args = (; T=thermal.Tc, P=stokes.P, dt=dt)#,  ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
     pt_thermal = PTThermalCoeffs(
         backend_JR, rheology, phase_ratios, args, dt, ni, di, li; ϵ=1e-5, CFL=0.98 / √2.1
@@ -371,7 +392,7 @@ end
     if DisplacementFormulation == true
         flow_bcs = DisplacementBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface=false,
+            free_surface=true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         displacement2velocity!(stokes, dt) # convert displacement to velocity
@@ -379,7 +400,7 @@ end
     elseif DisplacementFormulation == false
         flow_bcs = VelocityBoundaryConditions(;
             free_slip=(left=true, right=true, top=true, bot=true),
-            free_surface=false,
+            free_surface=true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
@@ -419,8 +440,8 @@ end
 
     for _ in 1:5
         compute_ρg!(ρg[end], phase_ratios, rheology, args)
-        # @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
-        stokes.P .= PTArray(backend_JR)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
+        @parallel (@idx ni) init_P!(stokes.P, ρg[2], xci[2],phases_dev, sticky_air)
+        # stokes.P .= PTArray(backend_JR)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
         compute_melt_fraction!(
             ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
         )
@@ -445,8 +466,8 @@ end
     T_buffer    = @zeros(ni.+1)
     Told_buffer = similar(T_buffer)
     Tsurf  = nondimensionalize(0C,CharDim)
-    # Tbot   = nondimensionalize(575C,CharDim)
-    Tbot   = thermal.T[1, 1]
+    Tbot   = nondimensionalize(1350C,CharDim)
+    # Tbot   = thermal.T[1, 1]
     dt₀         = similar(stokes.P)
     for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
         copyinn_x!(dst, src)
@@ -482,27 +503,27 @@ end
     ## Do a incompressible stokes solve, to get a better initial guess for the compressible stokes
     ## solver. And after that apply the extension/compression BCs. This is done to avoid the
     ## incompressible stokes solver to blow up.
-    println("Starting incompressible stokes solve")
-    solve!(
-        stokes,
-        pt_stokes,
-        di,
-        flow_bcs,
-        ρg,
-        phase_ratios,
-        rheology_incomp,
-        args,
-        dt*0.1,
-        igg;
-        kwargs = (;
-            iterMax          = 100e3,#250e3,
-            free_surface     = false,
-            nout             = 2e3,#5e3,
-            viscosity_cutoff = cutoff_visc,
-            verbose          = false,
-        )
-    )
-    tensor_invariant!(stokes.ε)
+    # println("Starting incompressible stokes solve")
+    # solve!(
+    #     stokes,
+    #     pt_stokes,
+    #     di,
+    #     flow_bcs,
+    #     ρg,
+    #     phase_ratios,
+    #     rheology_incomp,
+    #     args,
+    #     dt,
+    #     igg;
+    #     kwargs = (;
+    #         iterMax          = 500e3,#250e3,
+    #         free_surface     = false,
+    #         nout             = 2e3,#5e3,
+    #         viscosity_cutoff = cutoff_visc,
+    #         verbose          = false,
+    #     )
+    # )
+    # tensor_invariant!(stokes.ε)
     # heatdiffusion_PT!(
     #     thermal,
     #     pt_thermal,
@@ -524,7 +545,7 @@ end
         BC_displ!(@displacement(stokes)..., εbg, xvi,lx,lz,dt)
         flow_bcs = DisplacementBoundaryConditions(;
             free_slip   =(left=true, right=true, top=true, bot=true),
-            # free_surface=true,
+            free_surface=true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         displacement2velocity!(stokes, dt) # convert displacement to velocity
@@ -533,21 +554,30 @@ end
         BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz, phases_dev)
         flow_bcs = VelocityBoundaryConditions(;
             free_slip   =(left=true, right=true, top=true, bot=true),
-            # free_surface=true,
+            free_surface=true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
     else
         flow_bcs = VelocityBoundaryConditions(;
             free_slip    = (left=true, right=true, top=true, bot=true),
-            # free_surface =true,
+            free_surface =true,
         )
         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
         update_halo!(@velocity(stokes)...) # update halo cells
     end
     println("Starting main loop")
 
-    while it < 2500 #nt
+    while it < 250 #nt
+
+        # # interpolate fields from particle to grid vertices
+        # particle2grid!(T_buffer, pT, xvi, particles)
+        # @views T_buffer[:, end]      .= Tsurf
+        # @views T_buffer[:, 1]        .= Tbot
+        # @views thermal.T[2:end-1, :] .= T_buffer
+        # thermal_bcs!(thermal, thermal_bc)
+        # temperature2center!(thermal)
+        # vertex2center!(thermal.ΔTc, thermal.ΔT[2:end-1, :])
 
         dt = dt_new # update dt
         if DisplacementFormulation == true
@@ -556,33 +586,35 @@ end
             # BC_velo!(@velocity(stokes)..., εbg, xvi,lx,lz)
         end
 
-        if it > 1 && ustrip(dimensionalize(t,yr,CharDim)) >= (ustrip.(1.5e3yr)*interval)
-            # add_thermal_anomaly!(pPhases, particles, interval, lx, CharDim, thermal, T_buffer, Told_buffer, Tsurf, xvi, phase_ratios, grid, pT)
-            new_thermal_anomaly!(pPhases, particles, lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim))
-            ## rhyolite
-            circular_perturbation!(thermal.T, 30.0, nondimensionalize(1150C, CharDim), lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim), xvi)
-            # circular_perturbation!(thermal.T, 30.0, nondimensionalize(1250C, CharDim), lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim), xvi)
-            for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
-                copyinn_x!(dst, src)
-            end
-            @views T_buffer[:,end] .= Tsurf
-            @views thermal.T[2:end-1, :] .= T_buffer
-            temperature2center!(thermal)
-            # grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
-            grid2particle!(pT, xvi, T_buffer, particles)
-            update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
-            interval += 1.0
-        end
+        # if it > 1 && ustrip(dimensionalize(t,yr,CharDim)) >= (ustrip.(1.5e3yr)*interval)
+        #     # add_thermal_anomaly!(pPhases, particles, interval, lx, CharDim, thermal, T_buffer, Told_buffer, Tsurf, xvi, phase_ratios, grid, pT)
+        #     new_thermal_anomaly!(pPhases, particles, lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim))
+        #     ## rhyolite
+        #     circular_perturbation!(thermal.T, 30.0, nondimensionalize(1150C, CharDim), lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim), xvi)
+        #     # circular_perturbation!(thermal.T, 30.0, nondimensionalize(1250C, CharDim), lx*0.5, nondimensionalize(-5km, CharDim), nondimensionalize(0.5km, CharDim), xvi)
+        #     for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
+        #         copyinn_x!(dst, src)
+        #     end
+        #     @views T_buffer[:,end] .= Tsurf
+        #     @views thermal.T[2:end-1, :] .= T_buffer
+        #     temperature2center!(thermal)
+        #     # grid2particle_flip!(pT, xvi, T_buffer, Told_buffer, particles)
+        #     grid2particle!(pT, xvi, T_buffer, particles)
+        #     update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
+        #     interval += 1.0
+        # end
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt)
+        # args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
         ## Stokes solver -----------------------------------
-        solve!(
+        solve_VariationalStokes!(
             stokes,
             pt_stokes,
             di,
             flow_bcs,
             ρg,
             phase_ratios,
+            ϕ_R,
             rheology,
             args,
             dt,
@@ -595,6 +627,12 @@ end
             )
         )
 
+        # # do this after solve!
+        # air_phase  = 5 # or whatever the phase number is for the air
+        # isthereair = [p[air_phase] != 0 for p in phase_ratios.center]
+        # Pshift     = minimum(stokes.P[isthereair])
+        # stokes.P .-= Pshift
+
         dt_new = compute_dt(stokes, di, dt_diff, igg) #/ 9.81
         dt     = dt_new
 
@@ -604,14 +642,14 @@ end
         ## Save the checkpoint file before a possible thermal solver blow up
         checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
 
-        # ------------------------------
-        compute_shear_heating!(
-            thermal,
-            stokes,
-            phase_ratios,
-            rheology, # needs to be a tuple
-            dt,
-        )
+        # # ------------------------------
+        # compute_shear_heating!(
+        #     thermal,
+        #     stokes,
+        #     phase_ratios,
+        #     rheology, # needs to be a tuple
+        #     dt,
+        # )
         # Thermal solver ---------------
         heatdiffusion_PT!(
             thermal,
@@ -645,18 +683,18 @@ end
         )
         # ------------------------------
         # Update the particles Arguments
-        centroid2particle!(pη_vep, xci, stokes.viscosity.η_vep, particles)
-        centroid2particle!(pEII, xci, stokes.EII_pl, particles)
-        centroid2particle!(pϕ, xci, ϕ, particles)
+        # centroid2particle!(pη_vep, xci, stokes.viscosity.η_vep, particles)
+        # centroid2particle!(pEII, xci, stokes.EII_pl, particles)
+        # centroid2particle!(pϕ, xci, ϕ, particles)
 
         # Advection --------------------
         # advect particles in space
         # advection!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
         advection_LinP!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
-        # update halos
-        update_cell_halo!(particles.coords..., particle_args...);
-        update_cell_halo!(particles.index)
         # advection_MQS!(particles, RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
+        # update halos
+        # update_cell_halo!(particles.coords..., particle_args...);
+        # update_cell_halo!(particles.index)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
 
@@ -666,18 +704,18 @@ end
         # advect_markerchain!(chain,  RungeKutta2(), @velocity(stokes), (grid_vx, grid_vy), dt)
 
         # phase change for particles
-        # phase_change!(pPhases, pϕ, 0.05, 4.0, particles)
-        # phase_change!(pPhases, pEII, 1e-2, particles)
-
         # phase_change!(pPhases, particles, chain)
+        phase_change!(pPhases, particles)
         # update phase ratios
         update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
+        update_rock_ratio!(ϕ_R, phase_ratios, air_phase)
 
+        # interpolate fields from particle to grid vertices
         particle2grid!(T_buffer, pT, xvi, particles)
-        @views T_buffer[:, end] .= Tsurf;
-        @views T_buffer[:, 1] .= Tbot;
-        @views thermal.T[2:end - 1, :] .= T_buffer;
-        thermal_bcs!(thermal.T, thermal_bc)
+        @views T_buffer[:, end]      .= Tsurf
+        @views T_buffer[:, 1]        .= Tbot
+        @views thermal.T[2:end-1, :] .= T_buffer
+        thermal_bcs!(thermal, thermal_bc)
         temperature2center!(thermal)
         vertex2center!(thermal.ΔTc, thermal.ΔT[2:end-1, :])
 
@@ -800,8 +838,7 @@ end
                     (x_c,y_c),
                     data_v,
                     data_c,
-                    velocity_v,
-                    t=ustrip(t_Kyrs),
+                    velocity_v
                 )
             end
 
@@ -914,6 +951,14 @@ end
                 # @views EII_pl_d[pp.==4.0] .= NaN
                 # @views ϕ_d[pp.==4.0] .= NaN
                 # @views Vy_d[1:end-1, 1:end-1][pp.==4.0] .=NaN
+                @views T_d[ϕ_R.center[2:end-1, 2:end-1] .== 0.0] .= NaN
+                @views ρ_d[ϕ_R.center[2:end-1, 2:end-1] .== 0.0] .= NaN
+                @views η_vep_d[ϕ_R.center[2:end-1, 2:end-1] .== 0.0] .= NaN
+                @views τII_d[ϕ_R.center[2:end-1, 2:end-1] .== 0.0] .= NaN
+                @views εII_d[ϕ_R.center[2:end-1, 2:end-1] .== 0.0] .= NaN
+                @views EII_pl_d[ϕ_R.center[2:end-1, 2:end-1] .== 0.0] .= NaN
+                @views ϕ_d[ϕ_R.center[2:end-1, 2:end-1] .== 0.0] .= NaN
+                @views Vy_d[ϕ_R.center[1:end-1, 1:end-1] .== 0.0] .=NaN
 
                 p1 = heatmap!(ax1, x_c, y_c, T_d; colormap=:batlow, colorrange=(000, 1200))
                 contour!(ax1, x_c, y_c, T_d, ; color=:white, levels=600:200:1200)
@@ -921,6 +966,7 @@ end
                 contour!(ax2, x_c, y_c, T_d, ; color=:white, levels=600:200:1200)
                 p3 = heatmap!(ax3, x_v, y_v, Vy_d; colormap=:vik)
                 p4 = heatmap!(ax4, x_c, y_c, log10.(εII_d); colormap=:glasgow, colorrange= (log10(5e-15), log10(5e-12)))
+                # p5 = heatmap!(ax5, x_c, y_c, ρ_d; colormap=:glasgow)
                 p5 = heatmap!(ax5, x_c, y_c, EII_pl_d; colormap=:glasgow)
                 contour!(ax5, x_c, y_c, T_d, ; color=:white, levels=600:200:1200, labels = true)
                 p6 = heatmap!(ax6, x_v, y_v, τII_d; colormap=:batlow)
@@ -955,8 +1001,11 @@ end
                     Yv = [y for x in xvi[1], y in xvi[2]][:]
                     Y = [y for x in xci[1], y in xci[2]][:]
                     fig = Figure(; size=(1200, 900))
-                    ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
-                    ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Pressure")
+                    # ax1 = Axis(fig[1, 1]; title="T")
+                    # ax2 = Axis(fig[1, 2]; title="Pressure")
+                    ax1 = Axis(fig[1, 1]; aspect=2/3, title="T")
+                    ax2 = Axis(fig[1, 2]; aspect=2/3, title="Pressure")
+
                     scatter!(
                         ax1,
                         Array(ustrip.(dimensionalize(thermal.T[2:(end - 1), :][:], C, CharDim))),
@@ -967,6 +1016,7 @@ end
                         Array(ustrip.(dimensionalize(stokes.P[:], MPa, CharDim))),
                         ustrip.(dimensionalize(Y, km, CharDim)),
                     )
+
                     hideydecorations!(ax2)
                     save(joinpath(figdir, "pressure_profile_$it.png"), fig)
                     fig
@@ -994,7 +1044,7 @@ end
 end
 
 # figname = "Weak_lithosphere_v2_$(today())"
-figname = "$(today())_PipeFlow_Initialisation"
+figname = "$(today())_LaMEM_run"
 do_vtk = true
 ar = 1 # aspect ratio
 n = 128
