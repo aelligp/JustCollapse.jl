@@ -31,3 +31,6 @@ Manifest.toml
 *.gif
 *.jld2
 */*/checkpoint/*
+Systematics/*
+Various_scripts/*
+Nico_Codes/*
