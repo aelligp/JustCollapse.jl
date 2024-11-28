@@ -1,5 +1,5 @@
-# const isCUDA = false
-const isCUDA = true
+const isCUDA = false
+# const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -32,7 +32,7 @@ else
 end
 
 # Load script dependencies
-using GeoParams, GLMakie, CellArrays
+using GeoParams, CairoMakie, CellArrays
 
 # Load file with all the rheology configurations
 include("Caldera_setup.jl")
@@ -224,6 +224,14 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
     air_phase   = 5
     ϕ           = RockRatio(backend, ni)
     update_rock_ratio!(ϕ, phase_ratios, (phase_ratios.Vx, phase_ratios.Vy), air_phase)
+
+    # Extract topography and add marker chain
+    topo = extract_topo_particles2D!(particles, air_phase, phase_ratios; smoothing_factor=7)
+    chain             = init_markerchain(backend, nxcell, min_xcell, max_xcell, xvi[1], topo);
+    phase_change!(pPhases, particles, chain, air_phase; init=true)
+    update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
+    update_cell_halo!(particles.coords..., particle_args...);
+    update_cell_halo!(particles.index)
     # ----------------------------------------------------
 
     # STOKES ---------------------------------------------
@@ -285,7 +293,6 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
         take(vtk_dir)
     end
     take(figdir)
-    cp(@__FILE__, joinpath(figdir, "script.jl"); force = true)
     # ----------------------------------------------------
 
     local Vx_v, Vy_v
@@ -368,6 +375,7 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
         centroid2particle!(pτxx , xci, stokes.τ.xx, particles)
         centroid2particle!(pτyy , xci, stokes.τ.yy, particles)
         grid2particle!(pτxy, xvi, stokes.τ.xy, particles)
+        grid2particle!(pωxy, xvi, stokes.ω.xy, particles)
         rotate_stress_particles!(pτ, pω, particles, dt)
 
         println("Stokes solver time             ")
@@ -399,6 +407,10 @@ function main(li, origin, phases_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk
         )
         thermal.ΔT .= thermal.T .- thermal.Told
         vertex2center!(thermal.ΔTc, thermal.ΔT[2:end-1, :])
+
+        for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
+            copyinn_x!(dst, src)
+        end
 
         subgrid_characteristic_time!(
             subgrid_arrays, particles, dt₀, phase_ratios, rheology, thermal, stokes, xci, di
