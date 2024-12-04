@@ -2,20 +2,19 @@
 using GeophysicalModelGenerator
 
 function setup2D(
-    nx, nz; 
-    sticky_air     = 2.5, 
-    flat           = true, 
+    xvi, nx, nz, igg;
+    flat           = true,
     chimney        = false,
+    volcano_size   = (3e0, 5e0),
     chamber_T      = 1e3,
     chamber_depth  = 5e0,
     chamber_radius = 2e0,
     aspect_x       = 1.5,
 )
 
-    Lx = Ly = 50
-    x = range(0.0, Lx, nx);
-    y = range(0.0, Ly, 2);
-    z = range(-25, sticky_air, nz);
+    x = range(minimum(xvi[1]), maximum(xvi[1]), nx);
+    y = range(0.0, maximum(xvi[1]), 2);
+    z = range(minimum(xvi[2]), maximum(xvi[2]), nz);
     Grid = CartData(xyz_grid(x,y,z));
 
     # Now we create an integer array that will hold the `Phases` information (which usually refers to the material or rock type in the simulation)
@@ -35,10 +34,10 @@ function setup2D(
     if !flat
         add_volcano!(Phases, Temp, Grid;
             volcanic_phase  = 1,
-            center          = (mean(Grid.x.val),  0.0),
-            height          = 3,
-            radius          = 5,
-            crater          = 0.5,
+            center          = (25e0, 0.0),
+            height          = volcano_size[1],
+            radius          = volcano_size[2],
+            # crater          = 0.5,
             base            = 0.0,
             background      = nothing,
             T               = HalfspaceCoolingTemp(Age=20)
@@ -46,27 +45,24 @@ function setup2D(
     end
 
     add_ellipsoid!(Phases, Temp, Grid;
-        cen    = (mean(Grid.x.val), 0, -chamber_depth),
+        cen    = (25e0, 0, -chamber_depth),
         axes   = (chamber_radius * aspect_x, 2.5, chamber_radius),
         phase  = ConstantPhase(3),
         T      = ConstantTemp(T=chamber_T)
     )
-
-    # add_sphere!(Phases, Temp, Grid;
-    #     cen    = (mean(Grid.x.val), 0, -chamber_depth),
-    #     radius = 0.5,
-    #     phase  = ConstantPhase(4),
-    #     T      = ConstantTemp(T=chamber_T)
-    # )
+    add_sphere!(Phases, Temp, Grid;
+        cen    = (25e0, 0, -chamber_depth),
+        radius = (chamber_radius/3),
+        phase  = ConstantPhase(4),
+        T      = ConstantTemp(T=chamber_T+100)
+    )
 
     if chimney
         add_cylinder!(Phases, Temp, Grid;
-            base = (mean(Grid.x.val), 0, -chamber_depth),
-            cap  = (mean(Grid.x.val), 0, 3e0),
-            radius = 0.05,
+            base = (25e0, 0, -(chamber_depth-chamber_radius)),
+            cap  = (25e0, 0, volcano_size[1]),
+            radius = 0.3,
             phase  = ConstantPhase(3),
-            # T      = LinearTemp(Ttop=20, Tbot=1000),
-            # T      = ConstantTemp(T=800),
             T      = ConstantTemp(T=chamber_T),
         )
     end
@@ -77,6 +73,6 @@ function setup2D(
 
     ph      = Phases[:,1,:]
     T       = Temp[:,1,:] .+ 273
-    # write_paraview(Grid, "Volcano2D")
+    write_paraview(Grid, "Volcano2D_$(igg.me)")
     return li, origin, ph, T, Grid
 end

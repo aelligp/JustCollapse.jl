@@ -42,7 +42,7 @@ function init_rheology_linear()
 end
 
 function init_rheologies(; linear=false)
-   
+
     η_reg   = 1e18
     C       = linear ? Inf : 10e6
     ϕ       = 15
@@ -57,7 +57,7 @@ function init_rheologies(; linear=false)
     disl_top  = SetDislocationCreep(Dislocation.dry_olivine_Karato_2003)
     # diffusion laws
     disl_bot  = SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
-    
+
     # Define rheolgy struct
     rheology = (
         # Name = "Upper crust",
@@ -84,22 +84,24 @@ function init_rheologies(; linear=false)
         # Name              = "magma chamber",
         SetMaterialParams(;
             Phase             = 3,
-            Density           = T_Density(; ρ0=2.5e3, T0=273.15),
+            Density           = T_Density(; ρ0=2.4e3, T0=273.15), #after Townsend et al. 2019
             Conductivity      = ConstantConductivity(; k  = 1.5),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             LatentHeat        = ConstantLatentHeat(Q_L=350e3J/kg),
-            CompositeRheology = CompositeRheology( (LinearViscous(; η=1e18), el)),
+            # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e18), el)),
+            CompositeRheology = CompositeRheology( (LinearViscous(; η=1e16), el)),
         ),
         # Name              = "magma chamber - hot anomaly",
         SetMaterialParams(;
             Phase             = 4,
-            Density           = T_Density(; ρ0=2.5e3, T0=273.15),
+            Density           = T_Density(; ρ0=2.4e3, T0=273.15), #after Townsend et al. 2019
             Conductivity      = ConstantConductivity(; k  = 1.5),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             LatentHeat        = ConstantLatentHeat(Q_L=350e3J/kg),
-            CompositeRheology = CompositeRheology( (LinearViscous(; η=1e18), el, )),
+            # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e18), el, )),
+            CompositeRheology = CompositeRheology( (LinearViscous(; η=1e16), el, )),
         ),
         # Name              = "StickyAir",
         SetMaterialParams(;
