@@ -27,12 +27,12 @@ function main()
             end
 
             # Submit the job
-            # run(`sbatch runme_test.sh`)
+            run(`sbatch runme_test.sh`)
             println("Job submitted")
             # remove the file
-            # sleep(1)
-            # rm("runme_test.sh")
-            # println("File removed")
+            sleep(1)
+            rm("runme_test.sh")
+            println("File removed")
         end
     end
 end
