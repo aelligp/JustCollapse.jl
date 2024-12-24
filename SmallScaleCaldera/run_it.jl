@@ -7,7 +7,7 @@ function main()
         depths = 4e0:1:8e0
         radii = 1e0:0.5:2.5e0
         ars = 1:0.5:2.5
-        extensions = 1e-15:1e-13
+        extensions = 1e-15, 5e-15, 1e-14, 5e-14, 1e-13
         for conduit in conduits, depth in depths, radius in radii, ar in ars, extension in extensions
             jobname = "Systematics_$(conduit)_$(Int64(depth))_$(radius)_$(ar)_$(extension)"
             str =
@@ -27,12 +27,12 @@ function main()
             end
 
             # Submit the job
-            run(`sbatch runme_test.sh`)
+            # run(`sbatch runme_test.sh`)
             println("Job submitted")
             # remove the file
-            sleep(1)
-            rm("runme_test.sh")
-            println("File removed")
+            # sleep(1)
+            # rm("runme_test.sh")
+            # println("File removed")
         end
     end
 end
