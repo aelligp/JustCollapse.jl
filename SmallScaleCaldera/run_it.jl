@@ -20,8 +20,7 @@ function main()
 #SBATCH --ntasks-per-node=1
 #SBATCH --account c23
 
-#srun $(Base.julia_cmd()) --project=. -O3 --startup-file=no --check-bounds=no Caldera2D.jl
-$(conduit) $(depth) $(radius) $(ar) $(extension)"
+#srun $(Base.julia_cmd()) --project=. -O3 --startup-file=no --check-bounds=no Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)"
 
             open("runme_test.sh", "w") do io
                 println(io, str)
