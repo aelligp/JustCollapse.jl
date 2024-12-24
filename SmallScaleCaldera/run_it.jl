@@ -1,9 +1,42 @@
 function main()
+    Systematics = true
 
-    conduit, depth, radius, ar, extension = 0.2e0, 5e0, 1.25e0, 2, 1e-15
+    for systematic in Systematics
 
-    run(`$(Base.julia_cmd()) --project=. -O3 --startup-file=no --check-bounds=no Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)`)
+        conduits = 2e-1
+        depths = 4e0:1:8e0
+        radii = 1e0:0.5:2.5e0
+        ars = 1:0.5:2.5
+        extensions = 1e-15:1e-13
+        for conduit in conduits, depth in depths, radius in radii, ar in ars, extension in extensions
+            jobname = "Systematics_$(conduit)_$(Int64(depth))_$(radius)_$(ar)_$(extension)"
+            str =
+"#!/bin/bash -l
+#SBATCH --job-name=\"$(jobname)\"
+#SBATCH --nodes=1
+#SBATCH --output=out_vep.o
+#SBATCH --error=er_vep.e
+#SBATCH --time=12:00:00
+#SBATCH --ntasks-per-node=1
+#SBATCH --account c23
 
+#srun $(Base.julia_cmd()) --project=. -O3 --startup-file=no --check-bounds=no Caldera2D.jl
+$(conduit) $(depth) $(radius) $(ar) $(extension)"
+
+            open("runme_test.sh", "w") do io
+                println(io, str)
+            end
+
+            # Submit the job
+            run(`sbatch runme_test.sh`)
+            println("Job submitted")
+            # remove the file
+            sleep(1)
+            rm("runme_test.sh")
+            println("File removed")
+        end
+    end
 end
+
 
 main()

@@ -1,5 +1,5 @@
-const isCUDA = false
-# const isCUDA = true
+# const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -588,9 +588,9 @@ conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
 
 do_vtk   = true # set to true to generate VTK files for ParaView
 # figdir is defined as Systematics_conduit_depth_radius_ar_extension
-figdir   = "$(today())_Systematics_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
-n        = 64
-nx, ny   = n, n #>>> 1
+figdir   = "Systematics/$(today())_Systematics_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
+n        = 320
+nx, ny   = n, n >>> 1
 
 li, origin, phases_GMG, T_GMG = setup2D(
     nx+1, ny+1;
@@ -600,14 +600,10 @@ li, origin, phases_GMG, T_GMG = setup2D(
     chimney        = true,
     volcano_size   = (3e0, 5e0),
     conduit_radius = conduit,
-    # conduit_radius = parse(Float64, conduit),
     chamber_T      = 900e0,
     chamber_depth  = depth,
     chamber_radius = radius,
     aspect_x       = ar,
-    # chamber_depth  = parse(Float64, depth),
-    # chamber_radius = parse(Float64, radius),
-    # aspect_x       = parse(Float64, ar),
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
@@ -617,20 +613,3 @@ else
 end
 
 main(li, origin, phases_GMG, T_GMG, igg; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = extension);
-
-# function plot_particles(particles, pPhases, chain)
-#     p = particles.coords
-#     # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
-#     ppx, ppy = p
-#     # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-#     # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
-#     pxv = ppx.data[:]
-#     pyv = ppy.data[:]
-#     clr = pPhases.data[:]
-#     # clr = pϕ.data[:]
-#     idxv = particles.index.data[:]
-#     f,ax,h=scatter(Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=1)
-
-#     Colorbar(f[1,2], h)
-#     f
-# end
