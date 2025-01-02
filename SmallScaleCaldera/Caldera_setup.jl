@@ -6,9 +6,9 @@ function setup2D(
     sticky_air     = 5e0,
     dimensions     = (30e0, 20e0), # extent in x and y in km
     flat           = true,
-    conduit        = false,
+    chimeny        = false,
     volcano_size   = (3e0, 5e0),
-    conduit_radius = 0.25,
+    conduit_radius = 0.2,
     chamber_T      = 1e3,
     chamber_depth  = 5e0,
     chamber_radius = 2e0,
@@ -60,7 +60,7 @@ function setup2D(
         T      = ConstantTemp(T=chamber_T+100)
     )
 
-    if conduit
+    if chimeny
         add_cylinder!(Phases, Temp, Grid;
             base = (mean(Grid.x.val), 0, -(chamber_depth-chamber_radius)),
             cap  = (mean(Grid.x.val), 0, flat ? 0e0 : volcano_size[1]),
