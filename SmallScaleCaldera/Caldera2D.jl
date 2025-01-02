@@ -313,7 +313,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     t, it = 0.0, 0
     thermal.Told .= thermal.T
 
-    while it < 10 #000 # run only for 5 Myrs
+    while it < 50 #000 # run only for 5 Myrs
 
         # interpolate fields from particle to grid vertices
         particle2grid!(T_buffer, pT, xvi, particles)
