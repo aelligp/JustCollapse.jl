@@ -124,7 +124,7 @@ function thermal_anomaly!(Temp, Ω_T, phase_ratios, T_chamber, T_air, conduit_ph
 end
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
-function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk =false, extension = 1e-15 * 0)
+function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk =false, extension = 1e-15 * 0, cutoff_visc = (1e16, 1e23))
 
     # Physical domain ------------------------------------
     ni                  = nx, ny           # number of cells
@@ -134,7 +134,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # ----------------------------------------------------
 
     # Physical properties using GeoParams ----------------
-    rheology            = init_rheologies()
+    rheology            = init_rheologies(; incompressible=false)
+    rheology_incomp       = init_rheologies(; incompressible=true)
     dt                  = 5e2 * 3600 * 24 * 365
     # dt                  = Inf # diffusive CFL timestep limiter
     # ----------------------------------------------------
@@ -228,7 +229,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     )
     # Rheology
     args0            = (; ϕ=ϕ_m,T=thermal.Tc, P=stokes.P, dt = Inf)
-    viscosity_cutoff = (1e16, 1e23)
+    viscosity_cutoff = cutoff_visc
     compute_viscosity!(stokes, phase_ratios, args0, rheology, air_phase, viscosity_cutoff)
 
     # PT coefficients for thermal diffusion
@@ -258,12 +259,12 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # IO -------------------------------------------------
     # if it does not exist, make folder where figures are stored
     if plotting
-        checkpoint = joinpath(figdir, "checkpoint")
         if do_vtk
             vtk_dir      = joinpath(figdir, "vtk")
             take(vtk_dir)
         end
         take(figdir)
+        checkpoint = joinpath(figdir, "checkpoint")
     end
     # ----------------------------------------------------
 
@@ -338,7 +339,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
             ρg,
             phase_ratios,
             ϕ,
-            rheology,
+            it <= 5 ? rheology_incomp : rheology,
             args,
             dt,
             igg;
@@ -367,7 +368,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
             thermal,
             pt_thermal,
             thermal_bc,
-            rheology,
+            it <= 5 ? rheology_incomp : rheology,
             args,
             dt,
             di;
@@ -394,11 +395,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         # Advection --------------------
         copyinn_x!(T_buffer, thermal.T)
         # advect particles in space
-        advection!(particles, RungeKutta2(), @velocity(stokes), grid_vxi, dt)
+        advection_MQS!(particles, RungeKutta2(), @velocity(stokes), grid_vxi, dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
         # check if we need to inject particles
-        # inject_particles_phase!(particles, pPhases, (pT, ), (T_buffer, ), xvi)
         center2vertex!(τxx_v, stokes.τ.xx)
         center2vertex!(τyy_v, stokes.τ.yy)
         inject_particles_phase!(
@@ -424,9 +424,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
 
         tensor_invariant!(stokes.τ)
 
-        # track deformation of free_surface
-        # push!(deformation_x, chain.coords[1].data[:]./1e3)
-        # push!(deformation_y, chain.coords[2].data[:]./1e3)
+
         @show it += 1
         t        += dt
         if plotting
@@ -435,7 +433,23 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, basename(@__FILE__), "Caldera_setup.jl", "Caldera_rheology.jl")
                 end
-                checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
+                checkpointing = joinpath(figdir, "checkpoint_$it")
+                checkpointing_jld2(checkpointing, stokes, thermal, t, dt, igg)
+                mktempdir() do tmpdir
+                    # Save the checkpoint file in the temporary directory
+                    tmpfname = joinpath(tmpdir, basename(joinpath(checkpointing, "particles.jld2")))
+                    jldsave(
+                        tmpfname;
+                        particles   = JustPIC._2D.Array(particles),
+                        Phases      = JustPIC._2D.Array(pPhases),
+                        phase_ratios= JustPIC._2D.Array(phase_ratios),
+                        chain       = JustPIC._2D.Array(chain),
+                        time        =t,
+                        timestep    =dt,
+                    )
+                    # Move the checkpoint file from the temporary directory to the destination directory
+                    mv(tmpfname, joinpath(checkpointing, "particles.jld2"); force=true)
+                end
 
                 (; η_vep, η) = stokes.viscosity
                 if do_vtk
@@ -595,15 +609,15 @@ nx, ny   = n, n >>> 1
 li, origin, phases_GMG, T_GMG = setup2D(
     nx+1, ny+1;
     sticky_air     = 4e0,
-    dimensions     = (30e0, 20e0), # extent in x and y in km
-    flat           = false,
-    chimney        = true,
-    volcano_size   = (3e0, 5e0),
-    conduit_radius = conduit,
-    chamber_T      = 900e0,
-    chamber_depth  = depth,
-    chamber_radius = radius,
-    aspect_x       = ar,
+    dimensions     = (25e0, 20e0), # extent in x and y in km
+    flat           = false, # flat or volcano cone
+    conduit        = true, # conduit or not
+    volcano_size   = (3e0, 5e0),    # height, radius
+    conduit_radius = conduit, # radius of the conduit
+    chamber_T      = 900e0, # temperature of the chamber
+    chamber_depth  = depth, # depth of the chamber
+    chamber_radius = radius, # radius of the chamber
+    aspect_x       = ar, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid

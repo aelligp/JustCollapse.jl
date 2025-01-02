@@ -6,7 +6,7 @@ function setup2D(
     sticky_air     = 5e0,
     dimensions     = (30e0, 20e0), # extent in x and y in km
     flat           = true,
-    chimney        = false,
+    conduit        = false,
     volcano_size   = (3e0, 5e0),
     conduit_radius = 0.25,
     chamber_T      = 1e3,
@@ -21,10 +21,8 @@ function setup2D(
     z = range(-dimensions[2], sticky_air, nz);
     Grid = CartData(xyz_grid(x,y,z));
 
-    # Now we create an integer array that will hold the `Phases` information (which usually refers to the material or rock type in the simulation)
+    # Allocate Phase and Temp arrays
     Phases = fill(6, nx, 2, nz);
-
-    # In many (geodynamic) models, one also has to define the temperature, so lets define it as well
     Temp = fill(0.0, nx, 2, nz);
 
     add_box!(Phases, Temp, Grid;
@@ -62,14 +60,12 @@ function setup2D(
         T      = ConstantTemp(T=chamber_T+100)
     )
 
-    if chimney
+    if conduit
         add_cylinder!(Phases, Temp, Grid;
             base = (mean(Grid.x.val), 0, -(chamber_depth-chamber_radius)),
             cap  = (mean(Grid.x.val), 0, flat ? 0e0 : volcano_size[1]),
             radius = conduit_radius,
             phase  = ConstantPhase(5),
-            # T      = LinearTemp(Ttop=20, Tbot=1000),
-            # T      = ConstantTemp(T=800),
             T      = ConstantTemp(T=chamber_T),
         )
     end

@@ -41,15 +41,15 @@ function init_rheology_linear()
     init_rheologies(lithosphere_rheology)
 end
 
-function init_rheologies(; linear=false)
+function init_rheologies(; linear=false, incompressible=true)
 
     η_reg   = 1e16
     C       = linear ? Inf : 10e6
     ϕ       = 15
-    soft_C  = NonLinearSoftening(; ξ₀=C, Δ = C / 1e5)       # nonlinear softening law
+    soft_C  = NonLinearSoftening(; ξ₀=C, Δ = C / 1e4)       # nonlinear softening law
     # soft_C  = NonLinearSoftening()       # nonlinear softening law
     pl      = DruckerPrager_regularised(; C=C*MPa, ϕ=ϕ, η_vp=(η_reg)*Pas, Ψ=0.0, softening_C=soft_C)
-    el      = ConstantElasticity(; G = 25e9, ν = 0.45)
+    el      = incompressible ? ConstantElasticity(; G = 25e9, ν = 0.45) : ConstantElasticity(; G = 25e9, ν = 0.25)
     β       = 1 / el.Kb.val
     Cp      = 1200.0
 
@@ -100,7 +100,7 @@ function init_rheologies(; linear=false)
         # Name              = "magma chamber - hot anomaly",
         SetMaterialParams(;
             Phase             = 4,
-            Density           = BubbleFlow_Density(ρgas=ConstantDensity(; ρ= 1e0),c0=0.1, a=6.4e-6),
+            Density           = T_Density(; ρ0=1.5e3, T0=273.15),
             # Density           = T_Density(; ρ0=2.5e3, T0=273.15),
             Conductivity      = ConstantConductivity(; k  = 1.5),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
@@ -114,7 +114,7 @@ function init_rheologies(; linear=false)
         # Name              = "Conduit",
         SetMaterialParams(;
             Phase             = 5,
-            Density           = T_Density(; ρ0=1.5e3, T0=273.15),
+            Density           = BubbleFlow_Density(ρgas=ConstantDensity(; ρ= 1e0),c0=0.1, a=6.4e-6),
             Conductivity      = ConstantConductivity(; k  = 1.5),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
