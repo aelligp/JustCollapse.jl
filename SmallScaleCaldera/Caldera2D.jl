@@ -435,7 +435,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, basename(@__FILE__), "Caldera_setup.jl", "Caldera_rheology.jl")
                 end
-                checkpointing = joinpath(figdir, "checkpoint_$it")
+                checkpointing = joinpath(checkpoint, "checkpoint_$it")
                 checkpointing_jld2(checkpointing, stokes, thermal, t, dt, igg)
                 mktempdir() do tmpdir
                     # Save the checkpoint file in the temporary directory
