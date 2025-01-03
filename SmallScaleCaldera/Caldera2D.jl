@@ -136,8 +136,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # Physical properties using GeoParams ----------------
     rheology            = init_rheologies(; incompressible=false)
     rheology_incomp       = init_rheologies(; incompressible=true)
-    dt                  = 5e2 * 3600 * 24 * 365
-    # dt                  = Inf # diffusive CFL timestep limiter
+    dt_time             = 5e2 * 3600 * 24 * 365
+    κ                   = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val)) # thermal diffusivity                                 # thermal diffusivity
+    dt_diff             = 0.5 * min(di...)^2 / κ / 2.01
+    dt                  = min(dt_time, dt_diff)
     # ----------------------------------------------------
 
     # Initialize particles -------------------------------
@@ -552,7 +554,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                         Y./1e3,
                     )
                     hideydecorations!(ax2)
-                    save(joinpath(figdir, "thermal_profile_$it.png"), fig)
+                    # save(joinpath(figdir, "thermal_profile_$it.png"), fig)
                     fig
                 end
 
@@ -581,7 +583,7 @@ conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
 do_vtk   = true # set to true to generate VTK files for ParaView
 # figdir is defined as Systematics_conduit_depth_radius_ar_extension
 figdir   = "Systematics/$(today())_Systematics_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
-n        = 320
+n        = 512
 nx, ny   = n, n >>> 1
 
 li, origin, phases_GMG, T_GMG = setup2D(
@@ -604,4 +606,4 @@ else
     igg
 end
 
-main(li, origin, phases_GMG, T_GMG, igg; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = extension);
+main(li, origin, phases_GMG, T_GMG, igg; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = extension, cutoff_visc = (1e16, 1e23));
