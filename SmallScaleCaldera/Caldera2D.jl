@@ -328,8 +328,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         thermal_bcs!(thermal, thermal_bc)
         temperature2center!(thermal)
 
-        # args = (; T=thermal.Tc, P=stokes.P, dt=Inf, ΔTc=thermal.ΔTc)
-        args = (; ϕ=ϕ_m, T=thermal.Tc, P=stokes.P, dt=Inf)
+        args = (;ϕ=ϕ_m, T=thermal.Tc, P=stokes.P, dt=Inf, ΔTc=thermal.ΔTc)
+        # args = (; ϕ=ϕ_m, T=thermal.Tc, P=stokes.P, dt=Inf)
 
         stress2grid!(stokes, pτ, xvi, xci, particles)
 

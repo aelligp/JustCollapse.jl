@@ -88,7 +88,8 @@ function init_rheologies(; linear=false, incompressible=true)
         # Name              = "magma chamber",
         SetMaterialParams(;
             Phase             = 3,
-            Density           = T_Density(; ρ0=2.5e3, T0=273.15),
+            # Density           = T_Density(; ρ0=2.5e3, T0=273.15),
+            Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0=2.7e3, T0=273.15), ρmelt=T_Density(; ρ0=2.5e3, T0=273.15)),
             Conductivity      = ConstantConductivity(; k  = 1.5),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
@@ -100,8 +101,8 @@ function init_rheologies(; linear=false, incompressible=true)
         # Name              = "magma chamber - hot anomaly",
         SetMaterialParams(;
             Phase             = 4,
-            Density           = T_Density(; ρ0=1.5e3, T0=273.15),
-            # Density           = T_Density(; ρ0=2.5e3, T0=273.15),
+            # Density           = T_Density(; ρ0=1.5e3, T0=273.15),
+            Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0=2.7e3, T0=273.15), ρmelt=T_Density(; ρ0=2.5e3, T0=273.15)),
             Conductivity      = ConstantConductivity(; k  = 1.5),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
