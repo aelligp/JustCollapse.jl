@@ -32,7 +32,7 @@ else
 end
 
 # Load script dependencies
-using GeoParams, CairoMakie, CellArrays, Statistics, Dates
+using GeoParams, CairoMakie, CellArrays, Statistics, Dates, JLD2
 
 # Load file with all the rheology configurations
 include("Caldera_setup.jl")
@@ -320,9 +320,9 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         @views T_buffer[:, end]      .= Ttop
         @views T_buffer[:, 1]        .= Tbot
         @views thermal.T[2:end-1, :] .= T_buffer
-        # if mod(round(t/(1e3 * 3600 * 24 *365.25); digits=3), 1.5e3) == 0.0
+        if mod(round(t/(1e3 * 3600 * 24 *365.25); digits=3), 3e3) == 0.0
         thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, air_phase)
-        # end
+        end
         thermal_bcs!(thermal, thermal_bc)
         temperature2center!(thermal)
 
@@ -492,7 +492,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 chain_y = chain.coords[2].data[:]./1e3
 
                 # Make Makie figure
-                ar  = 2
+                ar  = DataAspect()
                 fig = Figure(size = (1200, 900), title = "t = $t")
                 ax1 = Axis(fig[1,1], aspect = ar, title = "T [K]  (t=$(round(t/(1e3 * 3600 * 24 *365.25); digits=3)) Kyrs)")
                 ax2 = Axis(fig[2,1], aspect = ar, title = "Vy [cm/yr]")
@@ -530,32 +530,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 Colorbar(fig[1,4], h3)
                 Colorbar(fig[2,4], h4)
                 Colorbar(fig[3,2], h5)
-                # Colorbar(fig[3,4], h6)
+                Colorbar(fig[3,4], h6)
                 linkaxes!(ax1, ax2, ax3, ax4, ax5)
                 fig
                 save(joinpath(figdir, "$(it).png"), fig)
-
-                # ## Plot initial T and P profile
-                fig = let
-                    Yv = [y for x in xvi[1], y in xvi[2]][:]
-                    Y = [y for x in xci[1], y in xci[2]][:]
-                    fig = Figure(; size=(1200, 900))
-                    ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
-                    ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Pressure")
-                    scatter!(
-                        ax1,
-                        Array(thermal.T[2:(end - 1), :][:].-273.15),
-                        Yv./1e3,
-                    )
-                    lines!(
-                        ax2,
-                        Array(stokes.P[:]./1e6),
-                        Y./1e3,
-                    )
-                    hideydecorations!(ax2)
-                    # save(joinpath(figdir, "thermal_profile_$it.png"), fig)
-                    fig
-                end
 
                 fig = let
                     Yv = [y for x in xvi[1], y in xvi[2]][:]

@@ -3,11 +3,11 @@ function main()
 
     for systematic in Systematics
 
-        conduits = 2e-1
-        depths = 4e0:1:8e0
-        radii = 1e0:0.5:2.5e0
-        ars = 1:0.5:2.5
-        extensions = 1e-15, 5e-15, 1e-14, 5e-14, 1e-13
+        conduits = 1.5e-1
+        depths = 5e0
+        radii = 2e0:0.5:2.5e0
+        ars = 1:0.5:2e0
+        extensions = 1e-15 #, 5e-15, 1e-14, 5e-14, 1e-13
         for conduit in conduits, depth in depths, radius in radii, ar in ars, extension in extensions
             jobname = "Systematics_$(conduit)_$(Int64(depth))_$(radius)_$(ar)_$(extension)"
             str =
@@ -20,7 +20,7 @@ function main()
 #SBATCH --ntasks-per-node=1
 #SBATCH --account c23
 
-#srun $(Base.julia_cmd()) --project=. -O3 --startup-file=no --check-bounds=no Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)"
+srun /users/paellig/.juliaup/bin/julia --project=. -O3 --startup-file=no --check-bounds=no SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)"
 
             open("runme_test.sh", "w") do io
                 println(io, str)
