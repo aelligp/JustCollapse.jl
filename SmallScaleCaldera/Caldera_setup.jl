@@ -50,15 +50,22 @@ function setup2D(
         cen    = (mean(Grid.x.val), 0, -chamber_depth),
         axes   = (chamber_radius * aspect_x, 2.5, chamber_radius),
         phase  = ConstantPhase(3),
+        T      = ConstantTemp(T=chamber_T-100e0)
+    )
+
+    add_ellipsoid!(Phases, Temp, Grid;
+        cen    = (mean(Grid.x.val), 0,  -(chamber_depth-(chamber_radius/2))),
+        axes   = ((chamber_radius/2) * aspect_x, 2.5, (chamber_radius/2)),
+        phase  = ConstantPhase(4),
         T      = ConstantTemp(T=chamber_T)
     )
 
-    add_sphere!(Phases, Temp, Grid;
-        cen    = (mean(Grid.x.val), 0, -(chamber_depth-(chamber_radius/2))),
-        radius = (chamber_radius/2),
-        phase  = ConstantPhase(4),
-        T      = ConstantTemp(T=chamber_T+100)
-    )
+    # add_sphere!(Phases, Temp, Grid;
+    #     cen    = (mean(Grid.x.val), 0, -(chamber_depth-(chamber_radius/2))),
+    #     radius = (chamber_radius/2),
+    #     phase  = ConstantPhase(4),
+    #     T      = ConstantTemp(T=chamber_T+100)
+    # )
 
     if chimney
         add_cylinder!(Phases, Temp, Grid;

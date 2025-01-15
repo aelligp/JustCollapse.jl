@@ -53,7 +53,9 @@ function init_rheologies(; linear=false, incompressible=true)
     β       = 1 / el.Kb.val
     Cp      = 1200.0
 
-    magma_visc = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e3Pa*s))
+    magma_visc = LinearViscous(η=1e16)
+    # magma_visc = ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K,η0=1e3Pa*s))
+    conduit_visc = LinearViscous(η=1e16)
     #dislocation laws
     disl_top  = DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
     # disl_top  = SetDislocationCreep(Dislocation.dry_olivine_Karato_2003)
@@ -89,7 +91,7 @@ function init_rheologies(; linear=false, incompressible=true)
         SetMaterialParams(;
             Phase             = 3,
             # Density           = T_Density(; ρ0=2.5e3, T0=273.15),
-            Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0=2.7e3, T0=273.15), ρmelt=T_Density(; ρ0=2.5e3, T0=273.15)),
+            Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0=2.7e3, T0=273.15), ρmelt=T_Density(; ρ0=2.4e3, T0=273.15)),
             Conductivity      = ConstantConductivity(; k  = 1.5),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
@@ -102,7 +104,7 @@ function init_rheologies(; linear=false, incompressible=true)
         SetMaterialParams(;
             Phase             = 4,
             # Density           = T_Density(; ρ0=1.5e3, T0=273.15),
-            Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0=2.7e3, T0=273.15), ρmelt=T_Density(; ρ0=2.5e3, T0=273.15)),
+            Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0=2.7e3, T0=273.15), ρmelt=T_Density(; ρ0=2.4e3, T0=273.15)),
             Conductivity      = ConstantConductivity(; k  = 1.5),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
@@ -117,8 +119,8 @@ function init_rheologies(; linear=false, incompressible=true)
             Phase             = 5,
             Density           = BubbleFlow_Density(ρgas=ConstantDensity(; ρ= 1e0),c0=0.1, a=6.4e-6),
             Conductivity      = ConstantConductivity(; k  = 1.5),
-            # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
-            HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
+            HeatCapacity      = ConstantHeatCapacity(; Cp = Cp),
+            # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
             LatentHeat        = ConstantLatentHeat(Q_L=350e3J/kg),
             CompositeRheology = CompositeRheology( (magma_visc, el, )),
             # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e18), el, )),

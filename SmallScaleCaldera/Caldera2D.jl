@@ -92,18 +92,21 @@ function extract_topo_from_GMG_phases(phases_GMG, xvi, air_phase)
     return topo_y
 end
 
-function thermal_anomaly!(Temp, Ω_T, phase_ratios, T_chamber, T_air, conduit_phase, magma_phase, air_phase)
+function thermal_anomaly!(Temp, Ω_T, phase_ratios, T_chamber, T_air, conduit_phase, magma_phase, anomaly_phase, air_phase)
 
-    @parallel_indices (i, j) function _thermal_anomaly!(Temp, Ω_T, T_chamber, T_air, vertex_ratio, conduit_phase, magma_phase, air_phase)
+    @parallel_indices (i, j) function _thermal_anomaly!(Temp, Ω_T, T_chamber, T_air, vertex_ratio, conduit_phase, magma_phase, anomaly_phase, air_phase)
         # quick escape
         conduit_ratio_ij = @index vertex_ratio[conduit_phase, i, j]
         magma_ratio_ij   = @index vertex_ratio[magma_phase, i, j]
+        anomaly_ratio_ij = @index vertex_ratio[anomaly_phase, i, j]
         air_ratio_ij     = @index vertex_ratio[air_phase, i, j]
 
-        if conduit_ratio_ij > 0.5 || magma_ratio_ij > 0.5
+        # if conduit_ratio_ij > 0.5 || magma_ratio_ij > 0.5
+        if conduit_ratio_ij > 0.5 || anomaly_ratio_ij > 0.5
         # if isone(conduit_ratio_ij) || isone(magma_ratio_ij)
             Ω_T[i+1, j] = Temp[i+1, j] = T_chamber
-
+        elseif magma_ratio_ij > 0.5
+            Ω_T[i+1, j] = Temp[i+1, j] = T_chamber - 100e0
         elseif air_ratio_ij > 0.5
             Ω_T[i+1, j] = Temp[i+1, j] = T_air
         end
@@ -113,7 +116,7 @@ function thermal_anomaly!(Temp, Ω_T, phase_ratios, T_chamber, T_air, conduit_ph
 
     ni = size(phase_ratios.vertex)
 
-    @parallel (@idx ni) _thermal_anomaly!(Temp, Ω_T, T_chamber, T_air, phase_ratios.vertex, conduit_phase, magma_phase, air_phase)
+    @parallel (@idx ni) _thermal_anomaly!(Temp, Ω_T, T_chamber, T_air, phase_ratios.vertex, conduit_phase, magma_phase, anomaly_phase, air_phase)
 
     @views Ω_T[1, :]    .= Ω_T[2, :]
     @views Ω_T[end, :]  .= Ω_T[end-1, :]
@@ -142,6 +145,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     dt                  = min(dt_time, dt_diff)
     # ----------------------------------------------------
 
+    # randomize cohesion
+    perturbation_C = @rand(ni...);
     # Initialize particles -------------------------------
     nxcell              = 100
     max_xcell           = 150
@@ -206,7 +211,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     T_chamber = 1223e0
     T_air     = 273e0
     Ω_T       = @zeros(size(thermal.T)...)
-    thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, air_phase)
+    thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
     JustRelax.DirichletBoundaryCondition(Ω_T)
 
     thermal_bc       = TemperatureBoundaryConditions(;
@@ -230,7 +235,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         ϕ_m, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
     )
     # Rheology
-    args0            = (; ϕ=ϕ_m,T=thermal.Tc, P=stokes.P, dt = Inf)
+    args0            = (; ϕ=ϕ_m,T=thermal.Tc, P=stokes.P, dt = Inf, perturbation_C = perturbation_C)
     viscosity_cutoff = cutoff_visc
     compute_viscosity!(stokes, phase_ratios, args0, rheology, air_phase, viscosity_cutoff)
 
@@ -323,7 +328,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         @views T_buffer[:, 1]        .= Tbot
         @views thermal.T[2:end-1, :] .= T_buffer
         if mod(round(t/(1e3 * 3600 * 24 *365.25); digits=3), 3e3) == 0.0
-        thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, air_phase)
+        thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
         end
         thermal_bcs!(thermal, thermal_bc)
         temperature2center!(thermal)
@@ -572,7 +577,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         end
     end
 
-     return nothing
+    return nothing
 end
 
 ## END OF MAIN SCRIPT ----------------------------------------------------------------
@@ -582,8 +587,9 @@ conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
 
 do_vtk   = true # set to true to generate VTK files for ParaView
 # figdir is defined as Systematics_conduit_depth_radius_ar_extension
-figdir   = "Systematics/$(today())_Systematics_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
-n        = 512
+# figdir   = "Systematics/$(today())_Systematics_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
+figdir   = "Systematics/$(today())_TEST"
+n        = 256
 nx, ny   = n, n >>> 1
 
 li, origin, phases_GMG, T_GMG = setup2D(
@@ -593,11 +599,11 @@ li, origin, phases_GMG, T_GMG = setup2D(
     flat           = false, # flat or volcano cone
     chimney        = true, # conduit or not
     volcano_size   = (3e0, 5e0),    # height, radius
-    conduit_radius = conduit, # radius of the conduit
+    conduit_radius = 2e-1, # radius of the conduit
     chamber_T      = 900e0, # temperature of the chamber
-    chamber_depth  = depth, # depth of the chamber
-    chamber_radius = radius, # radius of the chamber
-    aspect_x       = ar, # aspect ratio of the chamber
+    chamber_depth  = 5e0, # depth of the chamber
+    chamber_radius = 2e0, # radius of the chamber
+    aspect_x       = 2e0, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
