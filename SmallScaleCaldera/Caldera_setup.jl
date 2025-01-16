@@ -84,7 +84,11 @@ function setup2D(
     ph      = Phases[:,1,:]
     T       = Temp[:,1,:] .+ 273
     V       = 4/3 * π * (chamber_radius*aspect_x) * chamber_radius * (chamber_radius*aspect_x)
+    R       = ((chamber_depth-chamber_radius))/(chamber_radius*aspect_x)
+    chamber_diameter = 2*(chamber_radius*aspect_x)
     printstyled("Magma volume of the initial chamber: $(round(V; digits=3)) km³ \n"; bold=true, color=:red, blink=true)
+    printstyled("Roof ratio (Depth/half-axis width): $R \n"; bold=true, color=:cyan)
+    printstyled("Chamber diameter: $chamber_diameter km \n"; bold=true, color=:light_yellow)
     # write_paraview(Grid, "Volcano2D")
     return li, origin, ph, T, Grid
 end
