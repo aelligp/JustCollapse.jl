@@ -1,4 +1,5 @@
-const isCUDA = true
+const isCUDA = false
+# const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -162,7 +163,7 @@ end
     # Physical Parameters
     rheology     = init_rheology(CharDim; is_compressible=true, linear = false)
     rheology_incomp = init_rheology(CharDim; is_compressible=false, linear = false)
-    cutoff_visc  = nondimensionalize((1e15Pa*s, 1e24Pa*s),CharDim)
+    cutoff_visc  = nondimensionalize((1e16Pa*s, 1e23Pa*s),CharDim)
     κ            = (4 / (rheology[1].HeatCapacity[1].Cp.Cp.val * rheology[1].Density[1].ρsolid.ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val))                                 # thermal diffusivity
     # κ            = (4 / (rheology[2].HeatCapacity[1].Cp.Cp.val * rheology[2].Density[1].ρ0.val))                                 # thermal diffusivity
@@ -175,7 +176,12 @@ end
     # velocity grids
     grid_vxi         = velocity_grids(xci, xvi, di);
     # temperature
-    pT, pT0, pPhases = init_cell_arrays(particles, Val(3));
+    pT, pPhases = init_cell_arrays(particles, Val(2));
+
+    pτ                    = StressParticles(particles)
+    particle_args         = (pT, pPhases, unwrap(pτ)...)
+    particle_args_reduced = (pT,  unwrap(pτ)...)
+
     particle_args       = (pT, pT0, pPhases);
 
     # Assign material phases --------------------------
@@ -187,6 +193,18 @@ end
     update_cell_halo!(particles.coords..., particle_args...);
     update_cell_halo!(particles.index)
 
+    # RockRatios
+    air_phase   = 5
+    ϕ           = RockRatio(backend, ni)
+    # update_rock_ratio!(ϕ, phase_ratios, air_phase)
+    compute_rock_fraction!(ϕ, chain, xvi, di)
+
+    # STOKES ---------------------------------------------
+    # Allocate arrays needed for every Stokes problem
+    stokes          = StokesArrays(backend_JR, ni)
+    pt_stokes       = PTStokesCoeffs(li, di; ϵ=1e-5,  CFL = 0.99 / √3.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    # -----------------------------------------------------
+    # THERMAL --------------------------------------------
     thermal         = ThermalArrays(backend_JR, ni)
     thermal.T       .= PTArray(backend_JR)(nondimensionalize(T_GMG.*C, CharDim))
     thermal_bc      = TemperatureBoundaryConditions(;
@@ -195,11 +213,6 @@ end
     thermal_bcs!(thermal, thermal_bc)
     temperature2center!(thermal)
 
-    # STOKES ---------------------------------------------
-    # Allocate arrays needed for every Stokes problem
-    stokes          = StokesArrays(backend_JR, ni)
-    pt_stokes       = PTStokesCoeffs(li, di; ϵ=1e-5,  CFL = 0.99 / √3.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
-    # -----------------------------------------------------
     args = (; T=thermal.Tc, P=stokes.P, dt=dt,  ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
     pt_thermal = PTThermalCoeffs(
@@ -214,7 +227,7 @@ end
     update_halo!(@velocity(stokes)...) # update halo cells
 
     # Melt Fraction
-    ϕ = @zeros(ni...)
+    ϕ_m = @zeros(ni...)
 
     # Buoyancy force
     ρg= ntuple(_ -> @zeros(ni...), Val(3))           # ρg[1] is the buoyancy force in the x direction, ρg[2] is the buoyancy force in the y direction
@@ -260,17 +273,17 @@ end
     xci_v        = LinRange(minimum(x_global).*1e3, maximum(x_global).*1e3, nx_v), LinRange(minimum(y_global).*1e3, maximum(y_global).*1e3, ny_v), LinRange(minimum(z_global).*1e3, maximum(z_global).*1e3, nz_v)
     # -----------------------------------------------------
 
-    args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+    args = (; ϕ=ϕ_m, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
 
     for _ in 1:5
-        compute_ρg!(ρg[end], phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
+        compute_ρg!(ρg, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
         @parallel init_P!(stokes.P, ρg[3], xci[3])
     end
 
     compute_melt_fraction!(
-        ϕ, phase_ratios, rheology, (T=thermal.T, P=stokes.P)
+        ϕ_m, phase_ratios, rheology, (T=thermal.T, P=stokes.P)
     )
-    compute_viscosity!(stokes, phase_ratios, args, rheology, cutoff_visc)
+    compute_viscosity!(stokes, phase_ratios, args, rheology, air_phase, cutoff_visc)
 
     @copy stokes.P0 stokes.P
     @copy thermal.Told thermal.T
@@ -341,7 +354,7 @@ end
 
     while it < 1500 #nt
 
-        args = (; ϕ=ϕ, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
+        args = (; ϕ=ϕ_m, T=thermal.Tc, P=stokes.P, dt=dt, ΔTc=thermal.ΔTc, perturbation_C = perturbation_C)
         ## Stokes solver -----------------------------------
         solve!(
             stokes,
@@ -405,7 +418,7 @@ end
             pT, thermal.T, thermal.ΔT, subgrid_arrays, particles, xvi,  di, dt
         )
         compute_melt_fraction!(
-            ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
+            ϕ_m, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
         )
 
         # Advection --------------------
@@ -536,7 +549,7 @@ end
 
 do_vtk = true
 ar = 1 # aspect ratio
-n = 32
+n = 128
 nx = n * ar
 ny = n * ar
 nz = n
