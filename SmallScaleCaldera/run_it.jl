@@ -4,13 +4,12 @@ function main()
     for systematic in Systematics
 
         conduits = 1.5e-1
-        depths = 5e0
-        radii = 2e0:0.5:2.5e0
+        depths = 3e0:0.5:5e0
+        radii = 1e0:0.5:2.5e0
         ars = 1:0.5:2e0
         extensions = 1e-15 #, 5e-15, 1e-14, 5e-14, 1e-13
         for conduit in conduits, depth in depths, radius in radii, ar in ars, extension in extensions
-            jobname = "Systematics_$(conduit)_$(Int64(depth))_$(radius)_$(ar)_$(extension)"
-            str =
+            jobname = "Systematics_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
 "#!/bin/bash -l
 #SBATCH --job-name=\"$(jobname)\"
 #SBATCH --nodes=1
@@ -21,18 +20,21 @@ function main()
 #SBATCH --account c23
 
 srun /users/paellig/.juliaup/bin/julia --project=. -O3 --startup-file=no --check-bounds=no SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)"
+            if diameter <= 5.0
+                open("runme_test.sh", "w") do io
+                    println(io, str)
+                end
 
-            open("runme_test.sh", "w") do io
-                println(io, str)
+                # Submit the job
+                run(`sbatch runme_test.sh`)
+                println("Job submitted")
+                # remove the file
+                sleep(1)
+                rm("runme_test.sh")
+                println("File removed")
+            else
+                println("Diameter too large")
             end
-
-            # Submit the job
-            run(`sbatch runme_test.sh`)
-            println("Job submitted")
-            # remove the file
-            sleep(1)
-            rm("runme_test.sh")
-            println("File removed")
         end
     end
 end
