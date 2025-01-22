@@ -1,5 +1,5 @@
-const isCUDA = false
-# const isCUDA = true
+# const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -153,8 +153,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # ----------------------------------------------------
 
     # Physical properties using GeoParams ----------------
-    rheology            = init_rheologies(; incompressible=false)
-    rheology_incomp       = init_rheologies(; incompressible=true)
+    rheology            = init_rheologies(; incompressible=false, magma=false)
+    rheology_incomp       = init_rheologies(; incompressible=true, magma=false)
     dt_time             = 1e3 * 3600 * 24 * 365
     κ                   = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val)) # thermal diffusivity                                 # thermal diffusivity
     dt_diff             = 0.5 * min(di...)^2 / κ / 2.01
@@ -335,9 +335,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
 
     # Time loop
     t, it = 0.0, 0
+    interval =  0
     thermal.Told .= thermal.T
 
-    while it < 50 #000 # run only for 5 Myrs
+    while it < 100 #000 # run only for 5 Myrs
 
         # interpolate fields from particle to grid vertices
         particle2grid!(T_buffer, pT, xvi, particles)
@@ -345,9 +346,12 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         @views T_buffer[:, 1]        .= Tbot
         clamp!(T_buffer, 273e0, 1223e0)
         @views thermal.T[2:end-1, :] .= T_buffer
-        if mod(round(t/(1e3 * 3600 * 24 *365.25); digits=3), 3e3) == 0.0
-        thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
-        end
+        # if it > 1  && rem(it, 5) == 0
+        # # if mod(r/ound(t/(1e3 * 3600 * 24 *365.25); digits=1), 1e3) == 0.0
+        #     println("I'm groot")
+        #     thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
+        #     interval += 1
+        # end
         thermal_bcs!(thermal, thermal_bc)
         temperature2center!(thermal)
 
@@ -436,8 +440,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         )
 
         # advect marker chain
-        advect_markerchain!(chain, RungeKutta2(), @velocity(stokes), grid_vxi, dt)
-        update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
+        # advect_markerchain!(chain, RungeKutta2(), @velocity(stokes), grid_vxi, dt)
+        # update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
 
         compute_melt_fraction!(
             ϕ_m, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
@@ -458,8 +462,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, basename(@__FILE__), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__,"Caldera_rheology.jl"))
                 end
-                checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
-
+                # checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
+                # checkpointing_particles(checkpoint, particles; phases= pPhases, phase_ratios=phase_ratios, chain=chain, particle_args=particle_args, t=t, dt=dt)
                 (; η_vep, η) = stokes.viscosity
                 if do_vtk
                     velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
@@ -491,7 +495,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                         velocity_v;
                         t = round(t/(1e3 * 3600 * 24 *365.25); digits=3)
                     )
-                    save_marker_chain(joinpath(vtk_dir, "chain_" * lpad("$it", 6, "0")), chain.cell_vertices, chain.h_vertices)
+                    save_marker_chain(joinpath(vtk_dir, "chain_" * lpad("$it", 6, "0")), xvi[1], Array(chain.h_vertices))
                 end
 
                 # Make particles plottable
@@ -509,7 +513,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 # Make Makie figure
                 ar  = DataAspect()
                 fig = Figure(size = (1200, 900), title = "t = $t")
-                ax1 = Axis(fig[1,1], aspect = ar, title = "T [K]  (t=$(round(t/(1e3 * 3600 * 24 *365.25); digits=3)) Kyrs)")
+                ax1 = Axis(fig[1,1], aspect = ar, title = "T [C]  (t=$(round(t/(1e3 * 3600 * 24 *365.25); digits=3)) Kyrs)")
                 ax2 = Axis(fig[2,1], aspect = ar, title = "Vy [cm/yr]")
                 # ax2 = Axis(fig[2,1], aspect = ar, title = "Phase")
                 ax3 = Axis(fig[1,3], aspect = ar, title = "τII [MPa]")
@@ -518,7 +522,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 ax5 = Axis(fig[3,1], aspect = ar, title = "EII_pl")
                 ax6 = Axis(fig[3,3], aspect = ar, title = "Melt fraction ϕ")
                 # Plot temperature
-                h1  = heatmap!(ax1, xvi[1].*1e-3, xvi[2].*1e-3, Array(thermal.T[2:end-1,:]) , colormap=:batlow)
+                h1  = heatmap!(ax1, xvi[1].*1e-3, xvi[2].*1e-3, Array(thermal.T[2:end-1,:].-273) , colormap=:batlow)
                 # Plot particles phase
 
                 h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3, uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s") , colormap=:batlow)
@@ -593,13 +597,13 @@ end
 ## END OF MAIN SCRIPT ----------------------------------------------------------------
 const plotting = true
 
-conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
+# conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
 
 do_vtk   = true # set to true to generate VTK files for ParaView
 # figdir is defined as Systematics_conduit_depth_radius_ar_extension
 # figdir   = "Systematics/$(today())_Systematics_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
 figdir   = "Systematics/$(today())_TEST"
-n        = 128
+n        = 512
 nx, ny   = n, n >>> 1
 
 li, origin, phases_GMG, T_GMG = setup2D(
@@ -608,12 +612,12 @@ li, origin, phases_GMG, T_GMG = setup2D(
     dimensions     = (25e0, 20e0), # extent in x and y in km
     flat           = false, # flat or volcano cone
     chimney        = true, # conduit or not
-    volcano_size   = (3e0, 5e0),    # height, radius
+    volcano_size   = (3e0, 6e0),    # height, radius
     conduit_radius = 2e-1, # radius of the conduit
     chamber_T      = 900e0, # temperature of the chamber
     chamber_depth  = 5e0, # depth of the chamber
-    chamber_radius = 2e0, # radius of the chamber
-    aspect_x       = 2e0, # aspect ratio of the chamber
+    chamber_radius = 1.25e0, # radius of the chamber
+    aspect_x       = 2.5e0, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid

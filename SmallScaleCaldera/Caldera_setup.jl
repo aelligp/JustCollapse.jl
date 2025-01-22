@@ -55,7 +55,7 @@ function setup2D(
 
     add_ellipsoid!(Phases, Temp, Grid;
         cen    = (mean(Grid.x.val), 0,  -(chamber_depth-(chamber_radius/2))),
-        axes   = ((chamber_radius/2) * aspect_x, 2.5, (chamber_radius/2)),
+        axes   = ((chamber_radius/1.25) * aspect_x, 2.5, (chamber_radius/2)),
         phase  = ConstantPhase(4),
         T      = ConstantTemp(T=chamber_T)
     )
@@ -83,12 +83,16 @@ function setup2D(
 
     ph      = Phases[:,1,:]
     T       = Temp[:,1,:] .+ 273
-    V       = 4/3 * π * (chamber_radius*aspect_x) * chamber_radius * (chamber_radius*aspect_x)
+    V_total = 4/3 * π * (chamber_radius*aspect_x) * chamber_radius * (chamber_radius*aspect_x)
+    V_erupt = 4/3 * π * (chamber_radius/1.25) * aspect_x * (chamber_radius/2) * ((chamber_radius/1.25) * aspect_x)
     R       = ((chamber_depth-chamber_radius))/(chamber_radius*aspect_x)
     chamber_diameter = 2*(chamber_radius*aspect_x)
-    printstyled("Magma volume of the initial chamber: $(round(V; digits=3)) km³ \n"; bold=true, color=:red, blink=true)
+    chamber_erupt    = 2*((chamber_radius/1.25) * aspect_x)
+    printstyled("Magma volume of the initial chamber: $(round(V_total; digits=3)) km³ \n"; bold=true, color=:red, blink=true)
+    printstyled("Eruptible magma volume: $(round(V_erupt; digits=3)) km³ \n"; bold=true, color=:red, blink=true)
     printstyled("Roof ratio (Depth/half-axis width): $R \n"; bold=true, color=:cyan)
     printstyled("Chamber diameter: $chamber_diameter km \n"; bold=true, color=:light_yellow)
+    printstyled("Eruptible chamber diameter: $chamber_erupt km \n"; bold=true, color=:light_yellow)
     # write_paraview(Grid, "Volcano2D")
     return li, origin, ph, T, Grid
 end

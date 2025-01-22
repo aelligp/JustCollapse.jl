@@ -43,11 +43,12 @@ end
 
 function init_rheologies(; linear=false, incompressible=true, isplastic = true, magma = false)
 
-    η_reg   = 1e17
+    η_reg   = 1e15
     C       = isplastic ? 10e6 : Inf
     ϕ       = 30
+    Ψ       = 0.0
     soft_C  = NonLinearSoftening(; ξ₀=C, Δ = C / 1e5)       # nonlinear softening law
-    pl      = DruckerPrager_regularised(; C=C*MPa, ϕ=ϕ, η_vp=(η_reg)*Pas, Ψ=0.0, softening_C=soft_C)
+    pl      = DruckerPrager_regularised(; C=C*MPa, ϕ=ϕ, η_vp=(η_reg)*Pas, Ψ=Ψ, softening_C=soft_C)
     G0      = 25e9Pa        # elastic shear modulus
     G_magma = 10e9Pa        # elastic shear modulus magma
 
@@ -57,8 +58,8 @@ function init_rheologies(; linear=false, incompressible=true, isplastic = true, 
     β_magma = 1 / el_magma.Kb.val
     Cp      = 1200.0
 
-    magma_visc = magma ? LinearViscous(η=1e17) : ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K))
-    conduit_visc = magma  ? LinearViscous(η=1e17) : ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K))
+    magma_visc = magma ? LinearViscous(η=1e15) : ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K))
+    conduit_visc = magma  ? LinearViscous(η=1e15) : ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K))
     #dislocation laws
     disl_top  = linear ? LinearViscous(η=1e23) : DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
     # disl_top  = SetDislocationCreep(Dislocation.dry_olivine_Karato_2003)
@@ -104,7 +105,8 @@ function init_rheologies(; linear=false, incompressible=true, isplastic = true, 
         # Name              = "magma chamber - hot anomaly",
         SetMaterialParams(;
             Phase             = 4,
-            Density           = T_Density(; ρ0=2.2e3, T0=273.15),
+            # Density           = T_Density(; ρ0=2.2e3, T0=273.15),
+            Density           = BubbleFlow_Density(ρgas=ConstantDensity(ρ=10.0), ρmelt=ConstantDensity(ρ=2.4e3), c0=4e-2),
             Conductivity      = ConstantConductivity(; k  = 1.5),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
