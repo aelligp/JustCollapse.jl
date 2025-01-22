@@ -15,23 +15,33 @@ function main()
             jobname = "Systematics_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
             diameter = 2*(radius*ar)
             str =
-"#!/bin/bash -l
+"""#!/bin/bash -l
 #SBATCH --job-name=\"$(jobname)\"
+#SBATCH --output=caldera_$(jobname).o
+#SBATCH --error=caldera_$(jobname).e
+#SBATCH --time=20:00:00 #HH:MM:SS
 #SBATCH --nodes=1
-#SBATCH --output=out_vep.o
-#SBATCH --error=er_vep.e
-#SBATCH --time=12:00:00
+#SBATCH --ntasks=1
+#SBATCH --gpus-per-node=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --account c23
+#SBATCH --constraint=gpu
+#SBATCH --account=c23
 
-srun julia --project=. -O3 --startup-file=no --check-bounds=no SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)"
+export MPICH_GPU_SUPPORT_ENABLED=1
+
+export JULIAUP_DEPOT_PATH=\$SCRATCH/\$CLUSTER_NAME/juliaup/depot
+export JULIA_DEPOT_PATH=\$SCRATCH/\$CLUSTER_NAME/juliaup/depot
+export PATH="\$SCRATCH/\$CLUSTER_NAME/juliaup/bin:\$PATH"
+
+# mount the uenv prgenv-gnu with the view named default
+srun --gpu-bind=per_task:1 --cpu_bind=sockets julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)"""
             if diameter <= 5.0
                 open("runme_test.sh", "w") do io
                     println(io, str)
                 end
 
                 # Submit the job
-                # run(`sbatch runme_test.sh`)
+                run(`sbatch runme_test.sh`)
                 println("Job submitted")
                 # remove the file
                 sleep(1)
