@@ -440,8 +440,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         )
 
         # advect marker chain
-        # advect_markerchain!(chain, RungeKutta2(), @velocity(stokes), grid_vxi, dt)
-        # update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
+        advect_markerchain!(chain, RungeKutta2(), @velocity(stokes), grid_vxi, dt)
+        update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
 
         compute_melt_fraction!(
             ϕ_m, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
@@ -459,28 +459,32 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         if plotting
             # Data I/O and plotting ---------------------
             if it == 1 || rem(it, 1) == 0
+                ## this is used for plotting for now:
+                η_eff = @. stokes.τ.II / (2*stokes.ε.II)
+                ##
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, basename(@__FILE__), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__,"Caldera_rheology.jl"))
                 end
-                # checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
-                # checkpointing_particles(checkpoint, particles; phases= pPhases, phase_ratios=phase_ratios, chain=chain, particle_args=particle_args, t=t, dt=dt)
+                checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
+                checkpointing_particles(checkpoint, particles; phases= pPhases, phase_ratios=phase_ratios, chain=chain, particle_args=particle_args, t=t, dt=dt)
                 (; η_vep, η) = stokes.viscosity
                 if do_vtk
                     velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
                     data_v = (;
                         T   = Array(T_buffer),
-                        τxy = Array(stokes.τ.xy),
-                        εxy = Array(stokes.ε.xy),
+                        stress_xy = Array(stokes.τ.xy),
+                        strain_rate_xy = Array(stokes.ε.xy),
                     )
                     data_c = (;
                         P   = Array(stokes.P),
-                        η   = Array(η_vep),
+                        viscosity   = Array(η_eff),
                         phases = [argmax(p) for p in Array(phase_ratios.center)],
                         Melt_fraction = Array(ϕ_m),
                         EII_pl = Array(stokes.EII_pl),
-                        τII = Array(stokes.τ.II),
-                        εII = Array(stokes.ε.II),
-                        εII_pl = Array(stokes.ε_pl.II),
+                        stress_II = Array(stokes.τ.II),
+                        strain_rate_II = Array(stokes.ε.II),
+                        plastic_strain_rate_II = Array(stokes.ε_pl.II),
+                        density = Array(ρg[2]./9.81),
                     )
                     velocity_v = (
                         Array(Vx_v),
@@ -533,7 +537,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 h3  = heatmap!(ax3, xci[1].*1e-3, xci[2].*1e-3, Array(stokes.τ.II)./1e6 , colormap=:batlow)
                 # Plot effective viscosity
                 # h4  = heatmap!(ax4, xci[1].*1e-3, xci[2].*1e-3, Array(log10.(stokes.ε.II)) , colormap=:lipari)
-                h4  = heatmap!(ax4, xci[1].*1e-3, xci[2].*1e-3, Array(log10.(stokes.viscosity.η_vep)), colorrange=log10.(viscosity_cutoff), colormap=:batlow)
+                h4  = heatmap!(ax4, xci[1].*1e-3, xci[2].*1e-3, Array(log10.(η_eff)), colorrange=log10.(viscosity_cutoff), colormap=:batlow)
                 h5  = heatmap!(ax5, xci[1].*1e-3, xci[2].*1e-3, Array(stokes.EII_pl) , colormap=:batlow)
                 h6  = heatmap!(ax6, xci[1].*1e-3, xci[2].*1e-3, Array(ϕ_m) , colormap=:lipari)
                 hidexdecorations!(ax1)

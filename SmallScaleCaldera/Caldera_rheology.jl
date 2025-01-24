@@ -1,46 +1,6 @@
 using GeoParams.Dislocation
 using GeoParams.Diffusion
 
-function init_rheology_nonNewtonian()
-    #dislocation laws
-    disl_wet_olivine  = SetDislocationCreep(Dislocation.wet_olivine1_Hirth_2003)
-    # diffusion laws
-    diff_wet_olivine  = SetDiffusionCreep(Diffusion.wet_olivine_Hirth_2003)
-
-    el              = ConstantElasticity(; G = 40e9)
-
-    lithosphere_rheology = CompositeRheology( (el, disl_wet_olivine, diff_wet_olivine))
-    init_rheologies(lithosphere_rheology)
-end
-
-function init_rheology_nonNewtonian_plastic()
-    #dislocation laws
-    disl_wet_olivine  = SetDislocationCreep(Dislocation.wet_olivine1_Hirth_2003)
-    # diffusion laws
-    diff_wet_olivine  = SetDiffusionCreep(Diffusion.wet_olivine_Hirth_2003)
-    # plasticity
-    ϕ_wet_olivine   = asind(0.1)
-    C_wet_olivine   = 1e6
-    η_reg           = 1e16
-    el              = ConstantElasticity(; G = 40e9, ν = 0.45)
-    lithosphere_rheology = CompositeRheology(
-                (
-                    el,
-                    disl_wet_olivine,
-                    diff_wet_olivine,
-                    DruckerPrager_regularised(; C = C_wet_olivine, ϕ = ϕ_wet_olivine, η_vp=η_reg, Ψ=0.0) # non-regularized plasticity
-                )
-            )
-    init_rheologies(lithosphere_rheology)
-end
-
-function init_rheology_linear()
-    el    = ConstantElasticity(; G = 40e9, ν = 0.49)
-    # lithosphere_rheology = CompositeRheology( (LinearViscous(; η=1e23), ))
-    lithosphere_rheology = CompositeRheology( (LinearViscous(; η=1e23), el))
-    init_rheologies(lithosphere_rheology)
-end
-
 function init_rheologies(; linear=false, incompressible=true, isplastic = true, magma = false)
 
     η_reg   = 1e15
