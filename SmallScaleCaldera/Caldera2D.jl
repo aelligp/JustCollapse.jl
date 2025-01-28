@@ -196,11 +196,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
 
     # particle fields for the stress rotation
-    # pτ  = pτxx, pτyy, pτxy        = init_cell_arrays(particles, Val(3)) # stress
-    # # pτ_o = pτxx_o, pτyy_o, pτxy_o = init_cell_arrays(particles, Val(3)) # old stress
-    # pω   = pωxy,                  = init_cell_arrays(particles, Val(1)) # vorticity
-    # particle_args                 = (pT, pPhases, pτ..., pω...)
-    # particle_args_reduced         = (pT, pτ..., pω...)
     pτ                    = StressParticles(particles)
     particle_args         = (pT, pPhases, unwrap(pτ)...)
     particle_args_reduced = (pT,  unwrap(pτ)...)
@@ -228,11 +223,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     T_air     = 273e0
     Ω_T       = @zeros(size(thermal.T)...)
     thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
-    JustRelax.DirichletBoundaryCondition(Ω_T)
+    # JustRelax.DirichletBoundaryCondition(Ω_T)
 
     thermal_bc       = TemperatureBoundaryConditions(;
         no_flux      = (; left = true, right = true, top = false, bot = false),
-        dirichlet    = (; mask = Ω_T)
+        # dirichlet    = (; mask = Ω_T)
     )
     thermal_bcs!(thermal, thermal_bc)
     temperature2center!(thermal)
@@ -242,8 +237,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
 
     # Buoyancy forces
     ρg               = ntuple(_ -> @zeros(ni...), Val(2))
+    for _ in 1:5
     compute_ρg!(ρg, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
     @parallel init_P!(stokes.P, ρg[end], xvi[2])
+    end
     # stokes.P        .= PTArray(backend)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
 
     # Melt fraction
@@ -336,22 +333,36 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # Time loop
     t, it = 0.0, 0
     interval =  0
+    iterMax = 150e3
+    local iters
     thermal.Told .= thermal.T
 
     while it < 100 #000 # run only for 5 Myrs
+        if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ * 5
+            iterMax += 10e3
+            iterMax = min(iterMax, 200e3)
+            println("Increasing maximum pseudo timesteps to $iterMax")
+        else
+            iterMax = 150e3
+        end
 
         # interpolate fields from particle to grid vertices
         particle2grid!(T_buffer, pT, xvi, particles)
         @views T_buffer[:, end]      .= Ttop
         @views T_buffer[:, 1]        .= Tbot
-        clamp!(T_buffer, 273e0, 1223e0)
+        # clamp!(T_buffer, 273e0, 1223e0)
         @views thermal.T[2:end-1, :] .= T_buffer
-        # if it > 1  && rem(it, 5) == 0
-        # # if mod(r/ound(t/(1e3 * 3600 * 24 *365.25); digits=1), 1e3) == 0.0
-        #     println("I'm groot")
-        #     thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
-        #     interval += 1
-        # end
+        if it > 1  && rem(it, 5) == 0
+        # if mod(round(t/(1e3 * 3600 * 24 *365.25); digits=1), 1e3) == 0.0
+            println("Simulation eruption at t = $(round(t/(1e3 * 3600 * 24 *365.25); digits=2)) Kyrs")
+            thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
+            interval += 1
+            copyinn_x!(T_buffer, thermal.T)
+            @views T_buffer[:, end]      .= Ttop
+            @views T_buffer[:, 1]        .= Tbot
+            temperature2center!(thermal)
+            grid2particle!(pT, xvi, T_buffer, particles)
+        end
         thermal_bcs!(thermal, thermal_bc)
         temperature2center!(thermal)
 
@@ -388,7 +399,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         tensor_invariant!(stokes.ε)
         tensor_invariant!(stokes.ε_pl)
         dtmax = 2e3 * 3600 * 24 * 365.25
-        dt    = compute_dt(stokes, di, dtmax) * 0.5
+        dt    = compute_dt(stokes, di, dtmax)
 
         println("dt = $(dt/(3600 * 24 *365.25)) years")
         # ------------------------------
@@ -456,6 +467,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
 
         @show it += 1
         t        += dt
+
+        if it == 1
+            stokes.EII_pl .= 0.0
+        end
+
         if plotting
             # Data I/O and plotting ---------------------
             if it == 1 || rem(it, 1) == 0
@@ -474,6 +490,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                         T   = Array(T_buffer),
                         stress_xy = Array(stokes.τ.xy),
                         strain_rate_xy = Array(stokes.ε.xy),
+                        phase_vertices = [argmax(p) for p in Array(phase_ratios.vertex)],
                     )
                     data_c = (;
                         P   = Array(stokes.P),
@@ -605,9 +622,9 @@ const plotting = true
 
 do_vtk   = true # set to true to generate VTK files for ParaView
 # figdir is defined as Systematics_conduit_depth_radius_ar_extension
-# figdir   = "Systematics/$(today())_Systematics_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
-figdir   = "Systematics/$(today())_TEST"
-n        = 512
+figdir   = "Systematics/Caldera2D_$(today())"
+# figdir   = "Systematics/$(today())_KICKOFF_∂GPU4GEO"
+n        = 128
 nx, ny   = n, n >>> 1
 
 li, origin, phases_GMG, T_GMG = setup2D(
