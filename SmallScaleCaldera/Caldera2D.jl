@@ -337,13 +337,23 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     local iters
     thermal.Told .= thermal.T
 
-    while it < 100 #000 # run only for 5 Myrs
+    while it < 2000 #000 # run only for 5 Myrs
         if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ * 5
             iterMax += 10e3
             iterMax = min(iterMax, 200e3)
             println("Increasing maximum pseudo timesteps to $iterMax")
         else
             iterMax = 150e3
+        end
+
+        if progressiv_extension
+            if it > 5 && rem(it, 5) == 0.0
+                εbg += extension
+                println("Progressivly increased extension to $εbg")
+                apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
+                flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+                update_halo!(@velocity(stokes)...)
+            end
         end
 
         # interpolate fields from particle to grid vertices
@@ -371,7 +381,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
 
         stress2grid!(stokes, pτ, xvi, xci, particles)
 
-        t_stokes = @elapsed solve_VariationalStokes!(
+        t_stokes = @elapsed begin
+        iters = solve_VariationalStokes!(
             stokes,
             pt_stokes,
             di,
@@ -384,12 +395,12 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
             dt,
             igg;
             kwargs = (;
-                iterMax          = 100e3,
+                iterMax          = it < 3 ? 300e3 : iterMax,
                 nout             = 2e3,
                 viscosity_cutoff = viscosity_cutoff,
             )
         )
-
+        end
         # rotate stresses
         rotate_stress!(pτ, stokes, particles, xci, xvi, dt)
 
@@ -546,7 +557,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 h1  = heatmap!(ax1, xvi[1].*1e-3, xvi[2].*1e-3, Array(thermal.T[2:end-1,:].-273) , colormap=:batlow)
                 # Plot particles phase
 
-                h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3, uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s") , colormap=:batlow)
+                h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3, uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s") , colormap=:vik, colorrange= (-maximum(ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s"))), maximum(ustrip(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")))))
                 scatter!(ax2, Array(chain_x), Array(chain_y), color=:red, markersize = 3)
 
                 # Plot 2nd invariant of strain rate
@@ -617,15 +628,16 @@ end
 
 ## END OF MAIN SCRIPT ----------------------------------------------------------------
 const plotting = true
-
-# conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
-
+const progressiv_extension = true
 do_vtk   = true # set to true to generate VTK files for ParaView
-# figdir is defined as Systematics_conduit_depth_radius_ar_extension
-figdir   = "Systematics/Caldera2D_$(today())"
-# figdir   = "Systematics/$(today())_KICKOFF_∂GPU4GEO"
-n        = 128
-nx, ny   = n, n >>> 1
+
+conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
+
+# figdir is defined as Systematics_depth_radius_ar_extension
+figdir   = "Systematics/$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
+# figdir   = "Systematics/Caldera2D_$(today())"
+n        = 512
+nx, ny   = n, n
 
 li, origin, phases_GMG, T_GMG = setup2D(
     nx+1, ny+1;
@@ -634,11 +646,11 @@ li, origin, phases_GMG, T_GMG = setup2D(
     flat           = false, # flat or volcano cone
     chimney        = true, # conduit or not
     volcano_size   = (3e0, 6e0),    # height, radius
-    conduit_radius = 2e-1, # radius of the conduit
+    conduit_radius = conduit, # radius of the conduit
     chamber_T      = 900e0, # temperature of the chamber
-    chamber_depth  = 5e0, # depth of the chamber
-    chamber_radius = 1.25e0, # radius of the chamber
-    aspect_x       = 2.5e0, # aspect ratio of the chamber
+    chamber_depth  = depth, # depth of the chamber
+    chamber_radius = radius, # radius of the chamber
+    aspect_x       = ar, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
