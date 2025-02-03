@@ -304,35 +304,35 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     grid2particle!(pT, xvi, T_buffer, particles)
 
     ## Plot initial T and P profile
-    fig = let
-        Yv = [y for x in xvi[1], y in xvi[2]][:]
-        Y = [y for x in xci[1], y in xci[2]][:]
-        fig = Figure(; size=(1200, 900))
-        ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
-        ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Density")
-        scatter!(
-            ax1,
-            Array(thermal.T[2:(end - 1), :][:]),
-            Yv./1e3,
-        )
-        # lines!(
-        scatter!(
-            ax2,
-            # Array(stokes.P[:]./1e6),
-            Array(ρg[2][:]./9.81),
-            Y./1e3,
-        )
-        hideydecorations!(ax2)
-        # save(joinpath(figdir, "initial_profile.png"), fig)
-        fig
-    end
+    # fig = let
+    #     Yv = [y for x in xvi[1], y in xvi[2]][:]
+    #     Y = [y for x in xci[1], y in xci[2]][:]
+    #     fig = Figure(; size=(1200, 900))
+    #     ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
+    #     ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Density")
+    #     scatter!(
+    #         ax1,
+    #         Array(thermal.T[2:(end - 1), :][:]),
+    #         Yv./1e3,
+    #     )
+    #     # lines!(
+    #     scatter!(
+    #         ax2,
+    #         # Array(stokes.P[:]./1e6),
+    #         Array(ρg[2][:]./9.81),
+    #         Y./1e3,
+    #     )
+    #     hideydecorations!(ax2)
+    #     # save(joinpath(figdir, "initial_profile.png"), fig)
+    #     fig
+    # end
 
     τxx_v = @zeros(ni.+1...)
     τyy_v = @zeros(ni.+1...)
 
     # Time loop
     t, it = 0.0, 0
-    interval =  0
+    interval =  1
     iterMax = 150e3
     local iters
     thermal.Told .= thermal.T
@@ -347,7 +347,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         end
 
         if progressiv_extension
-            if it > 5 && rem(it, 5) == 0.0
+            if it > 5 && round(t/(3600 * 24 *365.25); digits=2) >= 1.5e3*interval
                 εbg += extension
                 println("Progressivly increased extension to $εbg")
                 apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
@@ -360,10 +360,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         particle2grid!(T_buffer, pT, xvi, particles)
         @views T_buffer[:, end]      .= Ttop
         @views T_buffer[:, 1]        .= Tbot
-        # clamp!(T_buffer, 273e0, 1223e0)
         @views thermal.T[2:end-1, :] .= T_buffer
-        if it > 1  && rem(it, 5) == 0
-        # if mod(round(t/(1e3 * 3600 * 24 *365.25); digits=1), 1e3) == 0.0
+        if it > 5 && round(t/(3600 * 24 *365.25); digits=2) >= 1.5e3*interval
             println("Simulation eruption at t = $(round(t/(1e3 * 3600 * 24 *365.25); digits=2)) Kyrs")
             thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
             interval += 1
@@ -485,15 +483,16 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
 
         if plotting
             # Data I/O and plotting ---------------------
-            if it == 1 || rem(it, 1) == 0
+            if it == 1 || rem(it, 5) == 0
                 ## this is used for plotting for now:
                 η_eff = @. stokes.τ.II / (2*stokes.ε.II)
                 ##
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, basename(@__FILE__), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__,"Caldera_rheology.jl"))
                 end
-                checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
-                checkpointing_particles(checkpoint, particles; phases= pPhases, phase_ratios=phase_ratios, chain=chain, particle_args=particle_args, t=t, dt=dt)
+                checkpointing = joinpath(checkpoint, "checkpoint_$(it)")
+                checkpointing_jld2(checkpointing, stokes, thermal, t, dt, igg)
+                checkpointing_particles(checkpointing, particles; phases= pPhases, phase_ratios=phase_ratios, chain=chain, particle_args=particle_args, t=t, dt=dt)
                 (; η_vep, η) = stokes.viscosity
                 if do_vtk
                     velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
