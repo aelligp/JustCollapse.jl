@@ -34,16 +34,16 @@ export JULIA_CUDA_USE_COMPAT=false # IGG
 # mount the uenv prgenv-gnu with the view named default
 srun --gpu-bind=per_task:1 --cpu_bind=sockets julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)"""
             if diameter <= 5.0
-                open("runme_test_$(jobname).sh", "w") do io
+                open("runme_test.sh", "w") do io
                     println(io, str)
                 end
 
                 # Submit the job
-                # run(`sbatch runme_test.sh`)
+                run(`sbatch runme_test.sh`)
                 println("Job submitted")
                 # remove the file
                 sleep(1)
-                # rm("runme_test_$(jobname).sh")
+                rm("runme_test.sh")
                 println("File removed")
                 # Append parameters to DataFrame
                 push!(results, (conduit, depth, radius, ar, extension, diameter))
