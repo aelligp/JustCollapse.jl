@@ -19,7 +19,7 @@ function main()
 #SBATCH --job-name=\"$(jobname)\"
 #SBATCH --output=caldera_$(jobname).o
 #SBATCH --error=caldera_$(jobname).e
-#SBATCH --time=20:00:00 #HH:MM:SS
+#SBATCH --time=24:00:00 #HH:MM:SS
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=1
