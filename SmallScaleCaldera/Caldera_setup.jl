@@ -73,7 +73,7 @@ function setup2D(
             cap  = (mean(Grid.x.val), 0, flat ? 0e0 : volcano_size[1]),
             radius = conduit_radius,
             phase  = ConstantPhase(5),
-            T      = ConstantTemp(T=chamber_T),
+            # T      = ConstantTemp(T=chamber_T),
         )
     end
 
@@ -83,16 +83,16 @@ function setup2D(
 
     ph      = Phases[:,1,:]
     T       = Temp[:,1,:] .+ 273
-    V_total = 4/3 * π * (chamber_radius*aspect_x) * chamber_radius * (chamber_radius*aspect_x)
-    V_erupt = 4/3 * π * (chamber_radius/1.25) * aspect_x * (chamber_radius/2) * ((chamber_radius/1.25) * aspect_x)
+    V_total = (4/3 * π * (chamber_radius*aspect_x) * chamber_radius * (chamber_radius*aspect_x)) * 1e9
+    V_eruptible = (4/3 * π * (chamber_radius/1.25) * aspect_x * (chamber_radius/2) * ((chamber_radius/1.25) * aspect_x)) *1e9
     R       = ((chamber_depth-chamber_radius))/(chamber_radius*aspect_x)
     chamber_diameter = 2*(chamber_radius*aspect_x)
     chamber_erupt    = 2*((chamber_radius/1.25) * aspect_x)
-    printstyled("Magma volume of the initial chamber: $(round(V_total; digits=3)) km³ \n"; bold=true, color=:red, blink=true)
-    printstyled("Eruptible magma volume: $(round(V_erupt; digits=3)) km³ \n"; bold=true, color=:red, blink=true)
+    printstyled("Magma volume of the initial chamber:$(round(ustrip.(uconvert(u"km^3",(V_total)u"m^3")); digits=5)) km³ \n"; bold=true, color=:red, blink=true)
+    printstyled("Eruptible magma volume: $(round(ustrip.(uconvert(u"km^3",(V_eruptible)u"m^3")); digits=5)) km³ \n"; bold=true, color=:red, blink=true)
     printstyled("Roof ratio (Depth/half-axis width): $R \n"; bold=true, color=:cyan)
-    printstyled("Chamber diameter: $chamber_diameter km \n"; bold=true, color=:light_yellow)
-    printstyled("Eruptible chamber diameter: $chamber_erupt km \n"; bold=true, color=:light_yellow)
+    printstyled("Chamber diameter: $(round(chamber_diameter; digits=3)) km \n"; bold=true, color=:light_yellow)
+    printstyled("Eruptible chamber diameter: $(round(chamber_erupt; digits=3)) km \n"; bold=true, color=:light_yellow)
     # write_paraview(Grid, "Volcano2D")
-    return li, origin, ph, T, Grid
+    return li, origin, ph, T, Grid, V_total, V_eruptible
 end
