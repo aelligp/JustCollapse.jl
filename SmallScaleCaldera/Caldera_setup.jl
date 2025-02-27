@@ -7,6 +7,7 @@ function setup2D(
     dimensions     = (30e0, 20e0), # extent in x and y in km
     flat           = true,
     chimney        = false,
+    layers         = 1,
     volcano_size   = (3e0, 5e0),
     conduit_radius = 0.2,
     chamber_T      = 1e3,
@@ -22,7 +23,9 @@ function setup2D(
     Grid = CartData(xyz_grid(x,y,z));
 
     # Allocate Phase and Temp arrays
-    Phases = fill(6, nx, 2, nz);
+    air_phase = layers + 6
+    # Phases = fill(6, nx, 2, nz);
+    Phases = fill(air_phase, nx, 2, nz);
     Temp = fill(0.0, nx, 2, nz);
 
     add_box!(Phases, Temp, Grid;
@@ -33,18 +36,6 @@ function setup2D(
         T = HalfspaceCoolingTemp(Age=20)
     )
 
-    if !flat
-        add_volcano!(Phases, Temp, Grid;
-            volcanic_phase  = 1,
-            center          = (mean(Grid.x.val),  0.0),
-            height          = volcano_size[1],
-            radius          = volcano_size[2],
-            crater          = 0.5,
-            base            = 0.0,
-            background      = nothing,
-            T               = HalfspaceCoolingTemp(Age=20)
-        )
-    end
 
     add_ellipsoid!(Phases, Temp, Grid;
         cen    = (mean(Grid.x.val), 0, -chamber_depth),
@@ -67,12 +58,29 @@ function setup2D(
     #     T      = ConstantTemp(T=chamber_T+100)
     # )
 
+    if !flat
+        heights = layers > 1 ? [volcano_size[1] - i * (volcano_size[1] / layers) for i in 0:(layers-1)] : volcano_size[1]
+        for (i, height) in enumerate(heights)
+            println("i'm $i")
+            add_volcano!(Phases, Temp, Grid;
+                volcanic_phase  = i+4,  # Change phase for each layer
+                center          = (mean(Grid.x.val),  0.0),
+                height          = height,
+                radius          = volcano_size[2],
+                crater          = 0.5,
+                base            = 0.0,
+                background      = nothing,
+                T               = HalfspaceCoolingTemp(Age=20)
+            )
+        end
+    end
+
     if chimney
         add_cylinder!(Phases, Temp, Grid;
             base = (mean(Grid.x.val), 0, -(chamber_depth-chamber_radius)),
             cap  = (mean(Grid.x.val), 0, flat ? 0e0 : volcano_size[1]),
             radius = conduit_radius,
-            phase  = ConstantPhase(5),
+            phase  = ConstantPhase(layers+5),
             # T      = ConstantTemp(T=chamber_T),
         )
     end
@@ -93,6 +101,6 @@ function setup2D(
     printstyled("Roof ratio (Depth/half-axis width): $R \n"; bold=true, color=:cyan)
     printstyled("Chamber diameter: $(round(chamber_diameter; digits=3)) km \n"; bold=true, color=:light_yellow)
     printstyled("Eruptible chamber diameter: $(round(chamber_erupt; digits=3)) km \n"; bold=true, color=:light_yellow)
-    # write_paraview(Grid, "Volcano2D")
-    return li, origin, ph, T, Grid, V_total, V_eruptible
+    write_paraview(Grid, "Volcano2D")
+    return li, origin, ph, T, Grid, V_total, V_eruptible, layers, air_phase
 end

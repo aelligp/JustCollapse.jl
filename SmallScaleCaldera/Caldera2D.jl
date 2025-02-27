@@ -201,7 +201,7 @@ numcells(A::AbstractArray) = count(x -> x == 1.0, A)
 
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
-function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk =false, extension = 1e-15 * 0, cutoff_visc = (1e16, 1e23), V_total = 0.0, V_eruptible = 0.0, progressiv_extension = false, plotting = true)
+function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk =false, extension = 1e-15 * 0, cutoff_visc = (1e16, 1e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase=6, progressiv_extension = false, plotting = true)
 
     # Physical domain ------------------------------------
     ni                  = nx, ny           # number of cells
@@ -211,8 +211,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # ----------------------------------------------------
 
     # Physical properties using GeoParams ----------------
-    rheology            = init_rheologies(; incompressible=false, magma=true)
-    rheology_incomp       = init_rheologies(; incompressible=true, magma=true)
+    rheology            = init_rheologies(layers; incompressible=false, magma=true)
+    rheology_incomp       = init_rheologies(layers; incompressible=true, magma=true)
     dt_time             = 1e3 * 3600 * 24 * 365
     κ                   = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val)) # thermal diffusivity                                 # thermal diffusivity
     dt_diff             = 0.5 * min(di...)^2 / κ / 2.01
@@ -243,7 +243,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     nxcell, max_xcell, min_xcell = 100, 150, 75
     initial_elevation            = 0e0
     chain                        = init_markerchain(backend_JP, nxcell, min_xcell, max_xcell, xvi[1], initial_elevation);
-    air_phase                    = 6
+    # air_phase                    = 6
     topo_y                       = extract_topo_from_GMG_phases(phases_GMG, xvi, air_phase)
     for _ in 1:3
         @views hn               = 0.5 .* (topo_y[1:end-1] .+ topo_y[2:end])
@@ -788,12 +788,13 @@ figdir   = "Systematics/Caldera2D_$(today())"
 n        = 128
 nx, ny   = n, n >> 1
 
-li, origin, phases_GMG, T_GMG, _,  V_total, V_eruptible = setup2D(
+li, origin, phases_GMG, T_GMG, _,  V_total, V_eruptible, layers, air_phase = setup2D(
     nx+1, ny+1;
     sticky_air     = 4e0,
     dimensions     = (40e0, 20e0), # extent in x and y in km
     flat           = false, # flat or volcano cone
     chimney        = true, # conduit or not
+    layers         = 5, # number of layers
     volcano_size   = (3e0, 9e0),    # height, radius
     conduit_radius = 1e-2, # radius of the conduit
     chamber_T      = 900e0, # temperature of the chamber
@@ -808,4 +809,4 @@ else
     igg
 end
 
-main(li, origin, phases_GMG, T_GMG, igg, ; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = extension, cutoff_visc = (1e17, 1e23), V_total = V_total, V_eruptible = V_eruptible);
+main(li, origin, phases_GMG, T_GMG, igg, ; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = extension, cutoff_visc = (1e17, 1e23), V_total = V_total, V_eruptible = V_eruptible, layers=layers, air_phase=air_phase, progressiv_extension = progressiv_extension, plotting = plotting);
