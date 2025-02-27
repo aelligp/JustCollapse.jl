@@ -423,6 +423,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                     extension = 1e-15
                 else
                     εbg += extension
+                    εbg = min(εbg, 5*extension)
                 end
                 println("Progressivly increased extension to $εbg")
                 apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
