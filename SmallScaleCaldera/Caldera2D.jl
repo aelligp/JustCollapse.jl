@@ -416,15 +416,20 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         #     iterMax = 150e3
         # end
 
-        # if progressiv_extension
-        #     if it > 5 && round(t/(3600 * 24 *365.25); digits=2) >= 1.5e3*interval
-        #         εbg += extension
-        #         println("Progressivly increased extension to $εbg")
-        #         apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
-        #         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
-        #         update_halo!(@velocity(stokes)...)
-        #     end
-        # end
+        if progressiv_extension
+            if it > 5 && round(t/(3600 * 24 *365.25); digits=2) >= 1.5e3*interval
+                if interval ==1
+                    εbg = 1e-15
+                    extension = 1e-15
+                else
+                    εbg += extension
+                end
+                println("Progressivly increased extension to $εbg")
+                apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
+                flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+                update_halo!(@velocity(stokes)...)
+            end
+        end
 
         # interpolate fields from particle to grid vertices
         particle2grid!(T_buffer, pT, xvi, particles)
@@ -449,7 +454,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         temperature2center!(thermal)
 
         if it > 3
-        if any(((Array(stokes.P) .- Array(P_lith)) ./ 1e6) .≥ 20 .&& (ϕ_m .≥ 0.5 .|| depth .≤ -2500)) .&& (V_total - V_erupt_fast) > 0.0
+        if any(((Array(stokes.P) .- Array(P_lith)) ./ 1e6) .≥ 20 .&& (ϕ_m .≥ 0.5 .|| depth .≤ -2500)) .&& (V_total - abs(V_erupt_fast)) > 0.0
             println("Critical overpressure reached - erupting with fast rate")
             V_erupt = V_erupt_fast
                 # dt *= 0.1
@@ -785,7 +790,7 @@ nx, ny   = n, n >> 1
 li, origin, phases_GMG, T_GMG, _,  V_total, V_eruptible = setup2D(
     nx+1, ny+1;
     sticky_air     = 4e0,
-    dimensions     = (25e0, 20e0), # extent in x and y in km
+    dimensions     = (40e0, 20e0), # extent in x and y in km
     flat           = false, # flat or volcano cone
     chimney        = true, # conduit or not
     volcano_size   = (3e0, 9e0),    # height, radius
