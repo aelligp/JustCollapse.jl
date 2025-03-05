@@ -36,6 +36,22 @@ function setup2D(
         T = HalfspaceCoolingTemp(Age=20)
     )
 
+    if !flat
+        heights = layers > 1 ? [volcano_size[1] - i * (volcano_size[1] / layers) for i in 0:(layers-1)] : volcano_size[1]
+        for (i, height) in enumerate(heights)
+            add_volcano!(Phases, Temp, Grid;
+                volcanic_phase  = i+4,  # Change phase for each layer
+                center          = (mean(Grid.x.val),  0.0),
+                height          = height,
+                radius          = volcano_size[2],
+                crater          = 0.5,
+                base            = 0.0,
+                background      = nothing,
+                # T               = HalfspaceCoolingTemp(Age=20)
+                T               = i == 1 ? HalfspaceCoolingTemp(Age=20) : nothing,
+            )
+        end
+    end
 
     add_ellipsoid!(Phases, Temp, Grid;
         cen    = (mean(Grid.x.val), 0, -chamber_depth),
@@ -58,22 +74,6 @@ function setup2D(
     #     T      = ConstantTemp(T=chamber_T+100)
     # )
 
-    if !flat
-        heights = layers > 1 ? [volcano_size[1] - i * (volcano_size[1] / layers) for i in 0:(layers-1)] : volcano_size[1]
-        for (i, height) in enumerate(heights)
-            println("i'm $i")
-            add_volcano!(Phases, Temp, Grid;
-                volcanic_phase  = i+4,  # Change phase for each layer
-                center          = (mean(Grid.x.val),  0.0),
-                height          = height,
-                radius          = volcano_size[2],
-                crater          = 0.5,
-                base            = 0.0,
-                background      = nothing,
-                T               = HalfspaceCoolingTemp(Age=20)
-            )
-        end
-    end
 
     if chimney
         add_cylinder!(Phases, Temp, Grid;
@@ -101,6 +101,6 @@ function setup2D(
     printstyled("Roof ratio (Depth/half-axis width): $R \n"; bold=true, color=:cyan)
     printstyled("Chamber diameter: $(round(chamber_diameter; digits=3)) km \n"; bold=true, color=:light_yellow)
     printstyled("Eruptible chamber diameter: $(round(chamber_erupt; digits=3)) km \n"; bold=true, color=:light_yellow)
-    write_paraview(Grid, "Volcano2D")
+    # write_paraview(Grid, "Volcano2D")
     return li, origin, ph, T, Grid, V_total, V_eruptible, layers, air_phase
 end
