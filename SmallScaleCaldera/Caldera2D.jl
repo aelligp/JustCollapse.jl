@@ -460,7 +460,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         temperature2center!(thermal)
 
         if it > 3
-            if eruption == false && ((any(((Array(stokes.P) .- Array(P_lith))) .≥ ΔPc .&& (ϕ_m .≥ 0.5 .|| depth .≤ -2500)) .&& any(ϕ_m .≥ 0.5)) .|| rem(it, 30) == 0.0).&& (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
+            if eruption == false && ((any(((Array(stokes.P) .- Array(P_lith))) .≥ ΔPc .&& (Array(ϕ_m) .≥ 0.5 .|| depth .≤ -2500)) .&& any(Array(ϕ_m) .≥ 0.5)) .|| rem(it, 30) == 0.0).&& (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
                 println("Critical overpressure reached - erupting with fast rate")
                 eruption_counter += 1
                 er_it = 0
@@ -480,7 +480,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 println("Erupted Volume: $(round(ustrip.(uconvert(u"km^3",(V_erupt)u"m^3")); digits=2)) km³")
 
             # if any(((Array(stokes.P) .- Array(P_lith))) .< ΔPc .&& ϕ_m .≥ 0.3 .&& depth .≤ -2500)
-            elseif eruption == false && any(((Array(stokes.P) .- Array(P_lith))) .< ΔPc .&& ϕ_m .≥ 0.3 .&& depth .≤ -2500)
+            elseif eruption == false && any(((Array(stokes.P) .- Array(P_lith))) .< ΔPc .&& Array(ϕ_m) .≥ 0.3 .&& depth .≤ -2500)
                 println("Adding volume to the chamber ")
                 if it > 1 && rem(it, 1) == 0
                     V_tot = V_total
