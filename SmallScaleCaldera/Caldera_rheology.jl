@@ -10,7 +10,8 @@ function init_rheologies(layers; linear=false, incompressible=true, plastic = tr
     soft_C  = NonLinearSoftening(; ξ₀=C, Δ = C / 1e5)       # nonlinear softening law
     soft_ϕ  = NonLinearSoftening(; ξ₀=ϕ, Δ = ϕ / 2)       # nonlinear softening law
     pl      = DruckerPrager_regularised(; C=C*Pa, ϕ=ϕ, η_vp=(η_reg)*Pas, Ψ=Ψ, softening_C=soft_C, softening_ϕ=soft_ϕ)
-    pl_cone = DruckerPrager_regularised(; C=((C/2)*rand()*Pa), ϕ=(ϕ/2), η_vp=(η_reg)*Pas, Ψ=Ψ, softening_C=soft_C, softening_ϕ=soft_ϕ)
+    pl_cone      = DruckerPrager_regularised(; C=C*Pa, ϕ=ϕ, η_vp=(η_reg)*Pas, Ψ=Ψ, softening_C=soft_C, softening_ϕ=soft_ϕ)
+    # pl_cone = DruckerPrager_regularised(; C=((C/2)*rand()*Pa), ϕ=(ϕ/2), η_vp=(η_reg)*Pas, Ψ=Ψ, softening_C=soft_C, softening_ϕ=soft_ϕ)
 
     G0      = 25e9Pa        # elastic shear modulus
     G_magma = 10e9Pa        # elastic shear modulus magma
@@ -21,15 +22,18 @@ function init_rheologies(layers; linear=false, incompressible=true, plastic = tr
     β_magma = 1 / el_magma.Kb.val
     Cp      = 1050.0
 
-    magma_visc = magma ? ViscosityPartialMelt_Costa_etal_2009(η=LinearViscous(η=1e15)) : LinearViscous(η=1e15)
+    oxd_wt =  (61.6, 0.90, 17.7, 3.65, 2.35, 5.38, 4.98, 1.27, 3.0)
+    # magma_visc = magma ? ViscosityPartialMelt_Costa_etal_2009(η=LinearViscous(η=1e15)) : LinearViscous(η=1e15)
+    magma_visc   = magma ? GiordanoMeltViscosity(oxd_wt = oxd_wt, η0 = 1e13Pas) : LinearViscous(η=1e15)
     conduit_visc = magma  ? ViscosityPartialMelt_Costa_etal_2009(η=LinearViscous(η=1e15)) : LinearViscous(η=1e15)
     # magma_visc = magma ? ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K)) : LinearViscous(η=1e15)
     # conduit_visc = magma  ? ViscosityPartialMelt_Costa_etal_2009(η=LinearMeltViscosity(A = -8.1590, B = 2.4050e+04K, T0 = -430.9606K)) : LinearViscous(η=1e15)
     #dislocation laws
     # disl_top  = linear ? LinearViscous(η=1e23) : DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
-    disl_top  = linear ? LinearViscous(η=1e21) : SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
+    disl_top  = linear ? LinearViscous(η=1e23) : SetDislocationCreep(Dislocation.dry_olivine_Karato_2003)
+    # disl_top  = linear ? LinearViscous(η=1e21) : SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
     # disl_top  = SetDislocationCreep(Dislocation.dry_olivine_Karato_2003)
-    disl_bot  = linear ? LinearViscous(η=1e21) : SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
+    disl_bot  = linear ? LinearViscous(η=1e23) : SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
 
 
     # Define the Volcano cone rheology
@@ -123,7 +127,8 @@ function init_rheologies(layers; linear=false, incompressible=true, plastic = tr
         # Name              = "magma chamber",
         SetMaterialParams(;
             Phase             = Int64(3),
-            Density           = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt=T_Density(ρ0=2.4e3, T0=273.15)),
+            # Density           = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt=T_Density(ρ0=2.4e3, T0=273.15)),
+            Density           = DensityX(oxd_wt= oxd_wt),
             # Density           = PT_Density(; ρ0=2.4e3, T0=273.15, β=β_magma),
             Conductivity      = ConstantConductivity(; k  = 3.0),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
@@ -137,7 +142,8 @@ function init_rheologies(layers; linear=false, incompressible=true, plastic = tr
             Phase             = Int64(4),
             # Density           = T_Density(; ρ0=2.2e3, T0=273.15),
             # Density           = BubbleFlow_Density(ρgas=ConstantDensity(ρ=10.0), ρmelt=ConstantDensity(ρ=2.4e3), c0=4e-2),
-            Density           = BubbleFlow_Density(ρgas=ConstantDensity(ρ=10.0), ρmelt=MeltDependent_Density(ρsolid=T_Density(ρ0=2.65e3, T0=273.15), ρmelt= ConstantDensity(ρ=2.4e3)), c0=4e-2),
+            # Density           = BubbleFlow_Density(ρgas=ConstantDensity(ρ=10.0), ρmelt=MeltDependent_Density(ρsolid=T_Density(ρ0=2.65e3, T0=273.15), ρmelt= ConstantDensity(ρ=2.4e3)), c0=4e-2),
+            Density           = DensityX(oxd_wt= oxd_wt),
             Conductivity      = ConstantConductivity(; k  = 3.0),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
