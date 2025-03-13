@@ -1,5 +1,5 @@
-const isCUDA = false
-# const isCUDA = true
+# const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -392,11 +392,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     P_lith= @zeros(ni...)
 
     # Time loop
-    t, it = 0.0, 0
+    t, it, er_it = 0.0, 0, 0
     interval =  1
     eruption_counter = 0
     iterMax = 150e3
-    local iters
+    local iters, er_it, eruption_counter
     thermal.Told .= thermal.T
 
     eruption = false
@@ -692,16 +692,16 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 # Plot velocity
                 h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3,ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")) , colormap=:vik, colorrange= (-maximum(ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s"))), maximum(ustrip(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")))))
                 scatter!(ax2, Array(chain_x), Array(chain_y), color=:red, markersize = 3)
-                arrows!(
-                    ax2,
-                    xvi[1][1:5:end-1] .* 1e-3,
-                    xvi[2][1:5:end-1] .* 1e-3,
-                    ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vx)u"m/s"))[1:5:end-1, 1:5:end-1],
-                    ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s"))[1:5:end-1, 1:5:end-1],
-                    lengthscale = 1 / max(maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s"))),
-                                          maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")))),
-                    color = :red,
-                )
+                # arrows!(
+                #     ax2,
+                #     xvi[1][1:5:end-1] .* 1e-3,
+                #     xvi[2][1:5:end-1] .* 1e-3,
+                #     ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vx)u"m/s"))[1:5:end-1, 1:5:end-1],
+                #     ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s"))[1:5:end-1, 1:5:end-1],
+                #     lengthscale = 1 / max(maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s"))),
+                #                           maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")))),
+                #     color = :red,
+                # )
                 # Plot 2nd invariant of stress
                 # h3  = heatmap!(ax3, xci[1].*1e-3, xci[2].*1e-3, Array(log10.(stokes.ε_pl.II)) , colormap=:batlow)
                 h3  = heatmap!(ax3, xci[1].*1e-3, xci[2].*1e-3, Array(stokes.τ.II)./1e6 , colormap=:batlow)
@@ -775,12 +775,12 @@ const plotting = true
 const progressiv_extension = true
 do_vtk   = true # set to true to generate VTK files for ParaView
 
-conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
+# conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-figdir   = "Systematics/$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
-# figdir   = "Systematics/Caldera2D_$(today())"
-n        = 512
+# figdir   = "Systematics/$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
+figdir   = "Systematics/Caldera2D_$(today())"
+n        = 256
 nx, ny   = n, n >> 1
 
 li, origin, phases_GMG, T_GMG, _,  V_total, V_eruptible, layers, air_phase = setup2D(
@@ -793,9 +793,9 @@ li, origin, phases_GMG, T_GMG, _,  V_total, V_eruptible, layers, air_phase = set
     volcano_size   = (3e0, 9e0),    # height, radius
     conduit_radius = 1e-2, # radius of the conduit
     chamber_T      = 900e0, # temperature of the chamber
-    chamber_depth  = depth, # depth of the chamber
-    chamber_radius = radius, # radius of the chamber
-    aspect_x       = ar, # aspect ratio of the chamber
+    # chamber_depth  = depth, # depth of the chamber
+    # chamber_radius = radius, # radius of the chamber
+    # aspect_x       = ar, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
@@ -804,4 +804,4 @@ else
     igg
 end
 
-main(li, origin, phases_GMG, T_GMG, igg, ; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = extension, cutoff_visc = (1e17, 1e23), V_total = V_total, V_eruptible = V_eruptible, layers=layers, air_phase=air_phase, progressiv_extension = progressiv_extension, plotting = plotting);
+main(li, origin, phases_GMG, T_GMG, igg, ; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = 1e-15, cutoff_visc = (1e17, 1e23), V_total = V_total, V_eruptible = V_eruptible, layers=layers, air_phase=air_phase, progressiv_extension = progressiv_extension, plotting = plotting);
