@@ -1,5 +1,5 @@
-const isCUDA = false
-# const isCUDA = true
+# const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -434,9 +434,9 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     depth = [y for x in xci[1], y in xci[2]]
 
     while it < 150 #000 # run only fo r 5 Myrs
-        # if it == 1
-        # P_lith .= stokes.P
-        # end
+        if it == 1
+        P_lith .= stokes.P
+        end
 
         # if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ * 5
         #     iterMax += 10e3
@@ -563,13 +563,13 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         println("Extrema T[C]: $(extrema(thermal.T.-273))")
         tensor_invariant!(stokes.ε)
         tensor_invariant!(stokes.ε_pl)
+        if er_it > 4
+            println("Eruption stopped")
+            eruption = false
+        end
         if eruption == true
             er_it += 1
             dtmax = 250 * 3600*24*365.25
-            if er_it > 4
-                println("Eruption stopped")
-                eruption = false
-            end
         else
             # dtmax = 5e2 * 3600 * 24 * 365.25
             dtmax = 1e3 * 3600 * 24 * 365.25
@@ -723,7 +723,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 # Plot temperature
                 h1  = heatmap!(ax1, xvi[1].*1e-3, xvi[2].*1e-3, Array(thermal.T[2:end-1,:].-273) , colormap=:batlow)
                 # Plot velocity
-                h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3,ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")) , colormap=:vik)#, colorrange= (-maximum(ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s"))), maximum(ustrip(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")))))
+                h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3,ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")) , colormap=:davos, colorrange= extrema(ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s"))))#(-maximum(ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s"))), maximum(ustrip(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")))))
                 scatter!(ax2, Array(chain_x), Array(chain_y), color=:red, markersize = 3)
                 # arrows!(
                 #     ax2,
@@ -809,7 +809,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                     xticklabelsize=25,
                     xlabelsize=25,
                     ylabelsize=25)
-                    scatterlines!(ax1, eruption_times, VEI_array, color=:blue, markersize=VEI_array*5)
+                    scatterlines!(ax1, eruption_times, VEI_array, colormap=:lipari, markersize=VEI_array*5)
                     ylims!(ax1, 0, 8.5)
                     ylims!(ax2, 0.00001, 1100)
                     hidexdecorations!(ax2)
