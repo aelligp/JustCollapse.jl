@@ -1,5 +1,5 @@
-# const isCUDA = false
-const isCUDA = true
+const isCUDA = false
+# const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -198,14 +198,36 @@ end
 numcells(A::AbstractArray) = count(x -> x == 1.0, A)
 
 
+function compute_VEI!(V_erupt)
+    if V_erupt <= 1e4
+        return 0
+    elseif V_erupt <= 1e6
+        return 1
+    elseif V_erupt <= 1e7
+        return 2
+    elseif V_erupt <= 1e8
+        return 3
+    elseif V_erupt <= 1e9
+        return 4
+    elseif V_erupt <= 1e10
+        return 5
+    elseif V_erupt <= 1e11
+        return 6
+    elseif V_erupt <= 1e12
+        return 7
+    else
+        return 8
+    end
+end
+
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
 function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D", do_vtk =false, extension = 1e-15 * 0, cutoff_visc = (1e16, 1e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase=6, progressiv_extension = false, plotting = true)
 
     # Physical domain ------------------------------------
-    ni                  = nx, ny           # number of cells
-    di                  = @. li / ni       # grid steps
-    grid                = Geometry(ni, li; origin = origin)
-    (; xci, xvi)        = grid             # nodes at the center and vertices of the cells
+    ni = nx, ny           # number of cells
+    di = @. li / ni       # grid steps
+    grid = Geometry(ni, li; origin = origin)
+    (; xci, xvi) = grid             # nodes at the center and vertices of the cells
     # ----------------------------------------------------
 
     # Physical properties using GeoParams ----------------
@@ -218,23 +240,23 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # ----------------------------------------------------
 
     # randomize cohesion
-    perturbation_C = @rand(ni...);
+    perturbation_C = @rand(ni...)
     # Initialize particles -------------------------------
-    nxcell              = 100
-    max_xcell           = 150
-    min_xcell           = 75
-    particles           = init_particles(
+    nxcell = 100
+    max_xcell = 150
+    min_xcell = 75
+    particles = init_particles(
         backend_JP, nxcell, max_xcell, min_xcell, xvi, di, ni
     )
-    subgrid_arrays      = SubgridDiffusionCellArrays(particles)
+    subgrid_arrays = SubgridDiffusionCellArrays(particles)
     # velocity grids
-    grid_vxi            = velocity_grids(xci, xvi, di)
+    grid_vxi = velocity_grids(xci, xvi, di)
     # material phase & temperature
-    pPhases, pT         = init_cell_arrays(particles, Val(2))
+    pPhases, pT = init_cell_arrays(particles, Val(2))
 
     # Assign particles phases anomaly
-    phases_device    = PTArray(backend)(phases_GMG)
-    phase_ratios     = phase_ratios = PhaseRatios(backend_JP, length(rheology), ni);
+    phases_device = PTArray(backend)(phases_GMG)
+    phase_ratios = phase_ratios = PhaseRatios(backend_JP, length(rheology), ni)
     init_phases!(pPhases, phases_device, particles, xvi)
 
     # Initialize marker chain
@@ -247,21 +269,21 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
 
     for _ in 1:3
-        @views hn               = 0.5 .* (topo_y[1:end-1] .+ topo_y[2:end])
-        @views topo_y[2:end-1] .= 0.5 .* (hn[1:end-1] .+ hn[2:end])
+        @views hn = 0.5 .* (topo_y[1:(end - 1)] .+ topo_y[2:end])
+        @views topo_y[2:(end - 1)] .= 0.5 .* (hn[1:(end - 1)] .+ hn[2:end])
         fill_chain_from_vertices!(chain, PTArray(backend)(topo_y))
         update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
     end
     update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
 
     # particle fields for the stress rotation
-    pτ                    = StressParticles(particles)
-    particle_args         = (pT, pPhases, unwrap(pτ)...)
-    particle_args_reduced = (pT,  unwrap(pτ)...)
+    pτ = StressParticles(particles)
+    particle_args = (pT, pPhases, unwrap(pτ)...)
+    particle_args_reduced = (pT, unwrap(pτ)...)
 
     # rock ratios for variational stokes
     # RockRatios
-    ϕ           = RockRatio(backend, ni)
+    ϕ = RockRatio(backend, ni)
     # update_rock_ratio!(ϕ, phase_ratios, air_phase)
     compute_rock_fraction!(ϕ, chain, xvi, di)
 
@@ -269,58 +291,58 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
 
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
-    stokes           = StokesArrays(backend, ni)
-    pt_stokes        = PTStokesCoeffs(li, di; ϵ=1e-4, Re = 3e0, r=0.7, CFL = 0.98 / √2.1) # Re=3π, r=0.7
+    stokes = StokesArrays(backend, ni)
+    pt_stokes = PTStokesCoeffs(li, di; ϵ = 1.0e-4, Re = 15π, r = 0.7, CFL = 0.98 / √2.1) # Re=3π, r=0.7
     # ----------------------------------------------------
 
     # TEMPERATURE PROFILE --------------------------------
-    thermal          = ThermalArrays(backend, ni)
-    @views thermal.T[2:end-1, :] .= PTArray(backend)(T_GMG)
+    thermal = ThermalArrays(backend, ni)
+    @views thermal.T[2:(end - 1), :] .= PTArray(backend)(T_GMG)
 
     # Add thermal anomaly BC's
-    T_chamber = 1223e0
-    T_air     = 273e0
-    Ω_T       = @zeros(size(thermal.T)...)
+    T_chamber = 1223.0e0
+    T_air = 273.0e0
+    Ω_T = @zeros(size(thermal.T)...)
     # thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
     # JustRelax.DirichletBoundaryCondition(Ω_T)
 
-    thermal_bc       = TemperatureBoundaryConditions(;
-        no_flux      = (; left = true, right = true, top = false, bot = false),
+    thermal_bc = TemperatureBoundaryConditions(;
+        no_flux = (; left = true, right = true, top = false, bot = false),
         # dirichlet    = (; mask = Ω_T)
     )
     thermal_bcs!(thermal, thermal_bc)
     temperature2center!(thermal)
-    Ttop             = thermal.T[2:end-1, end]
-    Tbot             = thermal.T[2:end-1, 1]
+    Ttop = thermal.T[2:(end - 1), end]
+    Tbot = thermal.T[2:(end - 1), 1]
     # ----------------------------------------------------
 
     # Buoyancy forces
-    ρg               = ntuple(_ -> @zeros(ni...), Val(2))
+    ρg = ntuple(_ -> @zeros(ni...), Val(2))
     for _ in 1:5
-    compute_ρg!(ρg, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P))
-    @parallel init_P!(stokes.P, ρg[end], xvi[2])
+        compute_ρg!(ρg, phase_ratios, rheology, (T = thermal.Tc, P = stokes.P))
+        @parallel init_P!(stokes.P, ρg[end], xvi[2])
     end
     # stokes.P        .= PTArray(backend)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
 
     # Melt fraction
-    ϕ_m    = @zeros(ni...)
+    ϕ_m = @zeros(ni...)
     compute_melt_fraction!(
-        ϕ_m, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
+        ϕ_m, phase_ratios, rheology, (T = thermal.Tc, P = stokes.P)
     )
     # Rheology
-    args0            = (; ϕ=ϕ_m,T=thermal.Tc, P=stokes.P, dt = Inf, perturbation_C = perturbation_C)
+    args0 = (; ϕ = ϕ_m, T = thermal.Tc, P = stokes.P, dt = Inf, perturbation_C = perturbation_C)
     viscosity_cutoff = cutoff_visc
     compute_viscosity!(stokes, phase_ratios, args0, rheology, viscosity_cutoff; air_phase=air_phase)
 
     # PT coefficients for thermal diffusion
-    pt_thermal       = PTThermalCoeffs(
-        backend, rheology, phase_ratios, args0, dt, ni, di, li; ϵ=1e-8, CFL=0.95 / √2
+    pt_thermal = PTThermalCoeffs(
+        backend, rheology, phase_ratios, args0, dt, ni, di, li; ϵ = 1.0e-8, CFL = 0.95 / √2
     )
 
     # Boundary conditions
     # flow_bcs         = DisplacementBoundaryConditions(;
-    flow_bcs         = VelocityBoundaryConditions(;
-        free_slip    = (left = true , right = true , top = true , bot = true),
+    flow_bcs = VelocityBoundaryConditions(;
+        free_slip = (left = true, right = true, top = true, bot = true),
         free_surface = false,
     )
 
@@ -330,7 +352,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # flow_bcs!(stokes, flow_bcs) # apply boundary conditions
     # displacement2velocity!(stokes, dt)
 
-    εbg          = extension
+    εbg = extension
     apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
 
     flow_bcs!(stokes, flow_bcs) # apply boundary conditions
@@ -340,7 +362,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # if it does not exist, make folder where figures are stored
     if plotting
         if do_vtk
-            vtk_dir      = joinpath(figdir, "vtk")
+            vtk_dir = joinpath(figdir, "vtk")
             take(vtk_dir)
         end
         take(figdir)
@@ -350,13 +372,13 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
 
     local Vx_v, Vy_v
     if do_vtk
-        Vx_v = @zeros(ni.+1...)
-        Vy_v = @zeros(ni.+1...)
+        Vx_v = @zeros(ni .+ 1...)
+        Vy_v = @zeros(ni .+ 1...)
     end
 
-    T_buffer    = @zeros(ni.+1)
+    T_buffer = @zeros(ni .+ 1)
     Told_buffer = similar(T_buffer)
-    dt₀         = similar(stokes.P)
+    dt₀ = similar(stokes.P)
     for (dst, src) in zip((T_buffer, Told_buffer), (thermal.T, thermal.Told))
         copyinn_x!(dst, src)
     end
@@ -366,20 +388,20 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # fig = let
     #     Yv = [y for x in xvi[1], y in xvi[2]][:]
     #     Y = [y for x in xci[1], y in xci[2]][:]
-    #     fig = Figure(; size=(1200, 900))
-    #     ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
-    #     ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Density")
+    #     fig = Figure(; size = (1200, 900))
+    #     ax1 = Axis(fig[1, 1]; aspect = 2 / 3, title = "T")
+    #     ax2 = Axis(fig[1, 2]; aspect = 2 / 3, title = "Density")
     #     scatter!(
     #         ax1,
     #         Array(thermal.T[2:(end - 1), :][:]),
-    #         Yv./1e3,
+    #         Yv ./ 1.0e3,
     #     )
     #     # lines!(
     #     scatter!(
     #         ax2,
-    #         Array(stokes.P[:]./1e6),
-    #         # Array(ρg[2][:]./9.81),
-    #         Y./1e3,
+    #         # Array(stokes.P[:]./1e6),
+    #         Array(ρg[2][:] ./ 9.81),
+    #         Y ./ 1.0e3,
     #     )
     #     hideydecorations!(ax2)
     #     # save(joinpath(figdir, "initial_profile.png"), fig)
@@ -405,13 +427,16 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     V_erupt_fast = -V_total/3
     V_max_eruptable = V_total/2
     ΔPc = 20e6 # 20MPa
+    VEI_array = Int[]
+    eruption_times = Float64[]
+    eruption_counters = Int[]
 
     depth = [y for x in xci[1], y in xci[2]]
 
     while it < 150 #000 # run only fo r 5 Myrs
-        if it == 1
-        P_lith .= stokes.P
-        end
+        # if it == 1
+        # P_lith .= stokes.P
+        # end
 
         # if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ * 5
         #     iterMax += 10e3
@@ -421,21 +446,21 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         #     iterMax = 150e3
         # end
 
-        if progressiv_extension
-            if it > 4 && round(t/(3600 * 24 *365.25); digits=2) >= 6e3*interval
-                if interval ==1
-                    εbg = 1e-15
-                    extension = 1e-15
-                else
-                    εbg += extension
-                    εbg = min(εbg, 5*extension)
-                end
-                println("Progressivly increased extension to $εbg")
-                apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
-                flow_bcs!(stokes, flow_bcs) # apply boundary conditions
-                update_halo!(@velocity(stokes)...)
-            end
-        end
+        # if progressiv_extension
+        #     if it > 4 && round(t/(3600 * 24 *365.25); digits=2) >= 6e3*interval
+        #         if interval ==1
+        #             εbg = 1e-15
+        #             extension = 1e-15
+        #         else
+        #             εbg += extension
+        #             εbg = min(εbg, 5*extension)
+        #         end
+        #         println("Progressivly increased extension to $εbg")
+        #         apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
+        #         flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+        #         update_halo!(@velocity(stokes)...)
+        #     end
+        # end
 
         # interpolate fields from particle to grid vertices
         particle2grid!(T_buffer, pT, xvi, particles)
@@ -479,6 +504,12 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3",(V_total)u"m^3")); digits=5)) km³")
                 println("Erupted Volume: $(round(ustrip.(uconvert(u"km^3",(V_erupt)u"m^3")); digits=2)) km³")
 
+                # Compute VEI and update arrays
+                VEI = compute_VEI!(abs(V_erupt))
+                push!(VEI_array, VEI)
+                push!(eruption_times, (t/(3600 * 24 *365.25)/1e3))
+                push!(eruption_counters, eruption_counter)
+
             # if any(((Array(stokes.P) .- Array(P_lith))) .< ΔPc .&& ϕ_m .≥ 0.3 .&& depth .≤ -2500)
             elseif eruption == false && any(((Array(stokes.P) .- Array(P_lith))) .< ΔPc .&& Array(ϕ_m) .≥ 0.3 .&& depth .≤ -2500)
                 println("Adding volume to the chamber ")
@@ -504,7 +535,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         stress2grid!(stokes, pτ, xvi, xci, particles)
 
         t_stokes = @elapsed begin
-        iters = solve_VariationalStokes!(
+        solve_VariationalStokes!(
             stokes,
             pt_stokes,
             di,
@@ -520,6 +551,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 iterMax          = it < 3 || eruption == true ? 300e3 : iterMax,
                 nout             = 2e3,
                 viscosity_cutoff = viscosity_cutoff,
+                # free_surface    = true,
             )
         )
         end
@@ -539,6 +571,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 eruption = false
             end
         else
+            # dtmax = 5e2 * 3600 * 24 * 365.25
             dtmax = 1e3 * 3600 * 24 * 365.25
         end
         dt    = compute_dt(stokes, di, dtmax)
@@ -621,7 +654,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 η_eff = @. stokes.τ.II / (2*stokes.ε.II)
                 ##
                 if igg.me == 0 && it == 1
-                    metadata(pwd(), checkpoint, basename(@__FILE__), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__,"Caldera_rheology.jl"))
+                    metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__,"Caldera_rheology.jl"))
                 end
                 checkpointing = joinpath(checkpoint, "checkpoint_$(it)")
                 checkpointing_jld2(checkpointing, stokes, thermal, t, dt, igg)
@@ -690,7 +723,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 # Plot temperature
                 h1  = heatmap!(ax1, xvi[1].*1e-3, xvi[2].*1e-3, Array(thermal.T[2:end-1,:].-273) , colormap=:batlow)
                 # Plot velocity
-                h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3,ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")) , colormap=:vik, colorrange= (-maximum(ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s"))), maximum(ustrip(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")))))
+                h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3,ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")) , colormap=:vik)#, colorrange= (-maximum(ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s"))), maximum(ustrip(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")))))
                 scatter!(ax2, Array(chain_x), Array(chain_y), color=:red, markersize = 3)
                 # arrows!(
                 #     ax2,
@@ -756,11 +789,33 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 fig1 = let
                     fig = Figure(; size=(1200, 900))
                     ax  = Axis(fig[1, 1];title="Drucker Prager")
-                    lines!(ax,[0e6, maximum(stokes.P)]./1e6,[10e6; (maximum(stokes.P)*sind(rheology[1].CompositeRheology[1].elements[end].ϕ.val) - rheology[1].CompositeRheology[1].elements[end].C.val*cosd(rheology[1].CompositeRheology[1].elements[end].ϕ.val))]./1e6, color=:black, linewidth=2)
+                    lines!(ax,[0e6, maximum(stokes.P)]./1e6,[10e6*cosd(rheology[1].CompositeRheology[1].elements[end].ϕ.val) ; (maximum(stokes.P)*sind(rheology[1].CompositeRheology[1].elements[end].ϕ.val) + rheology[1].CompositeRheology[1].elements[end].C.val*cosd(rheology[1].CompositeRheology[1].elements[end].ϕ.val))]./1e6, color=:black, linewidth=2)
                     s1=scatter!(ax, Array(stokes.P./1e6)[:], Array(stokes.τ.II./1e6)[:]; color=Array(stokes.R.RP)[:], colormap=:roma, markersize=3)
                     Colorbar(fig[1,2], s1)
                     fig
                     save(joinpath(figdir, "DruckerPrager_$it.png"), fig)
+                end
+                fig2 = let
+                    if eruption == true
+                    fig = Figure(; size=(1200, 900))
+                    ax1 = Axis(fig[1, 1]; title="VEI over Time - Eruption total = $eruption_counter", xlabel="Time [Kyrs]", ylabel="VEI",
+                    titlesize=40,
+                    yticklabelsize=25,
+                    xticklabelsize=25,
+                    xlabelsize=25,
+                    ylabelsize=25)
+                    ax2 = Axis(fig[1, 1], yaxisposition = :right, ylabel = "Erupted volume [km³]",yscale = log10,
+                    yticklabelsize=25,
+                    xticklabelsize=25,
+                    xlabelsize=25,
+                    ylabelsize=25)
+                    scatterlines!(ax1, eruption_times, VEI_array, color=:blue, markersize=VEI_array*5)
+                    ylims!(ax1, 0, 8.5)
+                    ylims!(ax2, 0.00001, 1100)
+                    hidexdecorations!(ax2)
+                    fig
+                    save(joinpath(figdir, "eruption_data.png"), fig)
+                    end
                 end
             end
             # ------------------------------
@@ -772,7 +827,7 @@ end
 
 ## END OF MAIN SCRIPT ----------------------------------------------------------------
 const plotting = true
-const progressiv_extension = true
+const progressiv_extension = false
 do_vtk   = true # set to true to generate VTK files for ParaView
 
 # conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
@@ -780,7 +835,7 @@ do_vtk   = true # set to true to generate VTK files for ParaView
 # figdir is defined as Systematics_depth_radius_ar_extension
 # figdir   = "Systematics/$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
 figdir   = "Systematics/Caldera2D_$(today())"
-n        = 256
+n        = 128
 nx, ny   = n, n >> 1
 
 li, origin, phases_GMG, T_GMG, _,  V_total, V_eruptible, layers, air_phase = setup2D(
@@ -789,13 +844,13 @@ li, origin, phases_GMG, T_GMG, _,  V_total, V_eruptible, layers, air_phase = set
     dimensions     = (40e0, 20e0), # extent in x and y in km
     flat           = false, # flat or volcano cone
     chimney        = true, # conduit or not
-    layers         = 3, # number of layers
+    layers         = 1, # number of layers
     volcano_size   = (3e0, 9e0),    # height, radius
     conduit_radius = 1e-2, # radius of the conduit
     chamber_T      = 900e0, # temperature of the chamber
     # chamber_depth  = depth, # depth of the chamber
     # chamber_radius = radius, # radius of the chamber
-    # aspect_x       = ar, # aspect ratio of the chamber
+    # aspect_x       = 2.3, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
@@ -804,4 +859,4 @@ else
     igg
 end
 
-main(li, origin, phases_GMG, T_GMG, igg, ; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = 1e-15, cutoff_visc = (1e17, 1e23), V_total = V_total, V_eruptible = V_eruptible, layers=layers, air_phase=air_phase, progressiv_extension = progressiv_extension, plotting = plotting);
+main(li, origin, phases_GMG, T_GMG, igg, ; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = extension, cutoff_visc = (1e17, 1e23), V_total = V_total, V_eruptible = V_eruptible, layers=layers, air_phase=air_phase, progressiv_extension = progressiv_extension, plotting = plotting);
