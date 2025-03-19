@@ -231,8 +231,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # ----------------------------------------------------
 
     # Physical properties using GeoParams ----------------
-    rheology            = init_rheologies(layers; incompressible=false, magma=false)
-    rheology_incomp       = init_rheologies(layers; incompressible=true, magma=false)
+    rheology            = init_rheologies(layers; incompressible=false, magma=true)
+    rheology_incomp       = init_rheologies(layers; incompressible=true, magma=true)
     dt_time             = 1e3 * 3600 * 24 * 365
     κ                   = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val)) # thermal diffusivity                                 # thermal diffusivity
     dt_diff             = 0.5 * min(di...)^2 / κ / 2.01
@@ -292,7 +292,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
-    pt_stokes = PTStokesCoeffs(li, di; ϵ = 1.0e-4, Re = 15π, r = 0.7, CFL = 0.98 / √2.1) # Re=3π, r=0.7
+    pt_stokes = PTStokesCoeffs(li, di; ϵ = 1.0e-4, Re = 3π, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
     # ----------------------------------------------------
 
     # TEMPERATURE PROFILE --------------------------------
@@ -431,7 +431,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
     eruption_times = Float64[]
     eruption_counters = Int[]
 
-    depth = [y for x in xci[1], y in xci[2]]
+    depth = [y for x in xci[1], y in xci[2]];
 
     while it < 150 #000 # run only fo r 5 Myrs
         if it == 1
@@ -551,7 +551,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 iterMax          = it < 3 || eruption == true ? 300e3 : iterMax,
                 nout             = 2e3,
                 viscosity_cutoff = viscosity_cutoff,
-                # free_surface    = true,
             )
         )
         end
@@ -560,7 +559,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
 
         println("Stokes solver time             ")
         println("   Total time:      $t_stokes s")
-        println("Extrema T[C]: $(extrema(thermal.T.-273))")
+        println("Extrema T[C]: $(extrema(thermal.T .- 273))")
         tensor_invariant!(stokes.ε)
         tensor_invariant!(stokes.ε_pl)
         if er_it > 4
@@ -576,11 +575,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         end
         dt    = compute_dt(stokes, di, dtmax)
 
-        println("dt = $(dt/(3600 * 24 *365.25)) years")
+        println("dt = $(dt / (3600 * 24 * 365.25)) years")
         # ------------------------------
 
         # Thermal solver ---------------
-          heatdiffusion_PT!(
+        heatdiffusion_PT!(
             thermal,
             pt_thermal,
             thermal_bc,
@@ -589,22 +588,22 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
             dt,
             di;
             kwargs = (
-                igg     = igg,
-                phase   = phase_ratios,
-                iterMax = 100e3,
-                nout    = 1e2,
+                igg = igg,
+                phase = phase_ratios,
+                iterMax = 100.0e3,
+                nout = 1.0e2,
                 verbose = true,
             )
         )
         thermal.ΔT .= thermal.T .- thermal.Told
-        vertex2center!(thermal.ΔTc, thermal.ΔT[2:end-1, :])
+        vertex2center!(thermal.ΔTc, thermal.ΔT[2:(end - 1), :])
 
         subgrid_characteristic_time!(
             subgrid_arrays, particles, dt₀, phase_ratios, rheology, thermal, stokes, xci, di
         )
         centroid2particle!(subgrid_arrays.dt₀, xci, dt₀, particles)
         subgrid_diffusion!(
-            pT, thermal.T, thermal.ΔT, subgrid_arrays, particles, xvi,  di, dt
+            pT, thermal.T, thermal.ΔT, subgrid_arrays, particles, xvi, di, dt
         )
         # ------------------------------
 
@@ -630,7 +629,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
 
         compute_melt_fraction!(
-            ϕ_m, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
+            ϕ_m, phase_ratios, rheology, (T = thermal.Tc, P = stokes.P)
         )
 
         # update phase ratios
@@ -641,7 +640,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
         tensor_invariant!(stokes.τ)
 
         @show it += 1
-        t        += dt
+        t += dt
 
         if it == 1
             stokes.EII_pl .= 0.0
@@ -723,7 +722,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                 # Plot temperature
                 h1  = heatmap!(ax1, xvi[1].*1e-3, xvi[2].*1e-3, Array(thermal.T[2:end-1,:].-273) , colormap=:batlow)
                 # Plot velocity
-                h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3,ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")) , colormap=:davos, colorrange= extrema(ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s"))))#(-maximum(ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s"))), maximum(ustrip(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")))))
+                h2  = heatmap!(ax2, xvi[1].*1e-3, xvi[2].*1e-3,ustrip.(uconvert.(u"cm/yr",Array(stokes.V.Vy)u"m/s")) , colormap=:vik)#, colorrange= (-(ustrip.(1u"cm/yr")), (ustrip(1u"cm/yr"))))
                 scatter!(ax2, Array(chain_x), Array(chain_y), color=:red, markersize = 3)
                 # arrows!(
                 #     ax2,
@@ -809,7 +808,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx=16, ny=16, figdir="figs2D",
                     xticklabelsize=25,
                     xlabelsize=25,
                     ylabelsize=25)
-                    scatterlines!(ax1, eruption_times, VEI_array, colormap=:lipari, markersize=VEI_array*5)
+                    scatterlines!(ax1, eruption_times, VEI_array,
+                        color=VEI_array,
+                        colormap=:lipari10,
+                        markersize=VEI_array*5)
                     ylims!(ax1, 0, 8.5)
                     ylims!(ax2, 0.00001, 1100)
                     hidexdecorations!(ax2)
