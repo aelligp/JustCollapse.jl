@@ -407,6 +407,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     eruption_times = Float64[]
     eruption_counters = Int[]
     volume = Float64[]
+    volume_times = Float64[]
     depth = [y for x in xci[1], y in xci[2]]
 
     while it < 150 #000 # run only fo r 5 Myrs
@@ -485,7 +486,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 push!(VEI_array, VEI)
                 push!(eruption_times, (t / (3600 * 24 * 365.25) / 1.0e3))
                 push!(eruption_counters, eruption_counter)
-                push!(volume, V_total)
 
                 # if any(((Array(stokes.P) .- Array(P_lith))) .< ΔPc .&& ϕ_m .≥ 0.3 .&& depth .≤ -2500)
             elseif eruption == false && any(((Array(stokes.P) .- Array(P_lith))) .< ΔPc .&& Array(ϕ_m) .≥ 0.3 .&& depth .≤ -2500)
@@ -498,7 +498,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                     V_total, V_erupt = make_it_go_boom!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                     println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
                     println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
-                    push!(volume, V_total)
                 end
                 # else
                 #     println("Resetting Q to 0.0")
@@ -619,6 +618,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
 
         @show it += 1
         t += dt
+        if igg.me == 0
+            push!(volume, V_total)
+            push!(volume_times, (t / (3600 * 24 * 365.25) / 1.0e3))
+        end
 
         if it == 1
             stokes.EII_pl .= 0.0
@@ -633,9 +636,9 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
                 end
-                checkpointing = joinpath(checkpoint, "checkpoint_$(it)")
-                checkpointing_jld2(checkpointing, stokes, thermal, t, dt, igg)
-                checkpointing_particles(checkpointing, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt)
+                # checkpointing = joinpath(checkpoint, "checkpoint_$(it)")
+                # checkpointing_jld2(checkpointing, stokes, thermal, t, dt, igg)
+                # checkpointing_particles(checkpointing, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt)
                 (; η_vep, η) = stokes.viscosity
                 if do_vtk
                     velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
@@ -702,16 +705,16 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 # Plot velocity
                 h2 = heatmap!(ax2, xvi[1] .* 1.0e-3, xvi[2] .* 1.0e-3, ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")), colormap = :vik) #, colorrange= (-(ustrip.(1u"cm/yr")), (ustrip(1u"cm/yr"))))
                 scatter!(ax2, Array(chain_x), Array(chain_y), color = :red, markersize = 3)
-                # arrows!(
-                #     ax2,
-                #     xvi[1][1:5:end-1] .* 1e-3,
-                #     xvi[2][1:5:end-1] .* 1e-3,
-                #     ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vx)u"m/s"))[1:5:end-1, 1:5:end-1],
-                #     ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s"))[1:5:end-1, 1:5:end-1],
-                #     lengthscale = 1 / max(maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s"))),
-                #                           maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")))),
-                #     color = :red,
-                # )
+                arrows!(
+                    ax2,
+                    xvi[1][1:div(nx, 20):end-1] .* 1e-3,  # Adjust spacing based on resolution
+                    xvi[2][1:div(ny, 20):end-1] .* 1e-3,
+                    ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vx)u"m/s"))[1:div(nx, 20):end-1, 1:div(ny, 20):end-1],
+                    ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s"))[1:div(nx, 20):end-1, 1:div(ny, 20):end-1],
+                    lengthscale = 1 / max(maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s"))),
+                                          maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")))),
+                    color = :red,
+                )
                 # Plot 2nd invariant of stress
                 # h3  = heatmap!(ax3, xci[1].*1e-3, xci[2].*1e-3, Array(log10.(stokes.ε_pl.II)) , colormap=:batlow)
                 h3 = heatmap!(ax3, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(stokes.τ.II) ./ 1.0e6, colormap = :batlow)
@@ -719,6 +722,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 # h4  = heatmap!(ax4, xci[1].*1e-3, xci[2].*1e-3, Array(log10.(stokes.ε.II)) , colormap=:lipari)
                 h4 = heatmap!(ax4, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(log10.(η_eff)), colorrange = log10.(viscosity_cutoff), colormap = :batlow)
                 h5 = heatmap!(ax5, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(stokes.EII_pl), colormap = :batlow)
+                contour!(ax5, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(ϕ_m), levels = [0.5, 0.75, 1.0], color = :white, linewidth = 1.5, labels=true)
+
                 # h6  = heatmap!(ax6, xci[1].*1e-3, xci[2].*1e-3, Array(ϕ_m) , colormap=:lipari, colorrange=(0.0,1.0))
                 h6 = heatmap!(ax6, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, (Array(stokes.P) .- Array(P_lith)) ./ 1.0e6, colormap = :roma)
 
@@ -772,6 +777,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                     fig
                     save(joinpath(figdir, "DruckerPrager_$it.png"), fig)
                 end
+
                 fig2 = let
                     if eruption == true
                         fig = Figure(; size = (1200, 900))
@@ -803,21 +809,22 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                         save(joinpath(figdir, "eruption_data.png"), fig)
                         save(joinpath(figdir, "eruption_data.svg"), fig)
 
-                        fig1 = Figure(; size = (1200, 900))
-                        ax1 = Axis(
-                            fig1[1, 1]; title = L"Volume\ change\ over\ time", xlabel = L"Time\ [Kyrs]", ylabel = L"Volume\ [km³]",
-                            titlesize = 40,
-                            yticklabelsize = 25,
-                            xticklabelsize = 25,
-                            xlabelsize = 25,
-                            ylabelsize = 25
-                        )
-                        scatterlines!(ax1, eruption_times, (round.(ustrip.(uconvert.(u"km^3", (volume)u"m^3")); digits = 5)), color = :blue, markersize = 5)
-                        fig1
-                        save(joinpath(figdir, "volume_change.png"), fig1)
-                        save(joinpath(figdir, "volume_change.svg"), fig1)
-
                     end
+                end
+                fig3 = let
+                    fig1 = Figure(; size = (1200, 900))
+                    ax1 = Axis(
+                        fig1[1, 1]; title = L"Volume\ change\ over\ time", xlabel = L"Time\ [Kyrs]", ylabel = L"Volume\ [km³]",
+                        titlesize = 40,
+                        yticklabelsize = 25,
+                        xticklabelsize = 25,
+                        xlabelsize = 25,
+                        ylabelsize = 25
+                    )
+                    scatterlines!(ax1, volume_times, (round.(ustrip.(uconvert.(u"km^3", (volume)u"m^3")); digits = 5)), color = :blue, markersize = 5)
+                    fig1
+                    save(joinpath(figdir, "volume_change.png"), fig1)
+                    save(joinpath(figdir, "volume_change.svg"), fig1)
                 end
             end
             # ------------------------------
@@ -837,7 +844,7 @@ do_vtk = true # set to true to generate VTK files for ParaView
 # figdir is defined as Systematics_depth_radius_ar_extension
 # figdir   = "Systematics/$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
 figdir = "Systematics/Caldera2D_$(today())"
-n = 320
+n = 256
 nx, ny = n, n >> 1
 
 li, origin, phases_GMG, T_GMG, _, V_total, V_eruptible, layers, air_phase = setup2D(
