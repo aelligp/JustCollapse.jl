@@ -83,7 +83,6 @@ function apply_pure_shear(Vx, Vy, εbg, xvi, lx, ly)
 
     return nothing
 end
-## END OF HELPER FUNCTION ------------------------------------------------------------
 
 function extract_topo_from_GMG_phases(phases_GMG, xvi, air_phase)
     topo_idx = [findfirst(x -> x == air_phase, row) - 1 for row in eachrow(phases_GMG)]
@@ -103,8 +102,6 @@ function thermal_anomaly!(Temp, Ω_T, phase_ratios, T_chamber, T_air, conduit_ph
 
         # if conduit_ratio_ij > 0.5 || magma_ratio_ij > 0.5
         if anomaly_ratio_ij > 0.5
-            # if conduit_ratio_ij > 0.5 || anomaly_ratio_ij > 0.5
-            # if isone(conduit_ratio_ij) || isone(magma_ratio_ij)
             Ω_T[i + 1, j] = Temp[i + 1, j] = T_chamber
         elseif magma_ratio_ij > 0.5
             Ω_T[i + 1, j] = Temp[i + 1, j] = T_chamber - 100.0e0
@@ -131,14 +128,11 @@ function plot_particles(particles, pPhases, chain)
     p = particles.coords
     # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
     ppx, ppy = p
-    # pxv = ustrip.(dimensionalize(ppx.data[:], km, CharDim))
-    # pyv = ustrip.(dimensionalize(ppy.data[:], km, CharDim))
     pxv = ppx.data[:] ./ 1.0e3
     pyv = ppy.data[:] ./ 1.0e3
     clr = pPhases.data[:]
     chain_x = chain.coords[1].data[:] ./ 1.0e3
     chain_y = chain.coords[2].data[:] ./ 1.0e3
-    # clr = pϕ.data[:]
     idxv = particles.index.data[:]
     f, ax, h = scatter(Array(pxv[idxv]), Array(pyv[idxv]), color = Array(clr[idxv]), colormap = :roma, markersize = 1)
     scatter!(ax, Array(chain_x), Array(chain_y), color = :red, markersize = 1)
@@ -158,11 +152,7 @@ function make_it_go_boom!(Q, cells, ϕ, V_erupt, V_tot, di, phase_ratios, magma_
 
         if (anomaly_ratio_ij > 0.5 || magma_ratio_ij > 0.5) && ϕ_ij ≥ 0.5
             # if (conduit_ratio_ij > 0.5 || anomaly_ratio_ij > 0.5 || magma_ratio_ij > 0.5) && ϕ_ij ≥ 0.3
-            # Q[i,j] = V_erupt * inv(V_tot) * inv(dx*dy)
-            # Q[i,j] = V_erupt * inv(V_tot)
             Q[i, j] = (V_erupt * inv(V_tot)) * ((total_fraction * cells_ij) * inv(numcells(cells)))
-            # println("Q: $(Q[i, j])")
-            # println(total_fraction)
         end
         return nothing
     end
@@ -219,6 +209,8 @@ function compute_VEI!(V_erupt)
         return 8
     end
 end
+## END OF HELPER FUNCTION ------------------------------------------------------------
+
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
 function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "figs2D", do_vtk = false, extension = 1.0e-15 * 0, cutoff_visc = (1.0e16, 1.0e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase = 6, progressiv_extension = false, plotting = true)
@@ -231,8 +223,9 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     # ----------------------------------------------------
 
     # Physical properties using GeoParams ----------------
-    rheology = init_rheologies(layers; incompressible = false, magma = true)
-    rheology_incomp = init_rheologies(layers; incompressible = true, magma = true)
+    oxd_wt = (61.6, 0.9, 17.7, 3.65, 2.35, 5.38, 4.98, 1.27, 3.0)
+    rheology = init_rheologies(layers, oxd_wt; incompressible = false, magma = true)
+    rheology_incomp = init_rheologies(layers, oxd_wt; incompressible = true, magma = true)
     dt_time = 1.0e3 * 3600 * 24 * 365
     κ = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val)) # thermal diffusivity                                 # thermal diffusivity
     dt_diff = 0.5 * min(di...)^2 / κ / 2.01
@@ -292,7 +285,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
-    pt_stokes = PTStokesCoeffs(li, di; ϵ = 1.0e-4, Re = 3π, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
+    pt_stokes = PTStokesCoeffs(li, di; ϵ = 1.0e-4, Re = 3.0, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
     # ----------------------------------------------------
 
     # TEMPERATURE PROFILE --------------------------------
@@ -385,28 +378,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     grid2particle!(pT, xvi, T_buffer, particles)
 
     # ## Plot initial T and P profile
-    # fig = let
-    #     Yv = [y for x in xvi[1], y in xvi[2]][:]
-    #     Y = [y for x in xci[1], y in xci[2]][:]
-    #     fig = Figure(; size = (1200, 900))
-    #     ax1 = Axis(fig[1, 1]; aspect = 2 / 3, title = "T")
-    #     ax2 = Axis(fig[1, 2]; aspect = 2 / 3, title = "Density")
-    #     scatter!(
-    #         ax1,
-    #         Array(thermal.T[2:(end - 1), :][:]),
-    #         Yv ./ 1.0e3,
-    #     )
-    #     # lines!(
-    #     scatter!(
-    #         ax2,
-    #         # Array(stokes.P[:]./1e6),
-    #         Array(ρg[2][:] ./ 9.81),
-    #         Y ./ 1.0e3,
-    #     )
-    #     hideydecorations!(ax2)
-    #     # save(joinpath(figdir, "initial_profile.png"), fig)
-    #     fig
-    # end
+    fig = let
+        compo = [oxd_wt[1] (oxd_wt[7]+oxd_wt[8])]
+        fig=Plot_TAS_diagram(compo; sz=(1000, 1000))
+        save(joinpath(figdir, "TAS_diagram.png"), fig)
+    end
 
     τxx_v = @zeros(ni .+ 1...)
     τyy_v = @zeros(ni .+ 1...)
@@ -430,7 +406,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     VEI_array = Int[]
     eruption_times = Float64[]
     eruption_counters = Int[]
-
+    volume = Float64[]
     depth = [y for x in xci[1], y in xci[2]]
 
     while it < 150 #000 # run only fo r 5 Myrs
@@ -509,6 +485,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 push!(VEI_array, VEI)
                 push!(eruption_times, (t / (3600 * 24 * 365.25) / 1.0e3))
                 push!(eruption_counters, eruption_counter)
+                push!(volume, V_total)
 
                 # if any(((Array(stokes.P) .- Array(P_lith))) .< ΔPc .&& ϕ_m .≥ 0.3 .&& depth .≤ -2500)
             elseif eruption == false && any(((Array(stokes.P) .- Array(P_lith))) .< ΔPc .&& Array(ϕ_m) .≥ 0.3 .&& depth .≤ -2500)
@@ -521,6 +498,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                     V_total, V_erupt = make_it_go_boom!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                     println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
                     println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
+                    push!(volume, V_total)
                 end
                 # else
                 #     println("Resetting Q to 0.0")
@@ -823,6 +801,22 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                         hidexdecorations!(ax2)
                         fig
                         save(joinpath(figdir, "eruption_data.png"), fig)
+                        save(joinpath(figdir, "eruption_data.svg"), fig)
+
+                        fig1 = Figure(; size = (1200, 900))
+                        ax1 = Axis(
+                            fig1[1, 1]; title = L"Volume\ change\ over\ time", xlabel = L"Time\ [Kyrs]", ylabel = L"Volume\ [km³]",
+                            titlesize = 40,
+                            yticklabelsize = 25,
+                            xticklabelsize = 25,
+                            xlabelsize = 25,
+                            ylabelsize = 25
+                        )
+                        scatterlines!(ax1, eruption_times, (round.(ustrip.(uconvert.(u"km^3", (volume)u"m^3")); digits = 5)), color = :blue, markersize = 5)
+                        fig1
+                        save(joinpath(figdir, "volume_change.png"), fig1)
+                        save(joinpath(figdir, "volume_change.svg"), fig1)
+
                     end
                 end
             end
@@ -843,7 +837,7 @@ do_vtk = true # set to true to generate VTK files for ParaView
 # figdir is defined as Systematics_depth_radius_ar_extension
 # figdir   = "Systematics/$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
 figdir = "Systematics/Caldera2D_$(today())"
-n = 128
+n = 320
 nx, ny = n, n >> 1
 
 li, origin, phases_GMG, T_GMG, _, V_total, V_eruptible, layers, air_phase = setup2D(

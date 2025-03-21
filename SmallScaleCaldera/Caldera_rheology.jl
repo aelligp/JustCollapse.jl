@@ -1,7 +1,7 @@
 using GeoParams.Dislocation
 using GeoParams.Diffusion
 
-function init_rheologies(layers; linear = false, incompressible = true, plastic = true, magma = false)
+function init_rheologies(layers, oxd_wt; linear = false, incompressible = true, plastic = true, magma = false)
 
     η_reg = 1.0e15
     C = plastic ? 10.0e6 : Inf
@@ -10,6 +10,7 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
     soft_C = NonLinearSoftening(; ξ₀ = C, Δ = C / 1.0e5)       # nonlinear softening law
     soft_ϕ = NonLinearSoftening(; ξ₀ = ϕ, Δ = ϕ / 2)       # nonlinear softening law
     pl = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_bot = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ)
     pl_cone = DruckerPrager_regularised(; C = ((C / 2) * rand()), ϕ = (ϕ / 2), η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
     G0 = 25.0e9Pa        # elastic shear modulus
     G_magma = 10.0e9Pa        # elastic shear modulus magma
@@ -20,7 +21,6 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
     β_magma = 1 / el_magma.Kb.val
     Cp = 1050.0
 
-    oxd_wt = (61.6, 0.9, 17.7, 3.65, 2.35, 5.38, 4.98, 1.27, 3.0)
     # magma_visc = magma ? ViscosityPartialMelt_Costa_etal_2009(η=LinearViscous(η=1e15)) : LinearViscous(η=1e15)
     magma_visc = magma ? GiordanoMeltViscosity(oxd_wt = oxd_wt, η0 = 1.0e13Pas) : LinearViscous(η = 1.0e15)
     # conduit_visc = magma  ? ViscosityPartialMelt_Costa_etal_2009(η=LinearViscous(η=1e15)) : LinearViscous(η=1e15)
@@ -42,7 +42,7 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
         Conductivity = ConstantConductivity(; k = 3.0),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone)),
         # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e23), el, pl)),
-        Melting = MeltingParam_Smooth3rdOrder(a = 517.9, b = -1619.0, c = 1699.0, d = -597.4), #mafic melting curve
+        Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
         Gravity = ConstantGravity(; g = 9.81),
     )
 
@@ -54,7 +54,7 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
         Conductivity = ConstantConductivity(; k = 3.0),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone)),
         # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e23), el, pl_cone)),
-        Melting = MeltingParam_Smooth3rdOrder(a = 517.9, b = -1619.0, c = 1699.0, d = -597.4), #mafic melting curve
+        Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
         Gravity = ConstantGravity(; g = 9.81),
     )
 
@@ -66,7 +66,7 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
         Conductivity = ConstantConductivity(; k = 3.0),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone)),
         # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e23), el, pl_cone)),
-        Melting = MeltingParam_Smooth3rdOrder(a = 517.9, b = -1619.0, c = 1699.0, d = -597.4), #mafic melting curve
+        Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
         Gravity = ConstantGravity(; g = 9.81),
     )
 
@@ -78,7 +78,7 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
         Conductivity = ConstantConductivity(; k = 3.0),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone)),
         # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e23), el, pl_cone)),
-        Melting = MeltingParam_Smooth3rdOrder(a = 517.9, b = -1619.0, c = 1699.0, d = -597.4), #mafic melting curve
+        Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
         Gravity = ConstantGravity(; g = 9.81),
     )
 
@@ -90,7 +90,7 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
         Conductivity = ConstantConductivity(; k = 3.0),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone)),
         # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e23), el, pl_cone)),
-        Melting = MeltingParam_Smooth3rdOrder(a = 517.9, b = -1619.0, c = 1699.0, d = -597.4), #mafic melting curve
+        Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
         Gravity = ConstantGravity(; g = 9.81),
     )
 
@@ -108,7 +108,7 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
             Conductivity = ConstantConductivity(; k = 3.0),
             CompositeRheology = CompositeRheology((disl_top, el, pl)),
             # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e23), el, pl)),
-            Melting = MeltingParam_Smooth3rdOrder(a = 517.9, b = -1619.0, c = 1699.0, d = -597.4), #mafic melting curve
+            Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
             Gravity = ConstantGravity(; g = 9.81),
         ),
         # Name = "Lower crust",
@@ -117,9 +117,9 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
             Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),
             HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
             Conductivity = ConstantConductivity(; k = 3.0),
-            CompositeRheology = CompositeRheology((disl_bot, el, pl)),
+            CompositeRheology = CompositeRheology((disl_bot, el, pl_bot)),
             # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e21), el, pl)),
-            Melting = MeltingParam_Smooth3rdOrder(a = 517.9, b = -1619.0, c = 1699.0, d = -597.4), #mafic melting curve
+            Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
             Gravity = ConstantGravity(; g = 9.81),
         ),
 
@@ -128,7 +128,7 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
             Phase = 3,
             # Density           = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt=T_Density(ρ0=2.4e3, T0=273.15)),
             # Density           = ConstantDensity(ρ=2.7e3),
-            Density = DensityX(oxd_wt = oxd_wt),
+            Density = Melt_DensityX(oxd_wt = oxd_wt),
             # Density           = PT_Density(; ρ0=2.4e3, T0=273.15, β=β_magma),
             Conductivity = ConstantConductivity(; k = 3.0),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
@@ -141,10 +141,10 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
         SetMaterialParams(;
             Phase = 4,
             # Density           = T_Density(; ρ0=2.2e3, T0=273.15),
-            Density = BubbleFlow_Density(ρgas = ConstantDensity(ρ = 10.0), ρmelt = DensityX(oxd_wt = oxd_wt), c0 = 3.0e-2),
+            Density = BubbleFlow_Density(ρgas = ConstantDensity(ρ = 10.0), ρmelt = Melt_DensityX(oxd_wt = oxd_wt), c0 = 3.0e-2),
             # Density           = BubbleFlow_Density(ρgas=ConstantDensity(ρ=10.0), ρmelt=MeltDependent_Density(ρsolid=T_Density(ρ0=2.65e3, T0=273.15), ρmelt= ConstantDensity(ρ=2.4e3)), c0=4e-2),
             # Density           = ConstantDensity(ρ=2.7e3),
-            # Density           = DensityX(oxd_wt= oxd_wt),
+            # Density           = Melt_DensityX(oxd_wt= oxd_wt),
             Conductivity = ConstantConductivity(; k = 3.0),
             # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
             HeatCapacity = Latent_HeatCapacity(Cp = ConstantHeatCapacity(), Q_L = 350.0e3J / kg),
@@ -163,7 +163,7 @@ function init_rheologies(layers; linear = false, incompressible = true, plastic 
             Conductivity = ConstantConductivity(; k = 3.0),
             CompositeRheology = CompositeRheology((disl_top, el, pl)),
             # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e23), el, pl)),
-            Melting = MeltingParam_Smooth3rdOrder(a = 517.9, b = -1619.0, c = 1699.0, d = -597.4), #mafic melting curve
+            Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
             Gravity = ConstantGravity(; g = 9.81),
         ),
         # Name              = "StickyAir",
@@ -240,5 +240,5 @@ end
 #     Conductivity      = ConstantConductivity(; k  = 3.0),
 #     CompositeRheology = CompositeRheology( (disl_top, el, pl)),
 #     # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e23), el, pl)),
-#     Melting             = MeltingParam_Smooth3rdOrder(a=517.9,  b=-1619.0, c=1699.0, d = -597.4), #mafic melting curve
+# Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
 #     ),
