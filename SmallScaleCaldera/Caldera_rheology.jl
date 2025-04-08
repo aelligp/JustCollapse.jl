@@ -5,13 +5,13 @@ function init_rheologies(layers, oxd_wt; linear = false, incompressible = true, 
 
     η_reg = 1.0e15
     C = plastic ? 10.0e6 : Inf
-    ϕ = 15
+    ϕ = 30
     Ψ = 0.0
     soft_C = NonLinearSoftening(; ξ₀ = C, Δ = C / 1.0e5)       # nonlinear softening law
     soft_ϕ = NonLinearSoftening(; ξ₀ = ϕ, Δ = ϕ / 2)       # nonlinear softening law
     pl = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
     pl_bot = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ)
-    pl_cone = DruckerPrager_regularised(; C = ((C / 2) * rand()), ϕ = (ϕ / 2), η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone = DruckerPrager_regularised(; C = ((C / 2) * rand()), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
     G0 = 25.0e9Pa        # elastic shear modulus
     G_magma = 10.0e9Pa        # elastic shear modulus magma
 
