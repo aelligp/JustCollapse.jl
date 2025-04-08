@@ -721,16 +721,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 # Plot velocity
                 h2 = heatmap!(ax2, xvi[1] .* 1.0e-3, xvi[2] .* 1.0e-3, ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")), colormap = :vik) #, colorrange= (-(ustrip.(1u"cm/yr")), (ustrip(1u"cm/yr"))))
                 scatter!(ax2, Array(chain_x), Array(chain_y), color = :red, markersize = 3)
-                arrows!(
-                    ax2,
-                    xvi[1][1:div(length(xvi[1]), 20):min(end-1, div(length(xvi[1]), 20) * 20)] .* 1e-3,  # Ensure consistent slicing
-                    xvi[2][1:div(length(xvi[2]), 20):min(end-1, div(length(xvi[2]), 20) * 20)] .* 1e-3,
-                    ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vx)u"m/s"))[1:div(length(xvi[1]), 20):min(end-1, div(length(xvi[1]), 20) * 20), 1:div(length(xvi[2]), 20):min(end-1, div(length(xvi[2]), 20) * 20)],
-                    ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s"))[1:div(length(xvi[1]), 20):min(end-1, div(length(xvi[1]), 20) * 20), 1:div(length(xvi[2]), 20):min(end-1, div(length(xvi[2]), 20) * 20)],
-                    lengthscale = 1 / max(maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vx)u"m/s"))),
-                                          maximum(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")))),
-                    color = :red,
-                )
                 # Plot 2nd invariant of stress
                 # h3  = heatmap!(ax3, xci[1].*1e-3, xci[2].*1e-3, Array(log10.(stokes.ε_pl.II)) , colormap=:batlow)
                 h3 = heatmap!(ax3, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(stokes.τ.II) ./ 1.0e6, colormap = :batlow)
