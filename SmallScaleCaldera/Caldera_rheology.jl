@@ -1,5 +1,6 @@
 using GeoParams.Dislocation
 using GeoParams.Diffusion
+using Random
 
 function init_rheologies(layers, oxd_wt; linear = false, incompressible = true, plastic = true, magma = false)
 
