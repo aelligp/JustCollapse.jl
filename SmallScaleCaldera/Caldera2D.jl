@@ -441,13 +441,13 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
             P_lith .= stokes.P
         end
 
-        # if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ * 5
-        #     iterMax += 10e3
-        #     iterMax = min(iterMax, 200e3)
-        #     println("Increasing maximum pseudo timesteps to $iterMax")
-        # else
-        #     iterMax = 150e3
-        # end
+        if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ * 5
+            iterMax += 10e3
+            iterMax = min(iterMax, 200e3)
+            println("Increasing maximum pseudo timesteps to $iterMax")
+        else
+            iterMax = 150e3
+        end
 
         if progressiv_extension
             if it > 4 && round(t/(3600 * 24 *365.25); digits=2) >= 6e3*interval
@@ -515,11 +515,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
                 V_tot = V_total
-                T_addition = 1050+273e0
+                T_addition = 950+273e0
                 V_erupt = (rand(5e-4:1e-4:6e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                 V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
-                compute_thermal_source!(thermal.H, T_addition, 0.4, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
+                compute_thermal_source!(thermal.H, T_addition, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
             end
