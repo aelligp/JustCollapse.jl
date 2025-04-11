@@ -164,6 +164,31 @@ function make_it_go_boom!(Q, threshold, cells, ϕ, V_erupt, V_tot, di, phase_rat
     return V_tot, V_erupt
 end
 
+function make_it_go_boom!(Q, threshold, cells, ϕ, ρg, Δρ, V_erupt, V_tot, di, phase_ratios, magma_phase, anomaly_phase)
+
+    @parallel_indices (i, j) function _make_it_go_boom!(Q, threshold, cells, ϕ, ρg, Δρ, V_erupt, V_tot, dx, dy, center_ratio, magma_phase, anomaly_phase)
+
+        magma_ratio_ij = @index center_ratio[magma_phase, i, j]
+        anomaly_ratio_ij = @index center_ratio[anomaly_phase, i, j]
+        total_fraction = magma_ratio_ij + anomaly_ratio_ij
+        ϕ_ij = ϕ[i, j]
+        cells_ij = cells[i, j]
+        ρg_ij = ρg[i, j]
+
+        if (anomaly_ratio_ij > 0.5 || magma_ratio_ij > 0.5) && ϕ_ij ≥ threshold
+            Q[i, j] =(((Δρ-ρg_ij) * inv(ρg_ij)) + (V_erupt * inv(V_tot))) * ((total_fraction * cells_ij) * inv(numcells(cells)))
+        end
+        return nothing
+    end
+
+    ni = size(phase_ratios.center)
+
+    @parallel (@idx ni) _make_it_go_boom!(Q, threshold, cells, ϕ, ρg, Δρ, V_erupt, V_tot, di..., phase_ratios.center, magma_phase, anomaly_phase)
+    V_tot += V_erupt
+
+    return V_tot, V_erupt
+end
+
 function compute_cells_for_Q!(cells, threshold, phase_ratios, magma_phase, anomaly_phase, melt_fraction)
     @parallel_indices (I...) function _compute_cells_for_Q!(cells, threshold, center_ratio, magma_phase, anomaly_phase, melt_fraction)
         magma_ratio_ij = @index center_ratio[magma_phase, I...]
@@ -310,6 +335,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
     pt_stokes = PTStokesCoeffs(li, di; ϵ = 1.0e-4, Re = 3.0, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
+    # pt_stokes = PTStokesCoeffs(li, di; ϵ = 1.0e-4, Re = 3*√10*π/2, r = 0.5, CFL = 0.8 / √2.1) # Re=3π, r=0.7
 
     # randomize cohesion
     perturbation_C = @rand(ni...)
@@ -498,7 +524,9 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 if (V_total - V_erupt_fast) > 0.0
                     compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                     T_erupt = mean(thermal.Tc[cells .== true])
-                    V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                    ρ_out = mean(ρg[end][cells .== true])
+                    # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                    V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, ρg[end], ρ_out, V_erupt, V_tot, di, phase_ratios, 3, 4)
                     # compute_thermal_source!(thermal.H, T_erupt, 0.4, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 end
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
@@ -517,8 +545,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 V_tot = V_total
                 T_addition = 950+273e0
                 V_erupt = (rand(5e-4:1e-4:6e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                ρ_in = mean(ρg[end][ϕ.center .== 1.0])
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
-                V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, ρg[end], ρ_in, V_erupt, V_tot, di, phase_ratios, 3, 4)
                 compute_thermal_source!(thermal.H, T_addition, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
@@ -879,4 +909,5 @@ else
     igg
 end
 # extension = 0.0
+# cutoff_visc = (1.0e17, 1.0e23)
 main(li, origin, phases_GMG, T_GMG, igg, ; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = extension, cutoff_visc = (1.0e17, 1.0e23), V_total = V_total, V_eruptible = V_eruptible, layers = layers, air_phase = air_phase, progressiv_extension = progressiv_extension, plotting = plotting);

@@ -8,8 +8,8 @@ function init_rheologies(layers, oxd_wt; linear = false, incompressible = true, 
     C = plastic ? 10.0e6 : Inf
     ϕ = 30
     Ψ = 0.0
-    soft_C = NonLinearSoftening(; ξ₀ = C, Δ = C / 2)       # nonlinear softening law
-    soft_ϕ = NonLinearSoftening(; ξ₀ = ϕ, Δ = ϕ / 2)       # nonlinear softening law
+    soft_C = NonLinearSoftening(; ξ₀ = C, Δ = C / 2, σ = 0.001)       # nonlinear softening law
+    soft_ϕ = NonLinearSoftening(; ξ₀ = ϕ, Δ = ϕ / 2, σ = 0.001)       # nonlinear softening law
     pl = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
     pl_bot = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ)
     rng = Xoshiro(1234)
