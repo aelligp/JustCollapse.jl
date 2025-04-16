@@ -849,7 +849,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                             markersize = VEI_array * 5
                         )
                         scatterlines!(
-                            ax2, eruption_times, (round.(ustrip.(uconvert.(u"km³", (erupted_volume)u"m³")); digits = 5)),
+                            ax2, eruption_times, (round.(ustrip.(uconvert.(u"km^3", (erupted_volume)u"m^3")); digits = 5)),
                             color = :blue,
                             markersize = 5
                         )
