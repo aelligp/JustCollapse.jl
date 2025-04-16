@@ -462,6 +462,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     erupted_volume = Float64[]
     volume_times = Float64[]
     overpressure = Float64[]
+    overpressure_t = Float64[]
     # depth = [y for x in xci[1], y in xci[2]]
 
     while it < 500 #000 # run only fo r 5 Myrs
@@ -541,6 +542,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 push!(eruption_times, (t / (3600 * 24 * 365.25) / 1.0e3))
                 push!(eruption_counters, eruption_counter)
                 push!(overpressure, maximum(Array(stokes.P)[pp] .- Array(P_lith)[pp]))
+                push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
 
             elseif eruption == false && any(((Array(stokes.P)[pp] .- Array(P_lith)[pp])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3) #.&& depth .≤ -2500)
                 println("Adding volume to the chamber ")
@@ -557,6 +559,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
                 push!(overpressure, maximum(Array(stokes.P)[pp] .- Array(P_lith)[pp]))
+                push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
             end
         end
 
@@ -888,7 +891,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                         xlabelsize = 25,
                         ylabelsize = 25
                     )
-                    scatterlines!(ax1, volume_times, overpressure./1e6, color = :violet, markersize = 5)
+                    scatterlines!(ax1, overpressure_t, overpressure./1e6, color = :violet, markersize = 5)
                     fig1
                     save(joinpath(figdir, "Overpressure.png"), fig1)
                     save(joinpath(figdir, "Overpressure.svg"), fig1)
