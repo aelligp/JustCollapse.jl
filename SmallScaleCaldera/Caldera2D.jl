@@ -459,7 +459,9 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     eruption_times = Float64[]
     eruption_counters = Int[]
     volume = Float64[]
+    erupted_volume = Float64[]
     volume_times = Float64[]
+    overpressure = Float64[]
     # depth = [y for x in xci[1], y in xci[2]]
 
     while it < 500 #000 # run only fo r 5 Myrs
@@ -535,8 +537,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 # Compute VEI and update arrays
                 VEI = compute_VEI!(abs(V_erupt))
                 push!(VEI_array, VEI)
+                push!(erupted_volume, abs(V_erupt))
                 push!(eruption_times, (t / (3600 * 24 * 365.25) / 1.0e3))
                 push!(eruption_counters, eruption_counter)
+                push!(overpressure, maximum(Array(stokes.P)[pp] .- Array(P_lith)[pp]))
 
             elseif eruption == false && any(((Array(stokes.P)[pp] .- Array(P_lith)[pp])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3) #.&& depth .≤ -2500)
                 println("Adding volume to the chamber ")
@@ -552,6 +556,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 compute_thermal_source!(thermal.H, T_addition, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
+                push!(overpressure, maximum(Array(stokes.P)[pp] .- Array(P_lith)[pp]))
             end
         end
 
@@ -661,8 +666,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
 
         # update phase ratios
         update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
-        # update_rock_ratio!(ϕ, phase_ratios, air_phase)
-        compute_rock_fraction!(ϕ, chain, xvi, di)
+        update_rock_ratio!(ϕ, phase_ratios, air_phase)
+        # compute_rock_fraction!(ϕ, chain, xvi, di)
 
         tensor_invariant!(stokes.τ)
 
@@ -843,6 +848,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                             colormap = :lipari10,
                             markersize = VEI_array * 5
                         )
+                        scatterlines!(
+                            ax2, eruption_times, (round.(ustrip.(uconvert.(u"km³", (erupted_volume)u"m³")); digits = 5)),
+                            color = :blue,
+                            markersize = 5
+                        )
                         ylims!(ax1, 0, 8.5)
                         ylims!(ax2, 0.00001, 1100)
                         hidexdecorations!(ax2)
@@ -867,6 +877,22 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                     save(joinpath(figdir, "volume_change.png"), fig1)
                     save(joinpath(figdir, "volume_change.svg"), fig1)
                 end
+
+                fig4 = let
+                    fig1 = Figure(; size = (1200, 900))
+                    ax1 = Axis(
+                        fig1[1, 1]; title = L"Overpressure\ \DeltaP_c", xlabel = L"Time\ [Kyrs]", ylabel = L"Pressure\ [MPa]",
+                        titlesize = 40,
+                        yticklabelsize = 25,
+                        xticklabelsize = 25,
+                        xlabelsize = 25,
+                        ylabelsize = 25
+                    )
+                    scatterlines!(ax2, volume_times, overpressure./1e6, color = :violet, markersize = 5)
+                    fig1
+                    save(joinpath(figdir, "Overpressure.png"), fig1)
+                    save(joinpath(figdir, "Overpressure.svg"), fig1)
+                end
             end
             # ------------------------------
         end
@@ -883,7 +909,7 @@ do_vtk = true # set to true to generate VTK files for ParaView
 conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-figdir   = "Systematics/Caldera2D_$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
+figdir   = "Systematics/Caldera2D_$(today())_$(depth)_$(radius)_$(ar)_$(extension)_no_extension"
 # figdir = "Systematics/Caldera2D_$(today())"
 n = 320
 nx, ny = n, n >> 1
