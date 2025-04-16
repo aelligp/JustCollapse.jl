@@ -23,7 +23,7 @@ function setup2D(
     Grid = CartData(xyz_grid(x, y, z))
 
     # Allocate Phase and Temp arrays
-    air_phase = layers + 6
+    air_phase = layers + 7
     # Phases = fill(6, nx, 2, nz);
     Phases = fill(air_phase, nx, 2, nz)
     Temp = fill(0.0, nx, 2, nz)
@@ -35,6 +35,14 @@ function setup2D(
         zlim = (minimum(Grid.z.val), 0.0),
         phase = LithosphericPhases(Layers = [chamber_depth], Phases = [1, 2]),
         T = HalfspaceCoolingTemp(Age = 20)
+    )
+
+    add_stripes!(Phases, Grid;
+        stripAxes = (0,0,1),
+        phase = ConstantPhase(1),
+        stripePhase = ConstantPhase(layers + 5),
+        # stripeWidth=0.002,
+        stripeSpacing=0.5
     )
 
     if !flat
@@ -85,7 +93,7 @@ function setup2D(
             base = (mean(Grid.x.val), 0, -(chamber_depth - chamber_radius)),
             cap = (mean(Grid.x.val), 0, flat ? 0.0e0 : volcano_size[1]),
             radius = conduit_radius,
-            phase = ConstantPhase(layers + 5),
+            phase = ConstantPhase(layers + 6),
             # T      = ConstantTemp(T=chamber_T),
         )
     end
