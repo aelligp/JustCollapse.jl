@@ -881,14 +881,14 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 fig4 = let
                     fig1 = Figure(; size = (1200, 900))
                     ax1 = Axis(
-                        fig1[1, 1]; title = L"Overpressure\ \DeltaP_c", xlabel = L"Time\ [Kyrs]", ylabel = L"Pressure\ [MPa]",
+                        fig1[1, 1]; title = L"Overpressure\ \Delta P_c", xlabel = L"Time\ [Kyrs]", ylabel = L"Pressure\ [MPa]",
                         titlesize = 40,
                         yticklabelsize = 25,
                         xticklabelsize = 25,
                         xlabelsize = 25,
                         ylabelsize = 25
                     )
-                    scatterlines!(ax2, volume_times, overpressure./1e6, color = :violet, markersize = 5)
+                    scatterlines!(ax1, volume_times, overpressure./1e6, color = :violet, markersize = 5)
                     fig1
                     save(joinpath(figdir, "Overpressure.png"), fig1)
                     save(joinpath(figdir, "Overpressure.svg"), fig1)
