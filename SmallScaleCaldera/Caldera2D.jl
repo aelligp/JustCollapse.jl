@@ -549,8 +549,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
                 V_tot = V_total
-                T_addition = 950+273e0
-                V_erupt = (rand(5e-4:1e-4:6e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                T_addition = 1000+273e0
+                V_erupt = (rand(1e-6:1e-5:6e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 ρ_in = mean(ρg[end][ϕ.center .== 1.0])
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                 # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
@@ -687,13 +687,15 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
 
         if plotting
             # Data I/O and plotting ---------------------
-            if it == 1 || rem(it, 5) == 0
+            if it == 1 || rem(it, 10) == 0
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
                 end
                 # checkpointing = joinpath(checkpoint, "checkpoint_$(it)")
                 # checkpointing_jld2(checkpointing, stokes, thermal, t, dt, igg)
                 # checkpointing_particles(checkpointing, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt)
+                checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
+                checkpointing_particles(checkpoint, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt)
                 η_eff = @. stokes.τ.II / (2 * stokes.ε.II)
                 (; η_vep, η) = stokes.viscosity
                 if do_vtk
@@ -828,7 +830,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 end
 
                 fig2 = let
-                    if eruption == true
                         fig = Figure(; size = (1200, 900))
                         ax1 = Axis(
                             fig[1, 1]; title = "VEI over Time - Eruption total = $eruption_counter", xlabel = "Time [Kyrs]", ylabel = "VEI",
@@ -862,8 +863,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                         fig
                         save(joinpath(figdir, "eruption_data.png"), fig)
                         save(joinpath(figdir, "eruption_data.svg"), fig)
-
-                    end
                 end
                 fig3 = let
                     fig1 = Figure(; size = (1200, 900))
@@ -906,13 +905,13 @@ end
 
 ## END OF MAIN SCRIPT ----------------------------------------------------------------
 const plotting = true
-const progressiv_extension = true
+const progressiv_extension = false
 do_vtk = true # set to true to generate VTK files for ParaView
 
 conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-figdir   = "Systematics/Caldera2D_$(today())_$(depth)_$(radius)_$(ar)_$(extension)_no_extension"
+figdir   = "Systematics/Caldera2D_$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
 # figdir = "Systematics/Caldera2D_$(today())"
 n = 320
 nx, ny = n, n >> 1

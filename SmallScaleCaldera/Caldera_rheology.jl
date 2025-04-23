@@ -33,8 +33,8 @@ function init_rheologies(layers, oxd_wt; linear = false, incompressible = true, 
 
     #dislocation laws
     # disl_top  = linear ? LinearViscous(η=1e23) : DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
-    # disl_top  = linear ? LinearViscous(η=1e23) : SetDislocationCreep(Dislocation.dry_olivine_Karato_2003)
-    disl_top = linear ? LinearViscous(η = 1.0e23) : SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
+    disl_top  = linear ? LinearViscous(η=1e23) : SetDislocationCreep(Dislocation.dry_olivine_Karato_2003)
+    # disl_top = linear ? LinearViscous(η = 1.0e23) : SetDislocationCreep(Dislocation.strong_diabase_Mackwell_1998)
 
     disl_bot = linear ? LinearViscous(η = 1.0e21) : SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
 
@@ -131,7 +131,7 @@ function init_rheologies(layers, oxd_wt; linear = false, incompressible = true, 
             # Density = Melt_DensityX(oxd_wt = oxd_wt; β=β_magma),
             HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
             Conductivity = ConstantConductivity(; k = 3.0),
-            CompositeRheology = CompositeRheology((disl_bot, el, pl_bot)),
+            CompositeRheology = CompositeRheology((magma_visc, disl_bot, el, pl_bot)),
             # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e21), el, pl)),
             # Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
             Melting = MeltingParam_Assimilation(),
