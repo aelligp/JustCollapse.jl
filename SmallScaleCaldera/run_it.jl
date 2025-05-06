@@ -32,7 +32,7 @@ export IGG_CUDAAWARE_MPI=1 # IGG
 export JULIA_CUDA_USE_COMPAT=false # IGG
 
 # mount the uenv prgenv-gnu with the view named default
-srun --constraint=gpu --gpu-bind=per_task:1 --cpu_bind=sockets /capstor/scratch/cscs/paellig/jobreport -o report -- julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)"""
+srun --constraint=gpu --gpu-bind=per_task:1 --cpu_bind=sockets /capstor/scratch/cscs/paellig/jobreport -o report -- julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) /capstor/scratch/cscs/paellig/jobreport print report"""
             if diameter <= 8.0
                 open("runme_test.sh", "w") do io
                     println(io, str)
