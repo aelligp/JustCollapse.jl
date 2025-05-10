@@ -550,7 +550,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 @views thermal.H .= 0.0
                 V_tot = V_total
                 T_addition = 1000+273e0
-                V_erupt = (rand(1e-6:1e-5:6e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                V_erupt = if rand() < 0.1
+                    0.0 / (3600 * 24 * 365.25) * dt
+                else
+                    (rand(1e-6:1e-5:6e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                end
                 ρ_in = mean(ρg[end][ϕ.center .== 1.0])
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                 # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
