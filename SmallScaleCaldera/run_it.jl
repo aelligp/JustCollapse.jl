@@ -23,7 +23,6 @@ function main()
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=1
-#SBATCH --ntasks-per-node=1
 #SBATCH --constraint=gpu
 #SBATCH --account=c44
 
