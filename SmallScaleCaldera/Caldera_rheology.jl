@@ -170,6 +170,7 @@ function init_rheologies(layers, oxd_wt; linear = false, incompressible = true, 
 
         rheology_volcano...,
 
+        # Name              = "Layers",
         SetMaterialParams(;
         Phase = Int64(layers + 5),
             Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),

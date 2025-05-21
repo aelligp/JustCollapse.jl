@@ -1,5 +1,5 @@
-# const isCUDA = false
-const isCUDA = true
+const isCUDA = false
+# const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -259,8 +259,61 @@ function compute_VEI!(V_erupt)
         return 8
     end
 end
-## END OF HELPER FUNCTION ------------------------------------------------------------
 
+function d18O_anomaly!(d18O, xci, phase_ratios, magma_phase, anomaly_phase, lower_crust, air_phase)
+
+    @parallel_indices (i, j) function _d18O_anomaly!(d18O, z, center_ratio, magma_phase, anomaly_phase, lower_crust, air_phase)
+        # quick escape
+        # conduit_ratio_ij = @index center_ratio[conduit_phase, i, j]
+        magma_ratio_ij = @index center_ratio[magma_phase, i, j]
+        anomaly_ratio_ij = @index center_ratio[anomaly_phase, i, j]
+        # upper_crust_ratio_ij = @index center_ratio[upper_crust, i, j]
+        lower_crust_ratio_ij = @index center_ratio[lower_crust, i, j]
+        # layer_ratio_ij = @index center_ratio[layer_phase, i, j]
+        # edifice_ratio_ij = sum(@index center_ratio[phase, i, j] for phase in edific_phases)
+        air_ratio_ij = @index center_ratio[air_phase, i, j]
+
+
+        # if conduit_ratio_ij > 0.5 || magma_ratio_ij > 0.5
+        # if upper_crust_ratio_ij > 0.5 && edifice_ratio_ij > 0.5 && layer_ratio_ij > 0.5
+        #     d18O[i,j] = -10.0
+        # elseif magma_ratio_ij > 0.5 && lower_crust_ratio_ij > 0.5
+        #     d18O[i,j] = 5.5
+        # elseif air_ratio_ij > 0.5
+        #     d18O[i,j] = 0.0
+        # end
+        # if upper_crust_ratio_ij > 0.5 && edifice_ratio_ij > 0.5 && layer_ratio_ij > 0.5
+            # d18O[i,j] = -10.0
+        if magma_ratio_ij > 0.5 || lower_crust_ratio_ij > 0.5 || anomaly_ratio_ij > 0.5
+            d18O[i,j] = 5.5
+        elseif air_ratio_ij > 0.5
+            d18O[i,j] = 0.0
+        elseif z[j] .> -3e3
+            d18O[i,j] = -10.0
+        elseif z[j] .< -3e3
+            d18O[i,j] = 5.0
+        end
+
+        return nothing
+    end
+
+    ni = size(phase_ratios.center)
+
+    @parallel (@idx ni) _d18O_anomaly!(d18O, xci[2], phase_ratios.center, magma_phase, anomaly_phase, lower_crust, air_phase)
+
+    return nothing
+end
+## END OF HELPER FUNCTION ------------------------------------------------------------
+## Custom Colormap by T.Keller
+using MAT
+using Colors, ColorSchemes
+
+matfile = matopen("SmallScaleCaldera/ocean.mat")
+my_cmap_data = read(matfile, "ocean") # e.g., "colormap_variable" is the variable name in the .mat file
+close(matfile)
+ocean = ColorScheme([RGB(r...) for r in eachrow(my_cmap_data)])
+ocean_rev = ColorScheme([RGB(r...) for r in eachrow(reverse(my_cmap_data, dims=1))])
+# --------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
 function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "figs2D", do_vtk = false, extension = 1.0e-15 * 0, cutoff_visc = (1.0e16, 1.0e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase = 6, progressiv_extension = false, plotting = true)
@@ -294,7 +347,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     # velocity grids
     grid_vxi = velocity_grids(xci, xvi, di)
     # material phase & temperature
-    pPhases, pT = init_cell_arrays(particles, Val(2))
+    pPhases, pT, pδ18O = init_cell_arrays(particles, Val(3))
 
     # Assign particles phases anomaly
     phases_device = PTArray(backend)(phases_GMG)
@@ -320,7 +373,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
 
     # particle fields for the stress rotation
     pτ = StressParticles(particles)
-    particle_args = (pT, pPhases, unwrap(pτ)...)
+    particle_args = (pT, pδ18O, pPhases, unwrap(pτ)...)
     particle_args_reduced = (pT, unwrap(pτ)...)
 
     # rock ratios for variational stokes
@@ -330,7 +383,12 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     compute_rock_fraction!(ϕ, chain, xvi, di)
 
     # ----------------------------------------------------
+    # Track isotope ratios
+    d18O = @zeros(ni...)
 
+    # magma_phase, upper_crust, lower_crust, edific_phases, layer_phase, air_phase
+    d18O_anomaly!(d18O, xci, phase_ratios, 3, 4, 2, 10)
+    centroid2particle!(pδ18O, xci, d18O, particles)
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
@@ -655,6 +713,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
         # check if we need to inject particles
         center2vertex!(τxx_v, stokes.τ.xx)
         center2vertex!(τyy_v, stokes.τ.yy)
+        particle2grid!(d18O, pδ18O, xci, particles)
         inject_particles_phase!(
             particles,
             pPhases,
@@ -691,7 +750,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
 
         if plotting
             # Data I/O and plotting ---------------------
-            if it == 1 || rem(it, 10) == 0
+            if it == 1 || rem(it, 1) == 0
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
                 end
@@ -712,6 +771,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                     )
                     data_c = (;
                         P = Array(stokes.P),
+                        d18O = Array(d18O),
                         viscosity_vep = Array(η_vep),
                         viscosity_eff = Array(η_eff),
                         viscosity = Array(η),
@@ -912,12 +972,12 @@ const plotting = true
 const progressiv_extension = false
 do_vtk = true # set to true to generate VTK files for ParaView
 
-conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
+# conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-figdir   = "Systematics/Caldera2D_$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
-# figdir = "Systematics/Caldera2D_$(today())"
-n = 320
+# figdir   = "Systematics/Caldera2D_$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
+figdir = "Systematics/Caldera2D_$(today())"
+n = 256
 nx, ny = n, n >> 1
 
 li, origin, phases_GMG, T_GMG, _, V_total, V_eruptible, layers, air_phase = setup2D(
@@ -930,9 +990,9 @@ li, origin, phases_GMG, T_GMG, _, V_total, V_eruptible, layers, air_phase = setu
     volcano_size = (3.0e0, 7.0e0),    # height, radius
     conduit_radius = 1.0e-2, # radius of the conduit
     chamber_T = 1050.0e0, # temperature of the chamber
-    chamber_depth  = depth, # depth of the chamber
-    chamber_radius = radius, # radius of the chamber
-    aspect_x       = ar, # aspect ratio of the chamber
+    # chamber_depth  = depth, # depth of the chamber
+    # chamber_radius = radius, # radius of the chamber
+    # aspect_x       = ar, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
