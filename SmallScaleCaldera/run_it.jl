@@ -1,41 +1,59 @@
+using DataFrames, CSV, Dates
+
 function main()
     Systematics = true
+    results = DataFrame(conduit=Float64[], depth=Float64[], radius=Float64[], ar=Float64[], extension=Float64[], diameter=Float64[])
 
     for systematic in Systematics
 
-        conduits = 2e-1
-        depths = 4e0:1:8e0
-        radii = 1e0:0.5:2.5e0
-        ars = 1:0.5:2.5
-        extensions = 1e-15, 5e-15, 1e-14, 5e-14, 1e-13
+        conduits = 1.5e-1
+        depths = 5e0
+        radii = 1.5:0.25:2.5e0
+        ars = 1.0:0.5:2.5e0
+        extensions = 1e-15 #, 5e-15, 1e-14, 5e-14, 1e-13
         for conduit in conduits, depth in depths, radius in radii, ar in ars, extension in extensions
-            jobname = "Systematics_$(conduit)_$(Int64(depth))_$(radius)_$(ar)_$(extension)"
+            jobname = "NO_Ext_Systematics_$(today())_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)"
+            diameter = 2*(radius*ar)
             str =
-"#!/bin/bash -l
+"""#!/bin/bash -l
 #SBATCH --job-name=\"$(jobname)\"
+#SBATCH --output=caldera_$(jobname).o
+#SBATCH --error=caldera_$(jobname).e
+#SBATCH --time=21:00:00 #HH:MM:SS
 #SBATCH --nodes=1
-#SBATCH --output=out_vep.o
-#SBATCH --error=er_vep.e
-#SBATCH --time=12:00:00
-#SBATCH --ntasks-per-node=1
-#SBATCH --account c23
+#SBATCH --ntasks=1
+#SBATCH --gpus-per-node=1
+#SBATCH --constraint=gpu
+#SBATCH --account=c44
 
-#srun $(Base.julia_cmd()) --project=. -O3 --startup-file=no --check-bounds=no Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension)"
+export MPICH_GPU_SUPPORT_ENABLED=1
+export IGG_CUDAAWARE_MPI=1 # IGG
+export JULIA_CUDA_USE_COMPAT=false # IGG
 
-            open("runme_test.sh", "w") do io
-                println(io, str)
+# mount the uenv prgenv-gnu with the view named default
+srun --constraint=gpu --gpu-bind=per_task:1 --cpu_bind=sockets /capstor/scratch/cscs/paellig/jobreport -o report -- julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) /capstor/scratch/cscs/paellig/jobreport print report"""
+            if diameter <= 8.0
+                open("runme_test.sh", "w") do io
+                    println(io, str)
+                end
+
+                # Submit the job
+                run(`sbatch runme_test.sh`)
+                println("Job submitted")
+                # remove the file
+                sleep(1)
+                rm("runme_test.sh")
+                println("File removed")
+                # Append parameters to DataFrame
+                push!(results, (conduit, depth, radius, ar, extension, diameter))
+            else
+                println("Diameter too large")
             end
-
-            # Submit the job
-            run(`sbatch runme_test.sh`)
-            println("Job submitted")
-            # remove the file
-            sleep(1)
-            rm("runme_test.sh")
-            println("File removed")
         end
     end
-end
 
+    # Write DataFrame to CSV
+    CSV.write(joinpath(@__DIR__, "Systematics_$(today()).csv"), results)
+end
 
 main()
