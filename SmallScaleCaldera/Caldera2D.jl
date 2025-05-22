@@ -1,5 +1,5 @@
-const isCUDA = false
-# const isCUDA = true
+# const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -523,7 +523,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     overpressure_t = Float64[]
     # depth = [y for x in xci[1], y in xci[2]]
 
-    while it < 500 #000 # run only fo r 5 Myrs
+    while it < 500 #000 # run only for 5 Myrs
         if it == 1
             P_lith .= stokes.P
         end
@@ -546,7 +546,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                     εbg += extension
                     εbg = min(εbg, 5*extension)
                 end
-                println("Progressivly increased extension to $εbg")
+                println("Progressively increased extension to $εbg")
                 apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
                 flow_bcs!(stokes, flow_bcs) # apply boundary conditions
                 update_halo!(@velocity(stokes)...)
@@ -972,11 +972,11 @@ const plotting = true
 const progressiv_extension = false
 do_vtk = true # set to true to generate VTK files for ParaView
 
-# conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
+conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
 # figdir   = "Systematics/Caldera2D_$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
-figdir = "Systematics/Caldera2D_$(today())"
+# figdir = "Systematics/Caldera2D_$(today())"
 n = 256
 nx, ny = n, n >> 1
 
@@ -990,9 +990,9 @@ li, origin, phases_GMG, T_GMG, _, V_total, V_eruptible, layers, air_phase = setu
     volcano_size = (3.0e0, 7.0e0),    # height, radius
     conduit_radius = 1.0e-2, # radius of the conduit
     chamber_T = 1050.0e0, # temperature of the chamber
-    # chamber_depth  = depth, # depth of the chamber
-    # chamber_radius = radius, # radius of the chamber
-    # aspect_x       = ar, # aspect ratio of the chamber
+    chamber_depth  = depth, # depth of the chamber
+    chamber_radius = radius, # radius of the chamber
+    aspect_x       = ar, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
