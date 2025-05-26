@@ -1,8 +1,8 @@
-# from "Fingerprinting secondary mantle plumes", Cloetingh et al. 2022
+
 
 function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; magma = true, CharDim = nothing)
     sill = magma ? GiordanoMeltViscosity(oxd_wt = oxd_wt_sill) : LinearViscous(η = 1.0e8Pa*s)
-    host_rock = magma ? GiordanoMeltViscosity(oxd_wt = oxd_wt_host_rock) : LinearViscous(η = 1.0e8Pa*s)
+    host_rock = magma ? GiordanoMeltViscosity(oxd_wt = oxd_wt_host_rock) : LinearViscous(η = 1.0e13Pa*s)
 
 
     # Define rheolgy struct
@@ -10,7 +10,7 @@ function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; magma = true, CharDim = 
         # Name              = "host_rock",
         SetMaterialParams(;
             Phase             = 1,
-            Density           = MeltDependent_Density(ρsolid=ConstantDensity(ρ=2700kg / m^3),ρmelt=Melt_DensityX(oxd_wt = oxd_wt_host_rock)),
+            Density           = MeltDependent_Density(ρsolid=T_Density(ρ0=2700kg / m^3), ρmelt=Melt_DensityX(oxd_wt = oxd_wt_host_rock)),
             HeatCapacity      = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
             Conductivity      = ConstantConductivity(; k = 3.0),
             CompositeRheology = CompositeRheology((host_rock,)),
@@ -20,11 +20,11 @@ function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; magma = true, CharDim = 
         # Name              = "Sill",
         SetMaterialParams(;
             Phase             = 2,
-            Density           = MeltDependent_Density(ρsolid=ConstantDensity(ρ=2700kg / m^3),ρmelt=Melt_DensityX(oxd_wt = oxd_wt_sill)),
+            Density           = MeltDependent_Density(ρsolid=T_Density(ρ0=2700kg / m^3), ρmelt=Melt_DensityX(oxd_wt = oxd_wt_sill)),
             HeatCapacity      = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
             Conductivity      = ConstantConductivity(),
             CompositeRheology = CompositeRheology((sill,)),
-            Melting           = MeltingParam_Smooth3rdOrder(),
+            Melting           = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
             CharDim           = CharDim,
         ),
     )
