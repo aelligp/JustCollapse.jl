@@ -244,7 +244,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
     Ra = @zeros(ni...)
 
     # while it < 30e3
-    while it < 50
+    while it < 1000
 
         # interpolate fields from particle to grid vertices
         # particle2grid!(T_buffer, pT, xvi, particles)
@@ -291,7 +291,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
         ## Save the checkpoint file before a possible thermal solver blow up
         checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
 
-        dt   = compute_dt(stokes, di, dt_diff) * 0.1
+        dt   = compute_dt(stokes, di, dt_diff)
         println("dt = $(dt/(3600*24))")
         # Thermal solver ---------------
         heatdiffusion_PT!(
@@ -326,7 +326,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
         vertex2center!(thermal.ΔTc, thermal.ΔT[2:(end - 1), :])
 
         compute_Re!(Re, Vx_c, Vy_c, ρg[end] ./9.81,  di, stokes.viscosity.η);
-        compute_Ra!(Ra, thermal.ΔTc, ρg[end] ./ 9.81, rheology[1].Density[1].ρsolid.α.val, rheology[1].Gravity[1].g.val, li, κ, stokes.viscosity.η);
+        # compute_Ra!(Ra, thermal.ΔTc, ρg[end] ./ 9.81, rheology[1].Density[1].ρsolid.α.val, rheology[1].Gravity[1].g.val, li, κ, stokes.viscosity.η);
 
         @show extrema(thermal.T)
         any(isnan.(thermal.T)) && break
@@ -358,7 +358,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
         t        += dt
 
         # Data I/O and plotting ---------------------
-        if it == 1 || rem(it, 5) == 0
+        if it == 1 || rem(it, 10) == 0
             if igg.me == 0 && it == 1
                 metadata(pwd(), checkpoint, joinpath(@__DIR__, "SillConvection2D.jl"), joinpath(@__DIR__, "SillModelSetup.jl"), joinpath(@__DIR__, "SillRheology.jl"))
             end
@@ -421,13 +421,13 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
             if t < 1e3
                 TimeScale = 1
                 TimeUnits = "s"
-            elseif t >= 1e3 && t < 1e3*3600
+            elseif t >= 1e3 && t < 24*3600
                 TimeScale = 3600
                 TimeUnits = "hr"
-            elseif t >= 1e3*3600 && t < 1e2*3600*24
+            elseif t >= 24*3600 && t < 365*3600*24
                 TimeScale = 3600*24
                 TimeUnits = "days"
-            elseif t >= 1e3*3600 && t < 1e2*3600*24*365
+            elseif t >= 365*3600*24 && t < 1e3*3600*24*365
                 TimeScale = 3600*24*365
                 TimeUnits = "yr"
             else
@@ -543,13 +543,13 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
                 if t < 1e3
                     TimeScale = 1
                     TimeUnits = "s"
-                elseif t >= 1e3 && t < 1e3*3600
+                elseif t >= 1e3 && t < 24*3600
                     TimeScale = 3600
                     TimeUnits = "hr"
-                elseif t >= 1e3*3600 && t < 1e3*3600*24
+                elseif t >= 24*3600 && t < 365*3600*24
                     TimeScale = 3600*24
                     TimeUnits = "days"
-                elseif t >= 1e3*3600 && t < 1e2*3600*24*365
+                elseif t >= 365*3600*24 && t < 1e3*3600*24*365
                     TimeScale = 3600*24*365
                     TimeUnits = "yr"
                 else
@@ -575,6 +575,48 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
                 Colorbar(fig[1,2], h1, height = Relative(4/4), ticklabelsize=25, ticksize=15)
                 save(joinpath(figdir, "Temperature_$(it).png"), fig)
                 fig
+
+                fig1 = Figure(size = (1600, 1000), title = "t = $t")
+
+                ax1 = Axis(
+                    fig1[1,1],
+                    aspect = DataAspect(),
+                    title = "Reynolds number (log10)  (time = $(round(t/TimeScale, digits=2)) $TimeUnits)",
+                    titlesize=40,
+                    yticklabelsize=25,
+                    xticklabelsize=25,
+                    xlabelsize=25,
+                )
+                # Plot Reynolds number
+                h1  = heatmap!(
+                    ax1,
+                    xci[1],
+                    xci[2],
+                    Array(log10.(Re));
+                    colormap=:lapaz)
+
+                Colorbar(fig1[1,2], h1, height = Relative(4/4), ticklabelsize=25, ticksize=15)
+                # ax2 = Axis(
+                #     fig1[2,1],
+                #     aspect = DataAspect(),
+                #     title = "Rayleigh number (log10)  (time = $(round(t/TimeScale, digits=2)) $TimeUnits)",
+                #     titlesize=40,
+                #     yticklabelsize=25,
+                #     xticklabelsize=25,
+                #     xlabelsize=25,
+                # )
+                # # Plot Rayleigh number
+                # h2  = heatmap!(
+                #     ax2,
+                #     xci[1],
+                #     xci[2],
+                #     Array(log10.(Ra));
+                #     colormap=:lapaz)
+                # Colorbar(fig1[2,2], h2, height = Relative(4/4), ticklabelsize=25, ticksize=15)
+                # linkaxes!(ax1, ax2)
+                save(joinpath(figdir, "Re_$(it).png"), fig1)
+                fig1
+
             end
 
         end
@@ -590,7 +632,7 @@ do_vtk = true
 
 # (Path)/folder where output data and figures are stored
 figdir   = "$(today())_SillConvection2D"
-n = 128
+n = 256
 nx, ny = n, n >> 1
 
 li, origin, phases_GMG, T_GMG, _ = SillSetup(
