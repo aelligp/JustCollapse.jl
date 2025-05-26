@@ -1,28 +1,31 @@
 ## Model Setup
 using GeophysicalModelGenerator
 
-function SillSetup(nx, ny, nz)
-    Lx = Ly = 300
+function SillSetup(nx, nz;
+    dimensions = (0.3, 0.25), # extent in x and y in km
+    sill_temp = 1000,       # temperature in C
+    host_rock_temp = 500,
+    sill_size = 0.1, # size of the sill in km
+    )
+    Lx = Ly = dimensions[1]
     x = range(0.0, Lx, nx)
     y = range(0.0, Ly, 2)
-    z = range(-250, 0.0, nz)
+    z = range(-dimensions[2], 0.0, nz)
     Grid = CartData(xyz_grid(x, y, z))
+    sill_placement = (dimensions[2] - (dimensions[2] - sill_size)/2, 0.0 + (dimensions[2] - sill_size)/2)
 
-    # Now we create an integer array that will hold the `Phases` information (which usually refers to the material or rock type in the simulation)
     Phases = fill(1, nx, 2, nz)
-
-    # In many (geodynamic) models, one also has to define the temperature, so lets define it as well
-    Temp = fill(400+273, nx, 2, nz)
+    Temp = fill(host_rock_temp, nx, 2, nz)
 
     add_box!(
         Phases,
         Temp,
         Grid;
-        xlim=(minimum(Grid.x.val), maximum(Grid.x.val)),
-        ylim=(minimum(Grid.y.val), maximum(Grid.y.val)),
-        zlim=(-175, -75),
+        xlim = (minimum(Grid.x.val), maximum(Grid.x.val)),
+        ylim = (minimum(Grid.y.val), maximum(Grid.y.val)),
+        zlim = (-sill_placement[1], -sill_placement[2]),
         phase=ConstantPhase(2),
-        T = ConstantTemp(; T=1200+273),
+        T = ConstantTemp(; T=sill_temp)
     )
 
     # add_sphere!(Phases, Temp, Grid;
@@ -33,12 +36,11 @@ function SillSetup(nx, ny, nz)
     # )
 
     Grid = addfield(Grid, (; Phases, Temp))
-
-    li = (abs(last(x) - first(x)), abs(last(z) - first(z)))
-    origin = (x[1], z[1])
+    li = (abs(last(x) - first(x)), abs(last(z) - first(z))) .* 1.0e3
+    origin = (x[1], z[1]) .* 1.0e3
 
     ph = Phases[:, 1, :]
-    T = Temp[:, 1, :]
+    T = Temp[:, 1, :] .+ 273
 
     return li, origin, ph, T, Grid
 end
