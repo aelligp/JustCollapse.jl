@@ -1,5 +1,5 @@
-const isCUDA = false
-# const isCUDA = true
+# const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -688,8 +688,8 @@ do_vtk = true
 
 # (Path)/folder where output data and figures are stored
 figdir   = "$(today())_SillConvection2D"
-n = 256
-nx, ny = n, n >> 1
+n = 2560
+nx, ny = n, n #>> 1
 
 sill_temp = 1000.0 # in C
 host_rock_temp = 500.0 # in C
@@ -703,6 +703,12 @@ li, origin, phases_GMG, T_GMG, _ = SillSetup(
     host_rock_temp = host_rock_temp,
     sill_size = sill_size
 )
+
+igg = if !(JustRelax.MPI.Initialized())
+    IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
+else
+    igg
+end
 
 # run main script
 main(li, origin, phases_GMG, T_GMG, igg; nx = nx, ny = ny, figdir = figdir, do_vtk = do_vtk, cutoff_visc = (1e1, 1.0e13), plotting = plotting, sill_temp = sill_temp, host_rock_temp = host_rock_temp, sill_size = sill_size, depth = depth);
