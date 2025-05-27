@@ -34,3 +34,4 @@ Manifest.toml
 Systematics/*
 Various_scripts/*
 Nico_Codes/*
+*.vtu
