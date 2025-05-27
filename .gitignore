@@ -35,3 +35,6 @@ Systematics/*
 Various_scripts/*
 Nico_Codes/*
 *.vtu
+*.e
+*.o
+*.vtp
