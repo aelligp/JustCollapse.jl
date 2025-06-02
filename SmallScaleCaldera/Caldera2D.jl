@@ -124,7 +124,7 @@ function thermal_anomaly!(Temp, Ω_T, phase_ratios, T_chamber, T_air, conduit_ph
     return nothing
 end
 
-function plot_particles(particles, pPhases, chain)
+function plot_particles(particles, pPhases, chain; clrmap = :roma)
     p = particles.coords
     # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
     ppx, ppy = p
@@ -134,7 +134,7 @@ function plot_particles(particles, pPhases, chain)
     chain_x = chain.coords[1].data[:] ./ 1.0e3
     chain_y = chain.coords[2].data[:] ./ 1.0e3
     idxv = particles.index.data[:]
-    f, ax, h = scatter(Array(pxv[idxv]), Array(pyv[idxv]), color = Array(clr[idxv]), colormap = :roma, markersize = 1)
+    f, ax, h = scatter(Array(pxv[idxv]), Array(pyv[idxv]), color = Array(clr[idxv]), colormap = clrmap, markersize = 1)
     scatter!(ax, Array(chain_x), Array(chain_y), color = :red, markersize = 1)
     Colorbar(f[1, 2], h)
     return f
@@ -260,49 +260,52 @@ function compute_VEI!(V_erupt)
     end
 end
 
-function d18O_anomaly!(d18O, xci, phase_ratios, magma_phase, anomaly_phase, lower_crust, air_phase)
+function d18O_anomaly!(
+    d18O, z, phase_ratios,
+    magma_phase,
+    anomaly_phase,
+    lower_crust,
+    air_phase;
+    crust_gradient::Bool = true,
+    crust_min::Float64 = -10.0,
+    crust_max::Float64 = 3.0,
+    crust_const::Float64 = 0.0,
+    magma_const::Float64 = 5.5,
 
-    @parallel_indices (i, j) function _d18O_anomaly!(d18O, z, center_ratio, magma_phase, anomaly_phase, lower_crust, air_phase)
-        # quick escape
-        # conduit_ratio_ij = @index center_ratio[conduit_phase, i, j]
-        magma_ratio_ij = @index center_ratio[magma_phase, i, j]
-        anomaly_ratio_ij = @index center_ratio[anomaly_phase, i, j]
-        # upper_crust_ratio_ij = @index center_ratio[upper_crust, i, j]
-        lower_crust_ratio_ij = @index center_ratio[lower_crust, i, j]
-        # layer_ratio_ij = @index center_ratio[layer_phase, i, j]
-        # edifice_ratio_ij = sum(@index center_ratio[phase, i, j] for phase in edific_phases)
-        air_ratio_ij = @index center_ratio[air_phase, i, j]
+)
+    ni = size(phase_ratios.vertex)
 
+    @parallel_indices (i, j) function _d18O_anomaly!(d18O, z, vertex_ratio, magma_phase, anomaly_phase, lower_crust, air_phase)
 
-        # if conduit_ratio_ij > 0.5 || magma_ratio_ij > 0.5
-        # if upper_crust_ratio_ij > 0.5 && edifice_ratio_ij > 0.5 && layer_ratio_ij > 0.5
-        #     d18O[i,j] = -10.0
-        # elseif magma_ratio_ij > 0.5 && lower_crust_ratio_ij > 0.5
-        #     d18O[i,j] = 5.5
-        # elseif air_ratio_ij > 0.5
-        #     d18O[i,j] = 0.0
-        # end
-        # if upper_crust_ratio_ij > 0.5 && edifice_ratio_ij > 0.5 && layer_ratio_ij > 0.5
-            # d18O[i,j] = -10.0
+        magma_ratio_ij = @index vertex_ratio[magma_phase, i, j]
+        anomaly_ratio_ij = @index vertex_ratio[anomaly_phase, i, j]
+        lower_crust_ratio_ij = @index vertex_ratio[lower_crust, i, j]
+        air_ratio_ij = @index vertex_ratio[air_phase, i, j]
+
         if magma_ratio_ij > 0.5 || lower_crust_ratio_ij > 0.5 || anomaly_ratio_ij > 0.5
-            d18O[i,j] = 5.5
+            d18O[i,j] = magma_const
         elseif air_ratio_ij > 0.5
-            d18O[i,j] = 0.0
+            d18O[i,j] = 3.0
         elseif z[j] .> -3e3
-            d18O[i,j] = -10.0
+            if crust_gradient
+                # Linear gradient from crust_min at shallowest to crust_max at deepest
+                zmin = z[1]
+                zmax = z[end]
+                d18O[i, j] = crust_min + (crust_max - crust_min) * (z[j] - zmin) / (zmax - zmin)
+            else
+                d18O[i, j] = crust_const
+            end
         elseif z[j] .< -3e3
             d18O[i,j] = 5.0
         end
-
         return nothing
     end
 
-    ni = size(phase_ratios.center)
-
-    @parallel (@idx ni) _d18O_anomaly!(d18O, xci[2], phase_ratios.center, magma_phase, anomaly_phase, lower_crust, air_phase)
+    @parallel (@idx ni) _d18O_anomaly!(d18O, z, phase_ratios.vertex, magma_phase, anomaly_phase, lower_crust, air_phase)
 
     return nothing
 end
+
 ## END OF HELPER FUNCTION ------------------------------------------------------------
 ## Custom Colormap by T.Keller
 using MAT
@@ -316,7 +319,7 @@ ocean_rev = ColorScheme([RGB(r...) for r in eachrow(reverse(my_cmap_data, dims=1
 # --------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
-function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "figs2D", do_vtk = false, extension = 1.0e-15 * 0, cutoff_visc = (1.0e16, 1.0e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase = 6, progressiv_extension = false, plotting = true)
+function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "figs2D", do_vtk = false, fric_angle = 30, extension = 1.0e-15 * 0, cutoff_visc = (1.0e16, 1.0e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase = 6, progressiv_extension = false, plotting = true)
 
     # Physical domain ------------------------------------
     ni = nx, ny           # number of cells
@@ -327,15 +330,19 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
 
     # Physical properties using GeoParams ----------------
     oxd_wt = (61.6, 0.9, 17.7, 3.65, 2.35, 5.38, 4.98, 1.27, 3.0)
-    rheology = init_rheologies(layers, oxd_wt; incompressible = false, magma = true)
-    rheology_incomp = init_rheologies(layers, oxd_wt; incompressible = true, magma = true)
+    rheology = init_rheologies(layers, oxd_wt, fric_angle; incompressible = false, magma = true)
+    rheology_incomp = init_rheologies(layers, oxd_wt, fric_angle; incompressible = true, magma = true)
     # dt_time = 100 * 3600 * 24 * 365
     dt_time = 1.0e3 * 3600 * 24 * 365
     κ = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val)) # thermal diffusivity                                 # thermal diffusivity
     dt_diff = 0.5 * min(di...)^2 / κ / 2.01
     dt = min(dt_time, dt_diff)
     # ----------------------------------------------------
-
+    # Weno model -----------------------------------------
+    weno = WENO5(backend, Val(2), ni.+1) # ni.+1 for ∂18O
+    # WENO arrays
+    Vx_v = @zeros(ni.+1...)
+    Vy_v = @zeros(ni.+1...)
     # Initialize particles -------------------------------
     nxcell = 100
     max_xcell = 150
@@ -384,11 +391,9 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
 
     # ----------------------------------------------------
     # Track isotope ratios
-    d18O = @zeros(ni...)
+    d18O = @zeros(ni.+ 1...)
+    d18O_anomaly!(d18O, xvi[2], phase_ratios, 3, 4, 2, air_phase)
 
-    # magma_phase, upper_crust, lower_crust, edific_phases, layer_phase, air_phase
-    d18O_anomaly!(d18O, xci, phase_ratios, 3, 4, 2, 10)
-    centroid2particle!(pδ18O, xci, d18O, particles)
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
@@ -407,13 +412,9 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     # Add thermal anomaly BC's
     T_chamber = 1223.0e0
     T_air = 273.0e0
-    Ω_T = @zeros(size(thermal.T)...)
-    # thermal_anomaly!(thermal.T, Ω_T, phase_ratios, T_chamber, T_air, 5, 3, 4, air_phase)
-    # JustRelax.DirichletBoundaryCondition(Ω_T)
 
     thermal_bc = TemperatureBoundaryConditions(;
         no_flux = (; left = true, right = true, top = false, bot = false),
-        # dirichlet    = (; mask = Ω_T)
     )
     thermal_bcs!(thermal, thermal_bc)
     temperature2center!(thermal)
@@ -450,12 +451,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
         free_slip = (left = true, right = true, top = true, bot = true),
         free_surface = false,
     )
-
-    # U            = 0.02
-    # stokes.U.Ux .= PTArray(backend)([(x - li[1] * 0.5) * U / dt for x in xvi[1], _ in 1:ny+2])
-    # stokes.U.Uy .= PTArray(backend)([-y * U / dt for _ in 1:nx+2, y in xvi[2]])
-    # flow_bcs!(stokes, flow_bcs) # apply boundary conditions
-    # displacement2velocity!(stokes, dt)
 
     εbg = extension
     apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
@@ -506,13 +501,14 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     interval = 1
     eruption_counter = 0
     iterMax = 150.0e3
-    local iters, er_it, eruption_counter
     thermal.Told .= thermal.T
 
     eruption = false
     V_erupt_fast = -V_total / 3
     V_max_eruptable = V_total / 2
     ΔPc = 20.0e6 # 20MPa
+
+    # Initialize the tracking arrays
     VEI_array = Int[]
     eruption_times = Float64[]
     eruption_counters = Int[]
@@ -521,7 +517,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     volume_times = Float64[]
     overpressure = Float64[]
     overpressure_t = Float64[]
-    # depth = [y for x in xci[1], y in xci[2]]
+    local iters, er_it, eruption_counter, Vx_v, Vy_v, d18O
 
     while it < 500 #000 # run only for 5 Myrs
         if it == 1
@@ -566,6 +562,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
 
         if it > 3
             CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             V_max_eruptable = V_total / 2
             V_erupt_fast = -V_total / 3
             if eruption == false && ((any((Array(stokes.P)[pp] .- Array(P_lith)[pp]) .≥ ΔPc .&& (Array(ϕ_m)[pp] .≥ 0.5)) .&& any(Array(ϕ_m) .≥ 0.5)) .|| rem(it, 30) == 0.0).&& (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
@@ -703,6 +700,9 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
         )
         end
         # ------------------------------
+        # Isotope advection
+        velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
+        WENO_advection!(d18O, (Vx_v, Vy_v), weno, di, dt)
 
         # Advection --------------------
         copyinn_x!(T_buffer, thermal.T)
@@ -713,7 +713,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
         # check if we need to inject particles
         center2vertex!(τxx_v, stokes.τ.xx)
         center2vertex!(τyy_v, stokes.τ.yy)
-        particle2grid!(d18O, pδ18O, xci, particles)
         inject_particles_phase!(
             particles,
             pPhases,
@@ -754,9 +753,6 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
                 end
-                # checkpointing = joinpath(checkpoint, "checkpoint_$(it)")
-                # checkpointing_jld2(checkpointing, stokes, thermal, t, dt, igg)
-                # checkpointing_particles(checkpointing, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt)
                 checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
                 checkpointing_particles(checkpoint, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt)
                 η_eff = @. stokes.τ.II / (2 * stokes.ε.II)
@@ -765,13 +761,13 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                     velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
                     data_v = (;
                         T = Array(T_buffer),
+                        d18O = Array(d18O),
                         stress_xy = Array(stokes.τ.xy),
                         strain_rate_xy = Array(stokes.ε.xy),
                         phase_vertices = [argmax(p) for p in Array(phase_ratios.vertex)],
                     )
                     data_c = (;
                         P = Array(stokes.P),
-                        d18O = Array(d18O),
                         viscosity_vep = Array(η_vep),
                         viscosity_eff = Array(η_eff),
                         viscosity = Array(η),
@@ -972,12 +968,12 @@ const plotting = true
 const progressiv_extension = false
 do_vtk = true # set to true to generate VTK files for ParaView
 
-conduit, depth, radius, ar, extension = parse.(Float64, ARGS[1:end])
+conduit, depth, radius, ar, extension, fric_angle = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-# figdir   = "Systematics/Caldera2D_$(today())_$(depth)_$(radius)_$(ar)_$(extension)"
+figdir   = "Systematics/Caldera2D_$(today())_$(depth)_$(radius)_$(ar)_$(extension)_$(fric_angle)"
 # figdir = "Systematics/Caldera2D_$(today())"
-n = 256
+n = 512
 nx, ny = n, n >> 1
 
 li, origin, phases_GMG, T_GMG, _, V_total, V_eruptible, layers, air_phase = setup2D(
@@ -1002,4 +998,5 @@ else
 end
 # extension = 0.0
 # cutoff_visc = (1.0e17, 1.0e23)
-main(li, origin, phases_GMG, T_GMG, igg, ; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, extension = extension, cutoff_visc = (1.0e17, 1.0e23), V_total = V_total, V_eruptible = V_eruptible, layers = layers, air_phase = air_phase, progressiv_extension = progressiv_extension, plotting = plotting);
+# fric_angle = 30.0e0 # friction angle in degrees
+main(li, origin, phases_GMG, T_GMG, igg; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, fric_angle = fric_angle, extension = extension, cutoff_visc = (1.0e17, 1.0e23), V_total = V_total, V_eruptible = V_eruptible, layers = layers, air_phase = air_phase, progressiv_extension = progressiv_extension, plotting = plotting);
