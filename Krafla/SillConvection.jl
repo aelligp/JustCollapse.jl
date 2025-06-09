@@ -1,5 +1,5 @@
-# const isCUDA = false
-const isCUDA = true
+const isCUDA = false
+# const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -92,10 +92,9 @@ end
 
 function compute_Ra!(Ra, ΔT, ρ, α, g, li, κ, η)
     # Rayleigh number: Ra = (ρ * α * g * ΔT * L^3) / (η * κ)
+    # where:           Ra = (kg/m3 * 1/K * m/s2 * K * m^3) / (Pa s * m2/s)
     L = mean(li)
     @. Ra = (ρ * α * g * ΔT * L^3) / (η * κ)  # Ensure all arrays have the same shape
-    # If ΔT has a different shape (e.g., smaller by boundaries), slice other arrays accordingly:
-    # Example: @. Ra = (ρ[2:end-1, :] * α * g * ΔT * L^3) / (η[2:end-1, :] * κ)
     return nothing
 end
 
@@ -154,7 +153,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
                      # (SiO2   TiO2  Al2O3  FeO   MgO   CaO   Na2O  K2O   H2O)
     oxd_wt_sill      = (70.78, 0.55, 15.86, 3.93, 1.11, 1.20, 2.54, 3.84, 2.0)
     oxd_wt_host_rock = (75.75, 0.28, 12.48, 2.14, 0.09, 0.48, 3.53, 5.19, 0.0)
-    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; magma = true)
+    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e3, magma = true)
     # rheology     = init_rheologies(;)
     dt_time = 1.0 * 3600 * 24 * 365
     κ            = (4 / (1050 * rheology[1].Density[1].ρ))
@@ -190,7 +189,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes          = StokesArrays(backend, ni)
-    pt_stokes       = PTStokesCoeffs(li, di; Re = 14.9, ϵ=1e-4, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes       = PTStokesCoeffs(li, di; Re = 14.9, ϵ_rel=1e-5, ϵ_abs=1e-12, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
     # ----------------------------------------------------
 
     thermal         = ThermalArrays(backend, ni)
@@ -288,7 +287,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
     Re = @zeros(ni...)
     Ra = @zeros(ni...)
 
-    while it < 30e3
+    while it < 300
     # while it < 50
 
         args = (; ϕ= ϕ,T = thermal.Tc, P = stokes.P, dt = dt, ΔTc = thermal.ΔTc)
@@ -363,13 +362,12 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
         vertex2center!(thermal.ΔTc, thermal.ΔT[2:(end - 1), :])
 
         compute_Re!(Re, Vx_c, Vy_c, ρg[end] ./9.81,  sill_size *1e3, stokes.viscosity.η);
-        compute_Ra!(Ra, sill_temp - host_rock_temp, ρg[end] ./ 9.81, rheology[1].Density[1].ρsolid.α.val, rheology[1].Gravity[1].g.val, li, κ, stokes.viscosity.η);
+        compute_Ra!(Ra, sill_temp - host_rock_temp, ρg[end] ./ 9.81, 3e-5, rheology[1].Gravity[1].g.val, li, κ, stokes.viscosity.η);
 
         @show extrema(thermal.T)
         any(isnan.(thermal.T)) && break
 
         # Advection --------------------
-        # copyinn_x!(T_buffer, thermal.T)
         # advect particles in space
         advection!(particles, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
         # advect particles in memory
@@ -687,8 +685,8 @@ const plotting = true
 do_vtk = true
 
 # (Path)/folder where output data and figures are stored
-figdir   = "$(today())_SillConvection2D"
-n = 2560
+figdir   = "SillConvection2D_$(today())"
+n = 128
 nx, ny = n, n #>> 1
 
 sill_temp = 1000.0 # in C
@@ -711,4 +709,4 @@ else
 end
 
 # run main script
-main(li, origin, phases_GMG, T_GMG, igg; nx = nx, ny = ny, figdir = figdir, do_vtk = do_vtk, cutoff_visc = (1e1, 1.0e13), plotting = plotting, sill_temp = sill_temp, host_rock_temp = host_rock_temp, sill_size = sill_size, depth = depth);
+main(li, origin, phases_GMG, T_GMG, igg; nx = nx, ny = ny, figdir = figdir, do_vtk = do_vtk, cutoff_visc = (1e1, 1.0e18), plotting = plotting, sill_temp = sill_temp, host_rock_temp = host_rock_temp, sill_size = sill_size, depth = depth);
