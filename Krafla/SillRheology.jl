@@ -16,7 +16,7 @@ function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e0, magma = t
             Conductivity      = ConstantConductivity(; k = 3.0),
             CompositeRheology = CompositeRheology((host_rock,)),
             # Melting           = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
-            Melting           = MeltingParam_Assimilation(T_s=600+273, T_l=670+273),
+            Melting           = MeltingParam_Assimilation(T_s=623+273, T_l=1117+273),
             Gravity           = ConstantGravity(; g = 9.81),
             CharDim           = CharDim,
         ),
