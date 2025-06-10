@@ -153,7 +153,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
                      # (SiO2   TiO2  Al2O3  FeO   MgO   CaO   Na2O  K2O   H2O)
     oxd_wt_sill      = (70.78, 0.55, 15.86, 3.93, 1.11, 1.20, 2.54, 3.84, 2.0)
     oxd_wt_host_rock = (75.75, 0.28, 12.48, 2.14, 0.09, 0.48, 3.53, 5.19, 2.0)
-    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e3, magma = true)
+    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e4, magma = true)
     # rheology     = init_rheologies(;)
     dt_time = 1.0 * 3600 * 24 * 365
     κ            = (4 / (1050 * rheology[1].Density[1].ρ))
@@ -165,7 +165,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
     weno = WENO5(backend, Val(2), ni.+1) # ni.+1 for Temp
 
     # Initialize particles -------------------------------
-    nxcell, max_xcell, min_xcell = 30, 40, 15
+    nxcell, max_xcell, min_xcell = 100, 150, 75
     particles = init_particles(
         backend_JP, nxcell, max_xcell, min_xcell, xvi, di, ni
     )
@@ -228,7 +228,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
 
     # Track isotope ratios
     d18O = @zeros(ni.+ 1...)
-    d18O_anomaly!(d18O, xvi[2], phase_ratios)
+    d18O_anomaly!(d18O, xvi[2], phase_ratios; crust_gradient = false, crust_const = -3.0)
 
     @copy stokes.P0 stokes.P
     @copy thermal.Told thermal.T
@@ -286,8 +286,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
 
     Re = @zeros(ni...)
     Ra = @zeros(ni...)
+    time_vec = Float64[]
+    d18O_evo = Float64[]
 
-    while it < 300
+    while it < 5000
     # while it < 50
 
         args = (; ϕ= ϕ,T = thermal.Tc, P = stokes.P, dt = dt, ΔTc = thermal.ΔTc)
@@ -391,6 +393,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
 
         @show it += 1
         t        += dt
+        push!(time_vec, t)
+        push!(d18O_evo, mean(d18O[1:end-1, 1:end-1][ϕ .> 0.2]))
 
         # Data I/O and plotting ---------------------
         if it == 1 || rem(it, 25) == 0
@@ -550,7 +554,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
             h4  = heatmap!(ax4,
                 xci...,
                 Array(ϕ);
-                colormap=:lipari)
+                colormap=:lipari,
+                colorrange=(0.0, 1.0))
 
             # h5  = heatmap!(ax5,
             #     xci...,
@@ -668,9 +673,27 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
                     Array(log10.(Ra));
                     colormap=:lapaz, colorrange= (0, maximum(Array(log10.(Ra)))))
                 Colorbar(fig1[1,4], h3, height = Relative(4/4), ticklabelsize=25, ticksize=15)
+
+                ax4 = Axis(
+                    fig1[2,3],
+                    title = "δ18O evolution - mean(d18O[ϕ .> 0.2])",
+                    titlesize=30,
+                    yticklabelsize=25,
+                    xticklabelsize=25,
+                    xlabelsize=25,
+                    ylabelsize=25,
+                    xlabel = "Time ($TimeUnits)",
+                    ylabel = "δ18O mean(ϕ > 0.2)"
+                    )
+                    l4 = lines!(
+                        ax4,
+                        time_vec ./ TimeScale,
+                        d18O_evo;
+                        color = :black,
+                        linewidth = 2,
+                    )
                 save(joinpath(figdir, "Re_$(it).png"), fig1)
                 fig1
-
             end
 
         end
@@ -696,7 +719,7 @@ depth = 5e3 # in m
 li, origin, phases_GMG, T_GMG, _ = SillSetup(
     nx + 1,
     ny + 1;
-    dimensions = (0.3, 0.25),
+    dimensions = (0.3, 0.2),
     sill_temp = sill_temp,
     host_rock_temp = host_rock_temp,
     sill_size = sill_size
