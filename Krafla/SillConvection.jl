@@ -90,10 +90,9 @@ function compute_Re!(Re_c, Vx, Vy, ρ, sill_size, η)
     return nothing
 end
 
-function compute_Ra!(Ra, ΔT, ρ, α, g, li, κ, η)
+function compute_Ra!(Ra, ΔT, ρ, α, g, L, κ, η)
     # Rayleigh number: Ra = (ρ * α * g * ΔT * L^3) / (η * κ)
     # where:           Ra = (kg/m3 * 1/K * m/s2 * K * m^3) / (Pa s * m2/s)
-    L = mean(li)
     @. Ra = (ρ * α * g * ΔT * L^3) / (η * κ)  # Ensure all arrays have the same shape
     return nothing
 end
@@ -363,8 +362,8 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
         thermal.ΔT .= thermal.T .- thermal.Told
         vertex2center!(thermal.ΔTc, thermal.ΔT[2:(end - 1), :])
 
-        compute_Re!(Re, Vx_c, Vy_c, ρg[end] ./9.81,  sill_size *1e3, stokes.viscosity.η);
-        compute_Ra!(Ra, sill_temp - host_rock_temp, ρg[end] ./ 9.81, 3e-5, rheology[1].Gravity[1].g.val, li, κ, stokes.viscosity.η);
+        compute_Re!(Re, Vx_c, Vy_c, ρg[end] ./9.81,  li[2], stokes.viscosity.η);
+        compute_Ra!(Ra, sill_temp - host_rock_temp, ρg[end] ./ 9.81, 3e-5, rheology[1].Gravity[1].g.val, li[2], κ, stokes.viscosity.η);
 
         @show extrema(thermal.T)
         any(isnan.(thermal.T)) && break
