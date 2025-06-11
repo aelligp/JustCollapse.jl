@@ -397,7 +397,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
-    pt_stokes = PTStokesCoeffs(li, di; ϵ_rel = 1.0e-5, ϵ_abs = 1.0e-6, Re = 3.0, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
+    pt_stokes = PTStokesCoeffs(li, di; ϵ_rel = 1.0e-4, ϵ_abs = 1.0e-5, Re = 3.0, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
     # pt_stokes = PTStokesCoeffs(li, di; ϵ = 1.0e-4, Re = 3*√10*π/2, r = 0.5, CFL = 0.8 / √2.1) # Re=3π, r=0.7
 
     # randomize cohesion
@@ -561,11 +561,12 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
         # args = (; ϕ=ϕ_m, T=thermal.Tc, P=stokes.P, dt=Inf)
 
         if it > 3
-            CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
-            # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            # CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             V_max_eruptable = V_total / 2
             V_erupt_fast = -V_total / 3
-            if eruption == false && ((any((Array(stokes.P)[pp] .- Array(P_lith)[pp]) .≥ ΔPc .&& (Array(ϕ_m)[pp] .≥ 0.5)) .&& any(Array(ϕ_m) .≥ 0.5)) .|| rem(it, 30) == 0.0).&& (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
+            # if eruption == false && ((any((Array(stokes.P)[pp] .- Array(P_lith)[pp]) .≥ ΔPc .&& (Array(ϕ_m)[pp] .≥ 0.5)) .&& any(Array(ϕ_m) .≥ 0.5)) .|| rem(it, 30) == 0.0).&& (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
+            if eruption == false && ((any(maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]) .≥ ΔPc .&& Array(ϕ_m)[pp] .≥ 0.5) .&& any(Array(ϕ_m) .≥ 0.5)) .|| rem(it, 30) == 0.0).&& (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
                 println("Critical overpressure reached - erupting with fast rate")
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
@@ -596,10 +597,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 push!(erupted_volume, abs(V_erupt))
                 push!(eruption_times, (t / (3600 * 24 * 365.25) / 1.0e3))
                 push!(eruption_counters, eruption_counter)
-                push!(overpressure, maximum(Array(stokes.P)[pp] .- Array(P_lith)[pp]))
+                push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
                 push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
 
-            elseif eruption == false && any(((Array(stokes.P)[pp] .- Array(P_lith)[pp])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3) #.&& depth .≤ -2500)
+            elseif eruption == false && any((maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3) #.&& depth .≤ -2500)
                 println("Adding volume to the chamber ")
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
@@ -617,7 +618,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 16, ny = 16, figdir = "fi
                 compute_thermal_source!(thermal.H, T_addition, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
-                push!(overpressure, maximum(Array(stokes.P)[pp] .- Array(P_lith)[pp]))
+                push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
                 push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
             end
         end
@@ -998,5 +999,5 @@ else
 end
 # extension = 0.0
 # cutoff_visc = (1.0e17, 1.0e23)
-# fric_angle = 30.0e0 # friction angle in degrees
+# fric_angle = 20.0e0 # friction angle in degrees
 main(li, origin, phases_GMG, T_GMG, igg; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, fric_angle = fric_angle, extension = extension, cutoff_visc = (1.0e17, 1.0e23), V_total = V_total, V_eruptible = V_eruptible, layers = layers, air_phase = air_phase, progressiv_extension = progressiv_extension, plotting = plotting);
