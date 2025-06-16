@@ -285,10 +285,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
 
     Re = @zeros(ni...)
     Ra = @zeros(ni...)
-    time_vec = Float64[]
-    d18O_evo = Float64[]
+    time_vec = Float64[0.0]
+    d18O_evo = Float64[5.5]
+    melt_fraction_evo = Float64[1.0]
 
-    while it < 5000
+    while it < 5
     # while it < 50
 
         args = (; ϕ= ϕ,T = thermal.Tc, P = stokes.P, dt = dt, ΔTc = thermal.ΔTc)
@@ -393,10 +394,11 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
         @show it += 1
         t        += dt
         push!(time_vec, t)
-        push!(d18O_evo, mean(d18O[1:end-1, 1:end-1][ϕ .> 0.2]))
+        push!(d18O_evo, round(mean(d18O[1:end-1, 1:end-1][ϕ .> 0.2]), digits=2))
+        push!(melt_fraction_evo, round(maximum(ϕ), digits=2))
 
         # Data I/O and plotting ---------------------
-        if it == 1 || rem(it, 25) == 0
+        if it == 1 || rem(it, 5) == 0
             if igg.me == 0 && it == 1
                 metadata(pwd(), checkpoint, joinpath(@__DIR__, "SillConvection.jl"), joinpath(@__DIR__, "SillModelSetup.jl"), joinpath(@__DIR__, "SillRheology.jl"))
             end
@@ -576,25 +578,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
             figsave = joinpath(figdir, @sprintf("%06d.png", it))
             save(figsave, fig)
 
+            # Plot time evolution of mean melt fraction with flow regime backgrounds
             let
                 fig = Figure(size = (2000, 1000), title = "t = $t")
-                # Determine time scale and units for plotting
-                if t < 1e3
-                    TimeScale = 1
-                    TimeUnits = "s"
-                elseif t >= 1e3 && t < 24*3600
-                    TimeScale = 3600
-                    TimeUnits = "hr"
-                elseif t >= 24*3600 && t < 365*3600*24
-                    TimeScale = 3600*24
-                    TimeUnits = "days"
-                elseif t >= 365*3600*24 && t < 1e3*3600*24*365
-                    TimeScale = 3600*24*365
-                    TimeUnits = "yr"
-                else
-                    TimeScale = 1e3*3600*24*365
-                    TimeUnits = "kyr"
-                end
+
                 ax1 = Axis(
                     fig[1,1],
                     aspect = DataAspect(),
@@ -693,6 +680,96 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
                     )
                 save(joinpath(figdir, "Re_$(it).png"), fig1)
                 fig1
+
+                fig2 = Figure(size = (1600, 800), title = "Melt Fraction Evolution")
+
+                ax = Axis(
+                    fig2[1,1],
+                    title = "Mean Melt Fraction Evolution",
+                    titlesize=30,
+                    yticklabelsize=25,
+                    xticklabelsize=25,
+                    xlabelsize=25,
+                    ylabelsize=25,
+                    xlabel = "Time ($TimeUnits)",
+                    ylabel = "mean(ϕ)"
+                )
+
+                # Define regime boundaries
+                porous_max = 0.08
+                mush_max = 0.45
+                suspension_max = 1.0
+
+                # Plot colored backgrounds for regimes
+                # Define x range for bands (span entire time axis)
+                x_min = 0.0
+                x_max = maximum(time_vec ./ TimeScale)
+                x_band = [x_min, x_max]
+
+                band!(
+                    x_band,
+                    [0.0, 0.0],
+                    [porous_max, porous_max],
+                    color = (:blue, 0.2),
+                    # label = "Porous flow"
+                )
+                text!(
+                    ax,
+                    x_min + 0.01 * (x_max - x_min),  # near left edge
+                    porous_max / 2,
+                    text = "Porous flow",
+                    align = (:left, :center),
+                    fontsize = 40,
+                    color = :blue,
+                    font = "bold"
+                )
+                band!(
+                    x_band,
+                    [porous_max, porous_max],
+                    [mush_max, mush_max],
+                    color = (:orange, 0.5),
+                    # label = "Mushy flow"
+                )
+                text!(
+                    ax,
+                    x_min + 0.01 * (x_max - x_min),
+                    (porous_max + mush_max) / 2,
+                    text = "Mushy flow",
+                    align = (:left, :center),
+                    fontsize = 40,
+                    color = :orange,
+                    font = "bold"
+                )
+                band!(
+                    x_band,
+                    [mush_max, mush_max],
+                    [suspension_max, suspension_max],
+                    color = (:red, 0.2),
+                    # label = "Suspension flow"
+                )
+                text!(
+                    ax,
+                    x_min + 0.01 * (x_max - x_min),
+                    (mush_max + suspension_max) / 2,
+                    text = "Suspension flow",
+                    align = (:left, :center),
+                    fontsize = 40,
+                    color = :red,
+                    font = "bold"
+                )
+
+                lines!(
+                    ax,
+                    time_vec ./ TimeScale,
+                    melt_fraction_evo;
+                    color = :black,
+                    linewidth = 2,
+                    label = "mean(ϕ)"
+                )
+
+                # axislegend(ax, position=:lb, framevisible=true, fontsize=30)
+                save(joinpath(figdir, "FlowRegime_diagram_$(it).png"), fig2)
+                fig2
             end
 
         end
