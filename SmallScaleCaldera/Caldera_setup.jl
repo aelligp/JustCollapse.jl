@@ -27,6 +27,7 @@ function setup2D(
     # Phases = fill(6, nx, 2, nz);
     Phases = fill(air_phase, nx, 2, nz)
     Temp = fill(0.0, nx, 2, nz)
+    Temp_bg = fill(0.0, nx, 2, nz)
 
     add_box!(
         Phases, Temp, Grid;
@@ -62,6 +63,8 @@ function setup2D(
             )
         end
     end
+
+    Temp_bg = copy(Temp)
 
     add_ellipsoid!(
         Phases, Temp, Grid;
@@ -104,6 +107,7 @@ function setup2D(
 
     ph = Phases[:, 1, :]
     T = Temp[:, 1, :] .+ 273
+    T_bg = Temp_bg[:, 1, :] .+ 273
     V_total = (4 / 3 * π * (chamber_radius * aspect_x) * chamber_radius * (chamber_radius * aspect_x)) * 1.0e9
     V_eruptible = (4 / 3 * π * (chamber_radius / 1.25) * aspect_x * (chamber_radius / 2) * ((chamber_radius / 1.25) * aspect_x)) * 1.0e9
     R = ((chamber_depth - chamber_radius)) / (chamber_radius * aspect_x)
@@ -115,5 +119,5 @@ function setup2D(
     printstyled("Chamber diameter: $(round(chamber_diameter; digits = 3)) km \n"; bold = true, color = :light_yellow)
     printstyled("Eruptible chamber diameter: $(round(chamber_erupt; digits = 3)) km \n"; bold = true, color = :light_yellow)
     # write_paraview(Grid, "Volcano2D")
-    return li, origin, ph, T, Grid, V_total, V_eruptible, layers, air_phase
+    return li, origin, ph, T, T_bg, Grid, V_total, V_eruptible, layers, air_phase
 end

@@ -30,6 +30,7 @@ function main()
 export MPICH_GPU_SUPPORT_ENABLED=1
 export IGG_CUDAAWARE_MPI=1 # IGG
 export JULIA_CUDA_USE_COMPAT=false # IGG
+export LD_PRELOAD=/capstor/scratch/cscs/paellig/.julia/gh200/juliaup/depot/artifacts/4c845485a01f4a5c51481d9714303da1309c266f/lib/libcrypto.so.3
 
 # mount the uenv prgenv-gnu with the view named default
 srun --constraint=gpu --gpu-bind=per_task:1 --cpu_bind=sockets /capstor/scratch/cscs/paellig/jobreport -o report -- julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) $(fric_angle) /capstor/scratch/cscs/paellig/jobreport print report"""
