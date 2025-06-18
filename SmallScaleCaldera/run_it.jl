@@ -13,7 +13,7 @@ function main()
         extensions = 1e-15 #, 5e-15, 1e-14, 5e-14, 1e-13
         friction = 15:5:30.0
         for conduit in conduits, depth in depths, radius in radii, ar in ars, extension in extensions, fric_angle in friction
-            jobname = "NO_Ext_Systematics_$(today())_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)_$(fric_angle)"
+            jobname = "Caldera_$(today())_$(conduit)_$(depth)_$(radius)_$(ar)_$(extension)_$(fric_angle)"
             diameter = 2*(radius*ar)
             str =
 """#!/bin/bash -l
@@ -33,7 +33,7 @@ export JULIA_CUDA_USE_COMPAT=false # IGG
 export LD_PRELOAD=/capstor/scratch/cscs/paellig/.julia/gh200/juliaup/depot/artifacts/4c845485a01f4a5c51481d9714303da1309c266f/lib/libcrypto.so.3
 
 # mount the uenv prgenv-gnu with the view named default
-srun --constraint=gpu --gpu-bind=per_task:1 --cpu_bind=sockets /capstor/scratch/cscs/paellig/jobreport -o report -- julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) $(fric_angle) /capstor/scratch/cscs/paellig/jobreport print report"""
+srun --constraint=gpu --gpu-bind=per_task:1 --cpu_bind=sockets -- julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) $(fric_angle) """
             if diameter <= 8.0
                 open("runme_test.sh", "w") do io
                     println(io, str)
