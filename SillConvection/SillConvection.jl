@@ -1,5 +1,5 @@
-const isCUDA = false
-# const isCUDA = true
+# const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -133,6 +133,19 @@ function d18O_anomaly!(
     return nothing
 end
 
+function plot_particles(particles, pPhases; clrmap = :roma)
+    p = particles.coords
+    # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
+    ppx, ppy = p
+    pxv = ppx.data[:] ./ 1.0e3
+    pyv = ppy.data[:] ./ 1.0e3
+    clr = pPhases.data[:]
+    idxv = particles.index.data[:]
+    f, ax, h = scatter(Array(pxv[idxv]), Array(pyv[idxv]), color = Array(clr[idxv]), colormap = clrmap, markersize = 1)
+    Colorbar(f[1, 2], h)
+    return f
+end
+
 ## END OF HELPER FUNCTION ------------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
@@ -188,7 +201,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes          = StokesArrays(backend, ni)
-    pt_stokes       = PTStokesCoeffs(li, di; Re = 14.9, ϵ_rel=1e-5, ϵ_abs=1e-7, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes       = PTStokesCoeffs(li, di; Re = 14.9, ϵ_rel=1e-5, ϵ_abs=1e-6, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
     # ----------------------------------------------------
 
     thermal         = ThermalArrays(backend, ni)
@@ -269,7 +282,12 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
         # save(joinpath(figdir, "initial_profile.png"), fig)
         fig
     end
-
+    let
+        compo = [oxd_wt_sill[1] (oxd_wt_sill[7]+oxd_wt_sill[8]);
+                 oxd_wt_host_rock[1] (oxd_wt_host_rock[7]+oxd_wt_host_rock[8])]
+        fig=Plot_TAS_diagram(compo; sz=(1000, 1000))
+        save(joinpath(figdir, "TAS_diagram.png"), fig)
+    end
     # WENO arrays
     T_WENO  = @zeros(ni.+1)
     Vx_v = @zeros(ni.+1...)
@@ -289,7 +307,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
     d18O_evo = Float64[5.5]
     melt_fraction_evo = Float64[1.0]
 
-    while it < 5
+    while it < 100e3 && round(maximum(ϕ), digits=2) > 0.3 && t < (60 * 3600 * 24 * 365)
     # while it < 50
 
         args = (; ϕ= ϕ,T = thermal.Tc, P = stokes.P, dt = dt, ΔTc = thermal.ΔTc)
@@ -325,10 +343,10 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
         tensor_invariant!(stokes.ε)
         tensor_invariant!(stokes.ε_pl)
         ## Save the checkpoint file before a possible thermal solver blow up
-        checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
+        # checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
 
         dt   = compute_dt(stokes, di, dt_diff)
-        println("dt = $(dt/(3600*24))")
+        println("dt = $(dt/(3600*24)) days")
         # Thermal solver ---------------
         heatdiffusion_PT!(
             thermal,
@@ -398,7 +416,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
         push!(melt_fraction_evo, round(maximum(ϕ), digits=2))
 
         # Data I/O and plotting ---------------------
-        if it == 1 || rem(it, 5) == 0
+        if it == 1 || rem(it, 50) == 0
             if igg.me == 0 && it == 1
                 metadata(pwd(), checkpoint, joinpath(@__DIR__, "SillConvection.jl"), joinpath(@__DIR__, "SillModelSetup.jl"), joinpath(@__DIR__, "SillRheology.jl"))
             end
@@ -785,7 +803,7 @@ do_vtk = true
 
 # (Path)/folder where output data and figures are stored
 figdir   = "SillConvection2D_$(today())"
-n = 128
+n = 512
 nx, ny = n, n #>> 1
 
 sill_temp = 1000.0 # in C
@@ -798,7 +816,8 @@ li, origin, phases_GMG, T_GMG, _ = SillSetup(
     dimensions = (0.3, 0.2),
     sill_temp = sill_temp,
     host_rock_temp = host_rock_temp,
-    sill_size = sill_size
+    sill_size = sill_size,
+    ellipse = true
 )
 
 igg = if !(JustRelax.MPI.Initialized())
