@@ -6,6 +6,7 @@ function SillSetup(nx, nz;
     sill_temp = 1000,       # temperature in C
     host_rock_temp = 500,
     sill_size = 0.1, # size of the sill in km
+    ellipse = false
     )
     Lx = Ly = dimensions[1]
     x = range(0.0, Lx, nx)
@@ -17,16 +18,27 @@ function SillSetup(nx, nz;
     Phases = fill(1, nx, 2, nz)
     Temp = fill(host_rock_temp, nx, 2, nz)
 
-    add_box!(
-        Phases,
-        Temp,
-        Grid;
-        xlim = (minimum(Grid.x.val), maximum(Grid.x.val)),
-        ylim = (minimum(Grid.y.val), maximum(Grid.y.val)),
-        zlim = (-sill_placement[1], -sill_placement[2]),
-        phase=ConstantPhase(2),
-        T = ConstantTemp(; T=sill_temp)
-    )
+    if ellipse
+        # Elliptical sill
+        add_ellipsoid!(
+            Phases, Temp, Grid;
+            cen = (mean(Grid.x.val), 0.0, mean(Grid.z.val)),
+            axes = (sill_size, dimensions[1] * 0.75, sill_size * 0.5),
+            phase = ConstantPhase(2),
+            T = ConstantTemp(T = sill_temp)
+        )
+    else
+        add_box!(
+            Phases,
+            Temp,
+            Grid;
+            xlim = (minimum(Grid.x.val), maximum(Grid.x.val)),
+            ylim = (minimum(Grid.y.val), maximum(Grid.y.val)),
+            zlim = (-sill_placement[1], -sill_placement[2]),
+            phase=ConstantPhase(2),
+            T = ConstantTemp(; T=sill_temp)
+        )
+    end
 
     # add_sphere!(Phases, Temp, Grid;
     # cen = (mean(Grid.x.val), 0,-90.0),
