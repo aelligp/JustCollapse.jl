@@ -592,9 +592,9 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 if (V_total - V_erupt_fast) > 0.0
                     compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                     T_erupt = mean(thermal.Tc[cells .== true])
-                    ρ_out = mean(ρg[end][cells .== true])
-                    # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
-                    V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, ρg[end], ρ_out, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                    V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                    # ρ_out = mean(ρg[end][cells .== true])
+                    # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, ρg[end], ρ_out, V_erupt, V_tot, di, phase_ratios, 3, 4)
                     compute_thermal_source!(thermal.H, T_erupt, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 end
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
@@ -620,10 +620,10 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 else
                     (rand(1e-6:1e-5:6e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 end
-                ρ_in = mean(ρg[end][ϕ.center .== 1.0])
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
-                # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
-                V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, ρg[end], ρ_in, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                # ρ_in = mean(ρg[end][ϕ.center .== 1.0])
+                # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, ρg[end], ρ_in, V_erupt, V_tot, di, phase_ratios, 3, 4)
                 compute_thermal_source!(thermal.H, T_addition, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
