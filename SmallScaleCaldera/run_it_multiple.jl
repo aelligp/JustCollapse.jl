@@ -29,9 +29,11 @@ function main()
 #SBATCH --error=batch_$(batch_counter).e
 #SBATCH --time=00:30:00 #HH:MM:SS
 #SBATCH --nodes=1
-#SBATCH --ntasks=$(max_jobs)
-#SBATCH --gpus-per-node=1
-#SBATCH --constraint=gpu
+#SBATCH --ntasks=1
+#SBATCH --exclusive
+#SBATCH --partition=normal
+#SBATCH --cpus-per-task=72
+#SBATCH --gpus-per-task=1
 #SBATCH --account=c44
 
 export MPICH_GPU_SUPPORT_ENABLED=1
@@ -48,10 +50,11 @@ export LD_PRELOAD=/capstor/scratch/cscs/paellig/.julia/gh200/juliaup/depot/artif
                 open("runme_batch_$(batch_counter).sh", "a") do io
                     if job_counter == max_jobs-1  # Last job in the batch
                         println(io, """
-srun --exclusive -N1 -n1 --gpu-bind=per_task:1 --cpu_bind=sockets julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) $(fric_angle) /capstor/scratch/cscs/paellig/jobreport print report""")
+srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) $(fric_angle) &
+wait""")
                     else
                         println(io, """
-srun --exclusive -N1 -n1 --gpu-bind=per_task:1 --cpu_bind=sockets julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) $(fric_angle) /capstor/scratch/cscs/paellig/jobreport print report &""")
+srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) $(fric_angle) &""")
                     end
                 end
 
