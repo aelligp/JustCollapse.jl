@@ -8,8 +8,8 @@ function main()
 
         conduits = 1.5e-1
         depths = 5e0
-        radii = 1.5#:0.25:2.5e0
-        ars = 1.0#:0.5:2.5e0
+        radii = 1.5:0.25:2.5e0
+        ars = 1.0:0.5:2.5e0
         extensions = 1e-15 #, 5e-15, 1e-14, 5e-14, 1e-13
         friction = 15:5:30.0
         max_jobs = 4
@@ -27,7 +27,7 @@ function main()
 #SBATCH --job-name="Batch_$(batch_counter)_$(today())"
 #SBATCH --output=batch_$(batch_counter).o
 #SBATCH --error=batch_$(batch_counter).e
-#SBATCH --time=00:30:00 #HH:MM:SS
+#SBATCH --time=24:00:00 #HH:MM:SS
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --exclusive
@@ -72,14 +72,14 @@ srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto Sma
         # Submit all batch files if any were created
         if batch_counter > 0
             for i in 1:batch_counter
-                # run(`sbatch runme_batch_$(i).sh`)
+                run(`sbatch runme_batch_$(i).sh`)
                 println("Batch file runme_batch_$(i).sh submitted")
             end
 
             # Remove all batch files after submission
             sleep(1)
             for i in 1:batch_counter
-                # rm("runme_batch_$(i).sh")
+                rm("runme_batch_$(i).sh")
                 println("Batch file runme_batch_$(i).sh removed")
             end
         end

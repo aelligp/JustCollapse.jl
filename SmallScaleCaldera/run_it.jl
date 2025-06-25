@@ -8,7 +8,7 @@ function main()
 
         conduits = 1.5e-1
         depths = 5e0
-        radii = 1.5:0.25:2.5e0
+        radii = 1.5:0.25:2.0#2.5e0
         ars = 1.0:0.5:2.5e0
         extensions = 1e-15 #, 5e-15, 1e-14, 5e-14, 1e-13
         friction = 15:5:30.0
@@ -20,7 +20,7 @@ function main()
 #SBATCH --job-name=\"$(jobname)\"
 #SBATCH --output=caldera_$(jobname).o
 #SBATCH --error=caldera_$(jobname).e
-#SBATCH --time=21:00:00 #HH:MM:SS
+#SBATCH --time=24:00:00 #HH:MM:SS
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=1
