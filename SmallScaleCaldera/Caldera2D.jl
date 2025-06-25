@@ -904,7 +904,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     ax = Axis(fig[1, 1]; title = "Drucker Prager")
                     lines!(ax, [0.0e6, maximum(stokes.P)] ./ 1.0e6, [10.0e6 * cosd(rheology[1].CompositeRheology[1].elements[end].ϕ.val) ; (maximum(stokes.P) * sind(rheology[1].CompositeRheology[1].elements[end].ϕ.val) + rheology[1].CompositeRheology[1].elements[end].C.val * cosd(rheology[1].CompositeRheology[1].elements[end].ϕ.val))] ./ 1.0e6, color = :black, linewidth = 2)
                     # s1 = scatter!(ax, Array(stokes.P ./ 1.0e6)[:], Array(stokes.τ.II ./ 1.0e6)[:]; color = Array(stokes.R.RP)[:], colormap = :roma, markersize = 3)
-                    s1 = scatter!(ax, Array((stokes.P - (1000 *9.81 .* depth)) ./ 1.0e6)[:], Array(stokes.τ.II ./ 1.0e6)[:]; color = Array(stokes.R.RP)[:], colormap = :roma, markersize = 3)
+                    s1 = scatter!(ax, Array((stokes.P) ./ 1.0e6)[:], Array(stokes.τ.II ./ 1.0e6)[:]; color = Array(stokes.R.RP)[:], colormap = :roma, markersize = 3)
                     Colorbar(fig[1, 2], s1)
                     fig
                     save(joinpath(figdir, "DruckerPrager_$it.png"), fig)
@@ -994,7 +994,7 @@ conduit, depth, radius, ar, extension, fric_angle = parse.(Float64, ARGS[1:end])
 # figdir is defined as Systematics_depth_radius_ar_extension
 figdir   = "Systematics/Caldera2D_$(today())_strong_diabase_$(depth)_$(radius)_$(ar)_$(extension)_$(fric_angle)"
 # figdir = "Systematics/Caldera2D_$(today())"
-n = 512
+n = 480
 nx, ny = n, n >> 1
 
 li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase = setup2D(
