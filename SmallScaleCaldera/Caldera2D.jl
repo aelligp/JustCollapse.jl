@@ -1005,6 +1005,7 @@ if plotting
     end
     take(figdir)
     checkpoint = joinpath(figdir, "checkpoint")
+    take(checkpoint)
 end
 # ----------------------------------------------------
 
