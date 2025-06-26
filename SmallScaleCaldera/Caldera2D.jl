@@ -649,7 +649,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 dt,
                 igg;
                 kwargs = (;
-                    iterMax = it < 5 || eruption == true ? 300.0e3 : iterMax,
+                    iterMax = it < 5 || eruption == true ? 250.0e3 : iterMax,
                     nout = 2.0e3,
                     viscosity_cutoff = viscosity_cutoff,
                 )
@@ -903,7 +903,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     fig = Figure(; size = (1200, 900))
                     ax = Axis(fig[1, 1]; title = "Drucker Prager")
                     lines!(ax, [0.0e6, maximum(stokes.P)] ./ 1.0e6, [10.0e6 * cosd(rheology[1].CompositeRheology[1].elements[end].ϕ.val) ; (maximum(stokes.P) * sind(rheology[1].CompositeRheology[1].elements[end].ϕ.val) + rheology[1].CompositeRheology[1].elements[end].C.val * cosd(rheology[1].CompositeRheology[1].elements[end].ϕ.val))] ./ 1.0e6, color = :black, linewidth = 2)
-                    # s1 = scatter!(ax, Array(stokes.P ./ 1.0e6)[:], Array(stokes.τ.II ./ 1.0e6)[:]; color = Array(stokes.R.RP)[:], colormap = :roma, markersize = 3)
                     s1 = scatter!(ax, Array((stokes.P) ./ 1.0e6)[:], Array(stokes.τ.II ./ 1.0e6)[:]; color = Array(stokes.R.RP)[:], colormap = :roma, markersize = 3)
                     Colorbar(fig[1, 2], s1)
                     fig
@@ -992,10 +991,32 @@ do_vtk = true # set to true to generate VTK files for ParaView
 conduit, depth, radius, ar, extension, fric_angle = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-figdir   = "Systematics/Caldera2D_$(today())_strong_diabase_$(depth)_$(radius)_$(ar)_$(extension)_$(fric_angle)"
+figdir   = "Systematics/Caldera2D_$(today())_strong_diabase_no_softening_$(depth)_$(radius)_$(ar)_$(extension)_$(fric_angle)"
 # figdir = "Systematics/Caldera2D_$(today())"
 n = 480
 nx, ny = n, n >> 1
+
+# IO -------------------------------------------------
+# if it does not exist, make folder where figures are stored
+if plotting
+    if do_vtk
+        vtk_dir = joinpath(figdir, "vtk")
+        take(vtk_dir)
+    end
+    take(figdir)
+    checkpoint = joinpath(figdir, "checkpoint")
+end
+# ----------------------------------------------------
+
+open(joinpath(checkpoint, "setup_args.txt"), "w") do io
+    println(io, "conduit: $conduit")
+    println(io, "depth: $depth")
+    println(io, "radius: $radius")
+    println(io, "aspect ratio (ar): $ar")
+    println(io, "extension: $extension")
+    println(io, "friction angle: $fric_angle")
+end
+
 
 li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase = setup2D(
     nx + 1, ny + 1;
