@@ -533,7 +533,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             P_lith .= stokes.P
         end
 
-        if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ * 5
+        if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ_abs * 5
             iterMax += 10e3
             iterMax = min(iterMax, 200e3)
             println("Increasing maximum pseudo timesteps to $iterMax")
