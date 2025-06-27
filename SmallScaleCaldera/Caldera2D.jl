@@ -164,30 +164,73 @@ function make_it_go_boom!(Q, threshold, cells, ϕ, V_erupt, V_tot, di, phase_rat
     return V_tot, V_erupt
 end
 
-function make_it_go_boom!(Q, threshold, cells, ϕ, ρg, Δρ, V_erupt, V_tot, di, phase_ratios, magma_phase, anomaly_phase)
 
-    @parallel_indices (i, j) function _make_it_go_boom!(Q, threshold, cells, ϕ, ρg, Δρ, V_erupt, V_tot, dx, dy, center_ratio, magma_phase, anomaly_phase)
+function make_it_go_boom_smooth!(
+    Q,
+    cells,
+    ϕ,
+    V_erupt,
+    V_tot,
+    weights,
+    phase_ratios,
+    magma_phase,
+    anomaly_phase,
+)
 
+    @parallel_indices (i, j) function _make_it_go_boom_smooth!(
+        Q,
+        cells,
+        ϕ,
+        V_erupt,
+        V_tot,
+        weights,
+        center_ratio,
+        magma_phase,
+        anomaly_phase
+    )
         magma_ratio_ij = @index center_ratio[magma_phase, i, j]
         anomaly_ratio_ij = @index center_ratio[anomaly_phase, i, j]
         total_fraction = magma_ratio_ij + anomaly_ratio_ij
-        ϕ_ij = ϕ[i, j]
-        cells_ij = cells[i, j]
-        ρg_ij = ρg[i, j]
+        weight = weights[i,j]
+        cells_ij = cells[i,j]
 
-        if (anomaly_ratio_ij > 0.5 || magma_ratio_ij > 0.5) && ϕ_ij ≥ threshold
-            Q[i, j] =(((Δρ-ρg_ij) * inv(ρg_ij)) + (V_erupt * inv(V_tot))) * ((total_fraction * cells_ij) * inv(numcells(cells)))
+        if cells_ij > 0 && weight > 0
+            Q[i, j] = (V_erupt * inv(V_tot)) * weight
+        else
+            Q[i, j] = 0.0
         end
+
         return nothing
     end
 
     ni = size(phase_ratios.center)
 
-    @parallel (@idx ni) _make_it_go_boom!(Q, threshold, cells, ϕ, ρg, Δρ, V_erupt, V_tot, di..., phase_ratios.center, magma_phase, anomaly_phase)
-    V_tot += V_erupt
+    @parallel (@idx ni) _make_it_go_boom_smooth!(
+        Q,
+        cells,
+        ϕ,
+        V_erupt,
+        V_tot,
+        weights,
+        phase_ratios.center,
+        magma_phase,
+        anomaly_phase,
+    )
 
+    V_tot += V_erupt
     return V_tot, V_erupt
 end
+
+function compute_total_eruptible_volume(cells, dx::Float64, dy::Float64)
+    V_total = 0.0
+    nx, ny = size(cells)
+    @inbounds for j in 1:ny
+        r = count(i -> cells[i, j] > 0, 1:nx) * dx
+        V_total += π * r^2 / 4 * dy
+    end
+    return V_total
+end
+
 
 function compute_cells_for_Q!(cells, threshold, phase_ratios, magma_phase, anomaly_phase, melt_fraction)
     @parallel_indices (I...) function _compute_cells_for_Q!(cells, threshold, center_ratio, magma_phase, anomaly_phase, melt_fraction)
@@ -209,27 +252,68 @@ function compute_cells_for_Q!(cells, threshold, phase_ratios, magma_phase, anoma
 
 end
 
+function compute_vertical_weights(cells, z, smoothing="cosine")
+    weights = @zeros(size(z))
+    z_vals = [z[i,j] for i in 1:size(z,1), j in 1:size(z,2) if cells[i,j] > 0]
+    if isempty(z_vals)
+        return weights
+    end
+
+    z_max = maximum(z_vals)  # top (shallower)
+    z_min = minimum(z_vals)  # bottom (deeper)
+
+    for i in 1:size(z,1), j in 1:size(z,2)
+        if cells[i,j] > 0
+            # Now z_rel = 1 at top, 0 at bottom
+            z_rel = (z[i,j] - z_min) / (z_max - z_min)
+
+            weights[i,j] = if smoothing == "linear"
+                z_rel
+            elseif smoothing == "cosine"
+                0.5 * (1 + cos(pi * (1 - z_rel)))  # taper: 1 at top, 0 at bottom
+            elseif smoothing == "exp"
+                exp(-3 * (1 - z_rel))  # also 1 at top, decays downward
+            else
+                z_rel
+            end
+        end
+    end
+
+    # Normalize weights to sum to 1
+    s = sum(weights)
+    if s > 0
+        weights ./= s
+    end
+
+    return weights
+end
+
 numcells(A::AbstractArray) = count(x -> x == 1.0, A)
 
-function compute_thermal_source!(H, T_erupt, threshold, V_erupt, cells, ϕ, phase_ratios, dt, args, di, magma_phase, anomaly_phase, rheology)
-    @parallel_indices (I...) function _compute_thermal_source!(H, T_erupt, threshold, V_erupt, cells, center_ratio, dt, args, dx, dy, magma_phase, anomaly_phase, heology)
+function compute_thermal_source!(
+    H, T_erupt, threshold, V_erupt, cells, ϕ,
+    phase_ratios, dt, args, di, magma_phase, anomaly_phase, rheology; α=1.0
+)
+    @parallel_indices (I...) function _compute_thermal_source!(
+        H, T_erupt, threshold, V_erupt, cells, center_ratio, dt, args,
+        dx, dy, magma_phase, anomaly_phase, rheology, α
+    )
         magma_ratio_ij = @index center_ratio[magma_phase, I...]
         anomaly_ratio_ij = @index center_ratio[anomaly_phase, I...]
-        phase_ij = center_ratio[I...]
         total_fraction = magma_ratio_ij + anomaly_ratio_ij
-        V_eruptij = V_erupt * ((total_fraction * cells[I...]) * inv(numcells(cells)))
-
         ϕ_ij = ϕ[I...]
-        args_ij = (; T = args.T[I...], P = args.P[I...])
         Tij_bg = args.Temp_bg[I...]
-        Tij = args_ij.T
+        Tij = args.T[I...]
+        phase_ij = center_ratio[I...]
+        args_ij = (; T = Tij, P = args.P[I...])
+        V_eruptij = V_erupt * ((total_fraction * cells[I...]) * inv(numcells(cells)))
         ρCp = JustRelax.JustRelax2D.compute_ρCp(rheology, phase_ij, args_ij)
 
         if ((anomaly_ratio_ij > 0.5 || magma_ratio_ij > 0.5) && ϕ_ij ≥ threshold)
             # Ensure temperature does not go below Temp_bg
             ΔT = max(T_erupt - max(Tij, Tij_bg), 0.0)
             H[I...] = ((V_eruptij / dt) * ρCp[I...] * ΔT) / (dx * dy * dx)
-            # H[I...] = ((V_eruptij / dt) * ρCp[I...] * (max(T_erupt - Tij, 0.0))) / (dx * dy * dx)
+            # H[I...] = ((V_eruptij / dt) * ρCp[I...] * ΔT / (dx * dy * dx)
 
         #   [W/m^3] = [[m3/[s]] * [[kg/m^3] * [J/kg/K]] * [K]] / [[m] * [m] * [m]]
         end
@@ -238,10 +322,48 @@ function compute_thermal_source!(H, T_erupt, threshold, V_erupt, cells, ϕ, phas
 
     ni = size(phase_ratios.center)
 
-    @parallel (@idx ni) _compute_thermal_source!(H, T_erupt, threshold, V_erupt, cells, phase_ratios.center, dt, args, di..., magma_phase, anomaly_phase, rheology)
+    @parallel (@idx ni) _compute_thermal_source!(
+        H, T_erupt, threshold, V_erupt, cells, phase_ratios.center, dt, args,
+        di..., magma_phase, anomaly_phase, rheology, α
+    )
 end
 
 
+function compute_thermal_source!(
+    H, T_erupt, threshold, V_erupt, cells, ϕ,
+    phase_ratios, dt, args, di, magma_phase, anomaly_phase, rheology, weights;
+    α = 0.3
+)
+    @parallel_indices (I...) function _compute_thermal_source!(
+        H, T_erupt, threshold, V_erupt, cells, weights,
+        center_ratio, dt, args, dx, dy, magma_phase, anomaly_phase, rheology, α
+    )
+        magma_ratio_ij = @index center_ratio[magma_phase, I...]
+        anomaly_ratio_ij = @index center_ratio[anomaly_phase, I...]
+        # total_fraction = magma_ratio_ij + anomaly_ratio_ij
+        ϕ_ij = ϕ[I...]
+        Tij_bg = args.Temp_bg[I...]
+        Tij = args.T[I...]
+        phase_ij = center_ratio[I...]
+        args_ij = (; T = Tij, P = args.P[I...])
+        V_eruptij = V_erupt * weights[I...]  # ← smoother vertical control
+        ρCp = JustRelax.JustRelax2D.compute_ρCp(rheology, phase_ij, args_ij)
+
+        if ((anomaly_ratio_ij > 0.5 || magma_ratio_ij > 0.5) && ϕ_ij ≥ threshold)
+            ΔT = max(T_erupt - max(Tij, Tij_bg), 0.0) * α       # ← partial ΔT removal
+            H[I...] = ((V_eruptij / dt) * ρCp[I...] * ΔT) / (dx * dy * dx)
+        end
+
+        return nothing
+    end
+
+    ni = size(phase_ratios.center)
+
+    @parallel (@idx ni) _compute_thermal_source!(
+        H, T_erupt, threshold, V_erupt, cells, weights, phase_ratios.center,
+        dt, args, di..., magma_phase, anomaly_phase, rheology, α
+    )
+end
 
 function compute_VEI!(V_erupt)
     if V_erupt <= 1.0e4
@@ -528,6 +650,10 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     overpressure_t = Float64[]
     local iters, er_it, eruption_counter, Vx_v, Vy_v, d18O
 
+    depth = [y for _ in xci[1], y in xci[2]];
+
+
+
     while it < 500 #000 # run only for 5 Myrs
         if it == 1
             P_lith .= stokes.P
@@ -574,8 +700,11 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             V_max_eruptable = V_total / 2
             V_erupt_fast = -V_total / 3
+            compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
+            V_total = compute_total_eruptible_volume(cells, di...)
             # if eruption == false && ((any((Array(stokes.P)[pp] .- Array(P_lith)[pp]) .≥ ΔPc .&& (Array(ϕ_m)[pp] .≥ 0.5)) .&& any(Array(ϕ_m) .≥ 0.5)) .|| rem(it, 30) == 0.0).&& (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
-            if eruption == false && ((any(maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]) .≥ ΔPc .&& Array(ϕ_m)[pp] .≥ 0.5) .&& any(Array(ϕ_m) .≥ 0.5)) .|| rem(it, 30) == 0.0).&& (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
+            if eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
+                (any(maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp] .≥ 0.3]) .≥ ΔPc .&& Array(ϕ_m)[pp] .≥ 0.5) && any(Array(ϕ_m) .≥ 0.5)) && (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
                 println("Critical overpressure reached - erupting with fast rate")
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
@@ -588,14 +717,17 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 else
                     V_erupt = rand() * V_erupt_fast
                 end
+                compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
+                # V_total = compute_total_eruptible_volume(cells, di...)
                 V_tot = V_total
-                if (V_total - V_erupt_fast) > 0.0
-                    compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
+                if (V_total - V_erupt) > 0.0
+                    weights = compute_vertical_weights(cells, depth, "cosine")  # or "linear", "exp"
                     T_erupt = mean(thermal.Tc[cells .== true])
-                    V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                    # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                    V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
                     # ρ_out = mean(ρg[end][cells .== true])
                     # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, ρg[end], ρ_out, V_erupt, V_tot, di, phase_ratios, 3, 4)
-                    compute_thermal_source!(thermal.H, T_erupt, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
+                    compute_thermal_source!(thermal.H, T_erupt, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights)
                 end
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
                 println("Erupted Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 2)) km³")
@@ -609,22 +741,21 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 # push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
                 # push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
 
-            elseif eruption == false && any((maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3) #.&& depth .≤ -2500)
+            elseif eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
+                any((maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3) #.&& depth .≤ -2500)
                 println("Adding volume to the chamber ")
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
+                compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
                 V_tot = V_total
                 T_addition = 1000+273e0
                 V_erupt = if rand() < 0.1
-                    0.0 / (3600 * 24 * 365.25) * dt
+                    (1e-6 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of volume to maybe sustain the heat
                 else
-                    (rand(1e-6:1e-5:6e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                    (rand(1e-4:1e-5:3e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 end
-                compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
-                V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
-                # ρ_in = mean(ρg[end][ϕ.center .== 1.0])
-                # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, ρg[end], ρ_in, V_erupt, V_tot, di, phase_ratios, 3, 4)
-                compute_thermal_source!(thermal.H, T_addition, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
+                V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.3, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                compute_thermal_source!(thermal.H, T_addition, 0.3, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
                 # push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
@@ -681,7 +812,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         # ------------------------------
 
         # Thermal solver ---------------
-        if it > 3
+        if it ≥ 3
         heatdiffusion_PT!(
             thermal,
             pt_thermal,
@@ -753,10 +884,12 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         if igg.me == 0
             push!(volume, V_total)
             push!(volume_times, (t / (3600 * 24 * 365.25) / 1.0e3))
-            CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
-            # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            # CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            if it > 1 && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3])
             push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
             push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
+            end
         end
 
         if it == 1
@@ -852,7 +985,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 h4 = heatmap!(ax4, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(log10.(stokes.viscosity.η_vep)), colorrange = log10.(viscosity_cutoff), colormap = :batlow)
                 # h4 = heatmap!(ax4, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(log10.(η_eff)), colorrange = log10.(viscosity_cutoff), colormap = :batlow)
                 h5 = heatmap!(ax5, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(stokes.EII_pl), colormap = :batlow)
-                contour!(ax5, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(ϕ_m), levels = [0.5, 0.75, 1.0], color = :white, linewidth = 1.5, labels=true)
+                # contour!(ax5, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(ϕ_m), levels = [0.5, 0.75, 1.0], color = :white, linewidth = 1.5, labels=true)
 
                 # h6  = heatmap!(ax6, xci[1].*1e-3, xci[2].*1e-3, Array(ϕ_m) , colormap=:lipari, colorrange=(0.0,1.0))
                 h6 = heatmap!(ax6, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, (Array(stokes.P) .- Array(P_lith)) ./ 1.0e6, colormap = :roma)
