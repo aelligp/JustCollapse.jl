@@ -1,5 +1,5 @@
-# const isCUDA = false
-const isCUDA = true
+const isCUDA = false
+# const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -46,6 +46,11 @@ macro all_k(A)
     return esc(:($A[$idx_k]))
 end
 
+const idx_i = INDICES[1]
+macro all_i(A)
+    return esc(:($A[$idx_i]))
+end
+
 function copyinn_x!(A, B)
     @parallel function f_x(A, B)
         @all(A) = @inn_x(B)
@@ -60,6 +65,12 @@ end
     @all(P) = abs(@all(ρg) * @all_k(z)) #* <(@all_k(z), 0.0)
     return nothing
 end
+
+@parallel function init_P!(P, ρg, z, topo_y)
+    @all(P) = @all(ρg) * (@all_i(topo_y) - @all_k(z))
+    return nothing
+end
+
 
 function apply_pure_shear(Vx, Vy, εbg, xvi, lx, ly)
     xv, yv = xvi
@@ -80,6 +91,29 @@ function apply_pure_shear(Vx, Vy, εbg, xvi, lx, ly)
     @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Vx, εbg, lx)
     nx, ny = size(Vy)
     @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Vy, εbg, ly)
+
+    return nothing
+end
+
+function apply_pure_shear(Ux, Uy, εbg, xvi, lx, ly, dt)
+    xv, yv = xvi
+
+    @parallel_indices (i, j) function pure_shear_x!(Ux, εbg, lx, dt)
+        xi = xv[i]
+        Ux[i, j + 1] = εbg * (xi - lx * 0.5) * dt
+        return nothing
+    end
+
+    @parallel_indices (i, j) function pure_shear_y!(Uy, εbg, ly, dt)
+        yi = yv[j]
+        Uy[i + 1, j] = abs(yi) * εbg *dt
+        return nothing
+    end
+
+    nx, ny = size(Ux)
+    @parallel (1:nx, 1:(ny - 2)) pure_shear_x!(Ux, εbg, lx, dt)
+    nx, ny = size(Uy)
+    @parallel (1:(nx - 2), 1:ny) pure_shear_y!(Uy, εbg, ly, dt)
 
     return nothing
 end
@@ -225,8 +259,10 @@ function compute_total_eruptible_volume(cells, dx::Float64, dy::Float64)
     V_total = 0.0
     nx, ny = size(cells)
     @inbounds for j in 1:ny
-        r = count(i -> cells[i, j] > 0, 1:nx) * dx
-        V_total += π * r^2 / 4 * dy
+        # Compute semi-axes for the ellipse at this y-row
+        a = count(i -> cells[i, j] > 0, 1:nx) * dx / 2  # semi-major axis (x-direction)
+        b = dy / 2                                      # semi-minor axis (y-direction, per row)
+        V_total += (4/3) * π * a * b * a
     end
     return V_total
 end
@@ -446,7 +482,7 @@ end
 # --------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
-function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir = "figs2D", do_vtk = false, fric_angle = 30, extension = 1.0e-15 * 0, cutoff_visc = (1.0e16, 1.0e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase = 6, progressiv_extension = false, plotting = true)
+function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir = "figs2D", do_vtk = false, fric_angle = 30, extension = 1.0e-15 * 0, cutoff_visc = (1.0e16, 1.0e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase = 6, progressiv_extension = false, plotting = true, displacement=false)
 
     # Physical domain ------------------------------------
     ni = nx, ny           # number of cells
@@ -526,8 +562,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
-    pt_stokes = PTStokesCoeffs(li, di; ϵ_rel = 1.0e-5, ϵ_abs = 1.0e-6, Re = 3.0, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
-    # pt_stokes = PTStokesCoeffs(li, di; ϵ = 1.0e-4, Re = 3*√10*π/2, r = 0.5, CFL = 0.8 / √2.1) # Re=3π, r=0.7
+    pt_stokes = PTStokesCoeffs(li, di; ϵ_rel = 1.0e-5, ϵ_abs = 1.0e-4, Re = 3.0, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
+
 
     # randomize cohesion
     perturbation_C = @rand(ni...)
@@ -557,7 +593,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     ρg = ntuple(_ -> @zeros(ni...), Val(2))
     for _ in 1:5
         compute_ρg!(ρg, phase_ratios, rheology, (T = thermal.Tc, P = stokes.P))
-        @parallel init_P!(stokes.P, ρg[end], xvi[2])
+        # @parallel init_P!(stokes.P, ρg[end], xvi[2])
+        @parallel init_P!(stokes.P, ρg[end], xvi[2], topo_y)
     end
     # stokes.P        .= PTArray(backend)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
 
@@ -577,16 +614,18 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     )
 
     # Boundary conditions
-    # flow_bcs         = DisplacementBoundaryConditions(;
-    flow_bcs = VelocityBoundaryConditions(;
+    displacement == true ?
+        flow_bcs         = DisplacementBoundaryConditions(;
         free_slip = (left = true, right = true, top = true, bot = true),
         free_surface = false,
-    )
-
+    ) : flow_bcs = VelocityBoundaryConditions(;
+        free_slip = (left = true, right = true, top = true, bot = true),
+        free_surface = false,)
     εbg = extension
-    apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
+    isa(flow_bcs, VelocityBoundaryConditions) ? apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...) : apply_pure_shear(@displacement(stokes)..., εbg, xvi, li..., dt)
 
     flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+    isa(flow_bcs, VelocityBoundaryConditions) ? nothing : displacement2velocity!(stokes, dt)
     update_halo!(@velocity(stokes)...)
 
     # IO -------------------------------------------------
@@ -693,16 +732,14 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         temperature2center!(thermal)
 
         args = (; ϕ = ϕ_m, T = thermal.Tc, P = stokes.P, dt = Inf, perturbation_C = perturbation_C, ΔTc=thermal.ΔTc,  Temp_bg = Temp_bg)
-        # args = (; ϕ=ϕ_m, T=thermal.Tc, P=stokes.P, dt=Inf)
-
         if it > 3
             CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             V_max_eruptable = V_total / 2
             V_erupt_fast = -V_total / 3
-            compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
+            compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m)
             V_total = compute_total_eruptible_volume(cells, di...)
-            # if eruption == false && ((any((Array(stokes.P)[pp] .- Array(P_lith)[pp]) .≥ ΔPc .&& (Array(ϕ_m)[pp] .≥ 0.5)) .&& any(Array(ϕ_m) .≥ 0.5)) .|| rem(it, 30) == 0.0).&& (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
+
             if eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
                 (any(maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp] .≥ 0.3]) .≥ ΔPc .&& Array(ϕ_m)[pp] .≥ 0.5) && any(Array(ϕ_m) .≥ 0.5)) && (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
                 println("Critical overpressure reached - erupting with fast rate")
@@ -718,16 +755,14 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     V_erupt = rand() * V_erupt_fast
                 end
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
-                # V_total = compute_total_eruptible_volume(cells, di...)
                 V_tot = V_total
                 if (V_total - V_erupt) > 0.0
                     weights = compute_vertical_weights(cells, depth, "cosine")  # or "linear", "exp"
                     T_erupt = mean(thermal.Tc[cells .== true])
-                    # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                     V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
-                    # ρ_out = mean(ρg[end][cells .== true])
-                    # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, ρg[end], ρ_out, V_erupt, V_tot, di, phase_ratios, 3, 4)
-                    compute_thermal_source!(thermal.H, T_erupt, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights)
+                    @views ρg[end][weights .> 0.0] .= (1000 * 9.81) * 10 .* weights[weights .> 0.0] # [kg/m^3] for the erupted volume
+                    # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                    # compute_thermal_source!(thermal.H, T_erupt, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights)
                 end
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
                 println("Erupted Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 2)) km³")
@@ -738,9 +773,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 push!(erupted_volume, abs(V_erupt))
                 push!(eruption_times, (t / (3600 * 24 * 365.25) / 1.0e3))
                 push!(eruption_counters, eruption_counter)
-                # push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
-                # push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
-
             elseif eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
                 any((maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3) #.&& depth .≤ -2500)
                 println("Adding volume to the chamber ")
@@ -752,14 +784,12 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 V_erupt = if rand() < 0.1
                     (1e-6 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of volume to maybe sustain the heat
                 else
-                    (rand(1e-4:1e-5:3e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                    (rand(5e-4:1e-4:3e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 end
                 V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.3, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                 compute_thermal_source!(thermal.H, T_addition, 0.3, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
-                # push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
-                # push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
             end
         end
 
@@ -781,6 +811,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 igg;
                 kwargs = (;
                     iterMax = it < 5 || eruption == true ? 250.0e3 : iterMax,
+                    strain_increment = displacement,
                     nout = 2.0e3,
                     viscosity_cutoff = viscosity_cutoff,
                 )
@@ -802,9 +833,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             er_it += 1
             dtmax = 100 * 3600 * 24 * 365.25
         else
-            # dtmax = 5e2 * 3600 * 24 * 365.25
             dtmax = 1.0e3 * 3600 * 24 * 365.25
-            # dtmax = 100 * 3600 * 24 * 365.25
         end
         dt = compute_dt(stokes, di, dtmax)
 
@@ -874,7 +903,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
         # update phase ratios
         update_phase_ratios!(phase_ratios, particles, xci, xvi, pPhases)
-        # update_rock_ratio!(ϕ, phase_ratios, air_phase)
         compute_rock_fraction!(ϕ, chain, xvi, di)
 
         tensor_invariant!(stokes.τ)
@@ -884,8 +912,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         if igg.me == 0
             push!(volume, V_total)
             push!(volume_times, (t / (3600 * 24 * 365.25) / 1.0e3))
-            # CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
-            pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             if it > 1 && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3])
             push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
             push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
@@ -945,48 +973,28 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     save_marker_chain(joinpath(vtk_dir, "chain_" * lpad("$it", 6, "0")), xvi[1] ./ 1.0e3, Array(chain.h_vertices) ./ 1.0e3)
                 end
 
-                # Make particles plottable
-                p = particles.coords
-                ppx, ppy = p
-                pxv = ppx.data[:] ./ 1.0e3
-                pyv = ppy.data[:] ./ 1.0e3
-                clr = pPhases.data[:]
-                # clr      = pT.data[:]
-                idxv = particles.index.data[:]
-
                 chain_x = chain.coords[1].data[:] ./ 1.0e3
                 chain_y = chain.coords[2].data[:] ./ 1.0e3
 
-                scatter!(pxv, pyv, color = clr, markersize = 10)
-                scatter!(Array(chain_x), Array(chain_y), color = :red, markersize = 3)
-
-                # Make Makie figure
                 ar = DataAspect()
                 fig = Figure(size = (1200, 900), title = "t = $t")
                 ax1 = Axis(fig[1, 1], aspect = ar, title = "T [C]  (t=$(round(t / (1.0e3 * 3600 * 24 * 365.25); digits = 3)) Kyrs)")
                 ax2 = Axis(fig[2, 1], aspect = ar, title = "Vy [cm/yr]")
-                # ax2 = Axis(fig[2,1], aspect = ar, title = "Phase")
                 ax3 = Axis(fig[1, 3], aspect = ar, title = "τII [MPa]")
-                # ax4 = Axis(fig[2,3], aspect = ar, title = "log10(εII)")
                 ax4 = Axis(fig[2, 3], aspect = ar, title = "log10(η)")
                 ax5 = Axis(fig[3, 1], aspect = ar, title = "EII_pl")
                 ax6 = Axis(fig[3, 3], aspect = ar, title = "ΔP from P_lith")
-                # ax6 = Axis(fig[3,3], aspect = ar, title = "Melt fraction ϕ")
                 # Plot temperature
                 h1 = heatmap!(ax1, xvi[1] .* 1.0e-3, xvi[2] .* 1.0e-3, Array(thermal.T[2:(end - 1), :] .- 273), colormap = :batlow)
                 # Plot velocity
                 h2 = heatmap!(ax2, xvi[1] .* 1.0e-3, xvi[2] .* 1.0e-3, ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")), colormap = :vik) #, colorrange= (-(ustrip.(1u"cm/yr")), (ustrip(1u"cm/yr"))))
                 scatter!(ax2, Array(chain_x), Array(chain_y), color = :red, markersize = 3)
                 # Plot 2nd invariant of stress
-                # h3  = heatmap!(ax3, xci[1].*1e-3, xci[2].*1e-3, Array(log10.(stokes.ε_pl.II)) , colormap=:batlow)
                 h3 = heatmap!(ax3, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(stokes.τ.II) ./ 1.0e6, colormap = :batlow)
                 # Plot effective viscosity
-                # h4  = heatmap!(ax4, xci[1].*1e-3, xci[2].*1e-3, Array(log10.(stokes.ε.II)) , colormap=:lipari)
                 h4 = heatmap!(ax4, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(log10.(stokes.viscosity.η_vep)), colorrange = log10.(viscosity_cutoff), colormap = :batlow)
-                # h4 = heatmap!(ax4, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(log10.(η_eff)), colorrange = log10.(viscosity_cutoff), colormap = :batlow)
                 h5 = heatmap!(ax5, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(stokes.EII_pl), colormap = :batlow)
                 # contour!(ax5, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(ϕ_m), levels = [0.5, 0.75, 1.0], color = :white, linewidth = 1.5, labels=true)
-
                 # h6  = heatmap!(ax6, xci[1].*1e-3, xci[2].*1e-3, Array(ϕ_m) , colormap=:lipari, colorrange=(0.0,1.0))
                 h6 = heatmap!(ax6, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, (Array(stokes.P) .- Array(P_lith)) ./ 1.0e6, colormap = :roma)
 
@@ -1008,28 +1016,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 fig
                 save(joinpath(figdir, "$(it).png"), fig)
 
-                ## Plot initial T and P profile
-                # fig = let
-                #     Yv = [y for x in xvi[1], y in xvi[2]][:]
-                #     Y = [y for x in xci[1], y in xci[2]][:]
-                #     fig = Figure(; size=(1200, 900))
-                #     ax1 = Axis(fig[1, 1]; aspect=2 / 3, title="T")
-                #     ax2 = Axis(fig[1, 2]; aspect=2 / 3, title="Pressure")
-                #     scatter!(
-                #         ax1,
-                #         Array(thermal.T[2:(end - 1), :][:].-273.15),
-                #         Yv./1e3,
-                #     )
-                #     lines!(
-                #         ax2,
-                #         Array(stokes.P[:]./1e6),
-                #         Y./1e3,
-                #     )
-                #     hideydecorations!(ax2)
-                #     # save(joinpath(figdir, "thermal_profile_$it.png"), fig)
-                #     fig
-                # end
-
                 # Plot Drucker Prager yield surface
                 fig1 = let
                     depth = [y for _ in xci[1], y in xci[2]]
@@ -1041,41 +1027,58 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     fig
                     save(joinpath(figdir, "DruckerPrager_$it.png"), fig)
                 end
-
                 fig2 = let
-                        fig = Figure(; size = (1200, 900))
-                        ax1 = Axis(
-                            fig[1, 1]; title = "VEI over Time - Eruption total = $eruption_counter", xlabel = "Time [Kyrs]", ylabel = "VEI",
-                            titlesize = 40,
-                            yticklabelsize = 25,
-                            xticklabelsize = 25,
-                            xlabelsize = 25,
-                            ylabelsize = 25
+                    fig = Figure(; size = (1200, 900))
+
+                    ax2 = Axis(
+                        fig[1, 1], ylabel = "Erupted volume [km³]", yscale = log10, xlabel = "Time [Kyrs]",
+                        yticklabelsize = 25,
+                        xticklabelsize = 25,
+                        xlabelsize = 25,
+                        ylabelsize = 25,
+                    )
+                    vei_boundaries = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+                    cmap = Makie.to_colormap(:lipari10)
+                    vei_colors = [cmap[i] for i in round.(Int, range(1, length(cmap), length=9))]  # 8 colors for VEI 0-8
+
+                    vei_labels = ["VEI 0\n(non-explosive)", "VEI 1\n(small)", "VEI 2\n(moderate)", "VEI 3\n(moderate-large)",
+                                    "VEI 4\n(large)", "VEI 5\n(very large)", "VEI 6\n(colossal)", "VEI 7\n(super-colossal)", "VEI 8 \n (Mega-colossal)"]
+                    vei_volume_thresholds = [1e-6, 0.00001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 5000.0]
+                    x_band = [0.0, (t / (3600 * 24 * 365.25) / 1.0e3) +1.0]
+
+                    for i in 1:length(vei_boundaries)-1
+                        y_bottom = vei_volume_thresholds[i]
+                        y_top = vei_volume_thresholds[i+1]
+                        band!(
+                            ax2,
+                            x_band,
+                            [y_bottom, y_bottom],
+                            [y_top, y_top],
+                            color = (vei_colors[i], 0.5)
                         )
-                        ax2 = Axis(
-                            fig[1, 1], yaxisposition = :right, ylabel = "Erupted volume [km³]", yscale = log10,
-                            yticklabelsize = 25,
-                            xticklabelsize = 25,
-                            xlabelsize = 25,
-                            ylabelsize = 25
+                        text!(
+                            ax2,
+                            0.0 + 0.02 * (x_max - 0.0),
+                            (y_bottom + y_top) / 2,
+                            text = vei_labels[i],
+                            align = (:left, :center),
+                            fontsize = 16,
+                            color = :black,
+                            font = "bold"
                         )
-                        scatterlines!(
-                            ax1, eruption_times, VEI_array,
-                            color = VEI_array,
-                            colormap = :lipari10,
-                            markersize = VEI_array * 5
-                        )
-                        scatterlines!(
-                            ax2, eruption_times, (round.(ustrip.(uconvert.(u"km^3", (erupted_volume)u"m^3")); digits = 5)),
-                            color = :blue,
-                            markersize = 5
-                        )
-                        ylims!(ax1, 0, 8.5)
-                        ylims!(ax2, 0.00001, 1100)
-                        hidexdecorations!(ax2)
-                        fig
-                        save(joinpath(figdir, "eruption_data.png"), fig)
-                        # save(joinpath(figdir, "eruption_data.svg"), fig)
+                    end
+                    scatterlines!(
+                        ax2, eruption_times, (round.(ustrip.(uconvert.(u"km^3", (erupted_volume)u"m^3")); digits = 5)),
+                        color = :blue,
+                        markersize = 10,
+                        linewidth = 2,
+                    )
+                    ylims!(ax2, 1e-6, 5000)
+                    xlims!(ax2, 0, maximum(eruption_times) + 1.0)
+                    fig
+                    save(joinpath(figdir, "eruption_data.png"), fig)
+                    save(joinpath(figdir, "eruption_data.svg"), fig)
                 end
                 fig3 = let
                     fig1 = Figure(; size = (1200, 900))
@@ -1090,7 +1093,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     scatterlines!(ax1, volume_times, (round.(ustrip.(uconvert.(u"km^3", (volume)u"m^3")); digits = 5)), color = :blue, markersize = 5)
                     fig1
                     save(joinpath(figdir, "volume_change.png"), fig1)
-                    # save(joinpath(figdir, "volume_change.svg"), fig1)
+                    save(joinpath(figdir, "volume_change.svg"), fig1)
                 end
 
                 fig4 = let
@@ -1106,7 +1109,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     scatterlines!(ax1, overpressure_t, overpressure./1e6, color = :violet, markersize = 5)
                     fig1
                     save(joinpath(figdir, "Overpressure.png"), fig1)
-                    # save(joinpath(figdir, "Overpressure.svg"), fig1)
+                    save(joinpath(figdir, "Overpressure.svg"), fig1)
                 end
             end
             # ------------------------------
@@ -1119,6 +1122,7 @@ end
 ## END OF MAIN SCRIPT ----------------------------------------------------------------
 const plotting = true
 const progressiv_extension = false
+const displacement = true  #set solver to displacement or velocity
 do_vtk = true # set to true to generate VTK files for ParaView
 
 conduit, depth, radius, ar, extension, fric_angle = parse.(Float64, ARGS[1:end])
@@ -1172,7 +1176,7 @@ igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
 else
     igg
 end
-# extension = 0.0
-# cutoff_visc = (1.0e17, 1.0e23)
-# fric_angle = 30.0e0 # friction angle in degrees
-main(li, origin, phases_GMG, T_GMG, T_bg, igg; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, fric_angle = fric_angle, extension = extension, cutoff_visc = (1.0e17, 1.0e23), V_total = V_total, V_eruptible = V_eruptible, layers = layers, air_phase = air_phase, progressiv_extension = progressiv_extension, plotting = plotting);
+extension = 0.0
+cutoff_visc = (1.0e17, 1.0e23)
+fric_angle = 30.0e0 # friction angle in degrees
+main(li, origin, phases_GMG, T_GMG, T_bg, igg; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, fric_angle = fric_angle, extension = extension, cutoff_visc = (1.0e17, 1.0e23), V_total = V_total, V_eruptible = V_eruptible, layers = layers, air_phase = air_phase, progressiv_extension = progressiv_extension, plotting = plotting, displacement=displacement);
