@@ -168,7 +168,9 @@ function plot_particles(particles, pPhases, chain; clrmap = :roma)
     chain_x = chain.coords[1].data[:] ./ 1.0e3
     chain_y = chain.coords[2].data[:] ./ 1.0e3
     idxv = particles.index.data[:]
-    f, ax, h = scatter(Array(pxv[idxv]), Array(pyv[idxv]), color = Array(clr[idxv]), colormap = clrmap, markersize = 1)
+    f = Figure(size = (800, 600))
+    ax = Axis(f[1, 1], title = "Particle positions", xlabel = "x [km]", ylabel = "y [km]", aspect = DataAspect())
+    h = scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color = Array(clr[idxv]), colormap = clrmap, markersize = 1)
     scatter!(ax, Array(chain_x), Array(chain_y), color = :red, markersize = 1)
     Colorbar(f[1, 2], h)
     return f
@@ -288,7 +290,7 @@ function compute_cells_for_Q!(cells, threshold, phase_ratios, magma_phase, anoma
 
 end
 
-function compute_vertical_weights(cells, z, smoothing="cosine")
+function compute_vertical_weights(cells, z; smoothing="cosine")
     weights = @zeros(size(z))
     z_vals = [z[i,j] for i in 1:size(z,1), j in 1:size(z,2) if cells[i,j] > 0]
     if isempty(z_vals)
@@ -309,6 +311,42 @@ function compute_vertical_weights(cells, z, smoothing="cosine")
                 0.5 * (1 + cos(pi * (1 - z_rel)))  # taper: 1 at top, 0 at bottom
             elseif smoothing == "exp"
                 exp(-3 * (1 - z_rel))  # also 1 at top, decays downward
+            else
+                z_rel
+            end
+        end
+    end
+
+    # Normalize weights to sum to 1
+    s = sum(weights)
+    if s > 0
+        weights ./= s
+    end
+
+    return weights
+end
+
+function compute_vertical_weights_bottom(cells, z; smoothing="cosine")
+    weights = @zeros(size(z))
+    z_vals = [z[i,j] for i in 1:size(z,1), j in 1:size(z,2) if cells[i,j] > 0]
+    if isempty(z_vals)
+        return weights
+    end
+
+    z_max = maximum(z_vals)  # top (shallower)
+    z_min = minimum(z_vals)  # bottom (deeper)
+
+    for i in 1:size(z,1), j in 1:size(z,2)
+        if cells[i,j] > 0
+            # Now z_rel = 0 at top, 1 at bottom (inverted from original)
+            z_rel = (z_max - z[i,j]) / (z_max - z_min)
+
+            weights[i,j] = if smoothing == "linear"
+                z_rel
+            elseif smoothing == "cosine"
+                0.5 * (1 + cos(pi * (1 - z_rel)))  # taper: 1 at bottom, 0 at top
+            elseif smoothing == "exp"
+                exp(-3 * (1 - z_rel))  # also 1 at bottom, decays upward
             else
                 z_rel
             end
@@ -757,10 +795,10 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                 V_tot = V_total
                 if (V_total - V_erupt) > 0.0
-                    weights = compute_vertical_weights(cells, depth, "cosine")  # or "linear", "exp"
+                    weights = compute_vertical_weights(cells, depth; smoothing = "cosine")  # or "linear", "exp"
                     T_erupt = mean(thermal.Tc[cells .== true])
                     V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
-                    @views ρg[end][weights .> 0.0] .= (1000 * 9.81) * 10 .* weights[weights .> 0.0] # [kg/m^3] for the erupted volume
+                    # @views ρg[end][weights .> 0.0] .= (1000 * 9.81) * 10 .* weights[weights .> 0.0] # [kg/m^3] for the erupted volume
                     # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                     # compute_thermal_source!(thermal.H, T_erupt, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights)
                 end
@@ -779,14 +817,16 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
                 compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
+                weights = compute_vertical_weights_bottom(cells, depth; smoothing = "cosine")  # or "linear", "exp"
                 V_tot = V_total
-                T_addition = 1000+273e0
+                T_addition = 900+273e0
                 V_erupt = if rand() < 0.1
                     (1e-6 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of volume to maybe sustain the heat
                 else
-                    (rand(5e-4:1e-4:3e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                    (rand(5e-3:1e-4:5e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 end
-                V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.3, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.3, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
+                V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
                 compute_thermal_source!(thermal.H, T_addition, 0.3, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
@@ -917,6 +957,9 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             if it > 1 && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3])
             push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
             push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
+            end
+            if overpressure[end] < -25e6
+            eruption = false
             end
         end
 
@@ -1059,7 +1102,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         )
                         text!(
                             ax2,
-                            0.0 + 0.02 * (x_max - 0.0),
+                            0.0 + 0.02 * (0.0),
                             (y_bottom + y_top) / 2,
                             text = vei_labels[i],
                             align = (:left, :center),
@@ -1075,7 +1118,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         linewidth = 2,
                     )
                     ylims!(ax2, 1e-6, 5000)
-                    xlims!(ax2, 0, maximum(eruption_times) + 1.0)
+                    # xlims!(ax2, 0, maximum(eruption_times) + 1.0)
                     fig
                     save(joinpath(figdir, "eruption_data.png"), fig)
                     save(joinpath(figdir, "eruption_data.svg"), fig)
@@ -1122,7 +1165,7 @@ end
 ## END OF MAIN SCRIPT ----------------------------------------------------------------
 const plotting = true
 const progressiv_extension = false
-const displacement = true  #set solver to displacement or velocity
+const displacement = false  #set solver to displacement or velocity
 do_vtk = true # set to true to generate VTK files for ParaView
 
 conduit, depth, radius, ar, extension, fric_angle = parse.(Float64, ARGS[1:end])
@@ -1165,7 +1208,7 @@ li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase 
     layers = 3, # number of layers
     volcano_size = (3.0e0, 7.0e0),    # height, radius
     conduit_radius = 1.0e-2, # radius of the conduit
-    chamber_T = 1050.0e0, # temperature of the chamber
+    chamber_T = 950.0e0, # temperature of the chamber
     chamber_depth  = depth, # depth of the chamber
     chamber_radius = radius, # radius of the chamber
     aspect_x       = ar, # aspect ratio of the chamber
