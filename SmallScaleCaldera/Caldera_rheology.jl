@@ -2,15 +2,17 @@ using GeoParams.Dislocation
 using GeoParams.Diffusion
 using Random
 
-function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressible = true, plastic = true, magma = false)
+function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressible = true, plastic = true, magma = false, softening_C=true, softening_ϕ=false)
 
     η_reg = 1.0e15
     C = plastic ? 10.0e6 : Inf
     ϕ = fric_angle
     Ψ = 0.0
-    soft_C = NonLinearSoftening(; ξ₀ = C, Δ = C / 2, σ = 0.001)       # nonlinear softening law
-    soft_ϕ = NonLinearSoftening(; ξ₀ = ϕ, Δ = ϕ / 2, σ = 0.001)       # nonlinear softening law
-    pl = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ)#, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    # soft_C = NonLinearSoftening(; ξ₀ = C, Δ = C / 2, σ = 0.001)       # nonlinear softening law
+    # soft_ϕ = NonLinearSoftening(; ξ₀ = ϕ, Δ = ϕ / 2, σ = 0.001)       # nonlinear softening law
+    soft_C = softening_C ? LinearSoftening(0e6, C, 0.0, 1.0) : NoSoftening()       # nonlinear softening law
+    soft_ϕ = softening_ϕ ? LinearSoftening(fric_angle/2, fric_angle, 0.0, 1.0) : NoSoftening()       # nonlinear softening law
+    pl = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
     pl_bot = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ)
     rng = Xoshiro(1234)
     pl_cone_1 = DruckerPrager_regularised(; C = ((C / 2) * 0.1*rand(rng)), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
