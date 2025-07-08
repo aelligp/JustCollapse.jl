@@ -165,7 +165,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
                      # (SiO2   TiO2  Al2O3  FeO   MgO   CaO   Na2O  K2O   H2O)
     oxd_wt_sill      = (70.78, 0.55, 15.86, 3.93, 1.11, 1.20, 2.54, 3.84, 2.0)
     oxd_wt_host_rock = (75.75, 0.28, 12.48, 2.14, 0.09, 0.48, 3.53, 5.19, 2.0)
-    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e4, magma = true)
+    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e3, magma = true)
     # rheology     = init_rheologies(;)
     dt_time = 1.0 * 3600 * 24 * 365
     κ            = (4 / (1050 * rheology[1].Density[1].ρ))
@@ -389,7 +389,7 @@ function main(li, origin, phases_GMG, T_GMG, igg; nx = 64, ny =64, figdir="SillC
 
         # Advection --------------------
         # advect particles in space
-        advection!(particles, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
+        advection_MQS!(particles, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
         center2vertex!(τxx_v, stokes.τ.xx)
@@ -817,7 +817,7 @@ li, origin, phases_GMG, T_GMG, _ = SillSetup(
     sill_temp = sill_temp,
     host_rock_temp = host_rock_temp,
     sill_size = sill_size,
-    ellipse = true
+    ellipse = false,
 )
 
 igg = if !(JustRelax.MPI.Initialized())
