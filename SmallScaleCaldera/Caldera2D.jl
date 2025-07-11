@@ -958,7 +958,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
             push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
             end
-            if t > 1 && overpressure[end] < -30e6
+            if t > 1 && !isempty(overpressure) && overpressure[end] < -30e6
             eruption = false
             end
         end
