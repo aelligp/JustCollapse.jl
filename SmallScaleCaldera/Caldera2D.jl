@@ -262,7 +262,7 @@ function compute_total_eruptible_volume(cells, dx::Float64, dy::Float64)
     nx, ny = size(cells)
     @inbounds for j in 1:ny
         # Compute semi-axes for the ellipse at this y-row
-        a = count(i -> cells[i, j] > 0, 1:nx) * dx / 2  # semi-major axis (x-direction)
+        a = sum(@views cells[:, j] .> 0) * dx / 2   # semi-major axis (x-direction)
         b = dy / 2                                      # semi-minor axis (y-direction, per row)
         V_total += (4/3) * π * a * b * a
     end
@@ -1209,9 +1209,9 @@ li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase 
     volcano_size = (3.0e0, 7.0e0),    # height, radius
     conduit_radius = 1.0e-2, # radius of the conduit
     chamber_T = 950.0e0, # temperature of the chamber
-    chamber_depth  = depth, # depth of the chamber
-    chamber_radius = radius, # radius of the chamber
-    aspect_x       = ar, # aspect ratio of the chamber
+    # chamber_depth  = depth, # depth of the chamber
+    # chamber_radius = radius, # radius of the chamber
+    # aspect_x       = ar, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
