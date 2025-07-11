@@ -1,5 +1,5 @@
-const isCUDA = false
-# const isCUDA = true
+# const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -632,7 +632,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     for _ in 1:5
         compute_ρg!(ρg, phase_ratios, rheology, (T = thermal.Tc, P = stokes.P))
         # @parallel init_P!(stokes.P, ρg[end], xvi[2])
-        @parallel init_P!(stokes.P, ρg[end], xvi[2], topo_y)
+        @parallel init_P!(stokes.P, ρg[end], xvi[2], PTArray(backend)(topo_y))
     end
     # stokes.P        .= PTArray(backend)(reverse(cumsum(reverse((ρg[2]).* di[2], dims=2), dims=2), dims=2))
 
@@ -958,7 +958,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
             push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
             end
-            if overpressure[end] < -25e6
+            if overpressure[end] < -30e6
             eruption = false
             end
         end
@@ -1171,9 +1171,9 @@ do_vtk = true # set to true to generate VTK files for ParaView
 conduit, depth, radius, ar, extension, fric_angle = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-figdir   = "Systematics/Caldera2D_$(today())_strong_diabase_no_softening_$(depth)_$(radius)_$(ar)_$(extension)_$(fric_angle)"
+figdir   = "Systematics/Caldera2D_$(today())_compression_strong_diabase_softeningC_$(depth)_$(radius)_$(ar)_$(extension)_$(fric_angle)"
 # figdir = "Systematics/Caldera2D_$(today())"
-n = 480
+n = 360
 nx, ny = n, n >> 1
 
 # IO -------------------------------------------------
@@ -1219,7 +1219,7 @@ igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
 else
     igg
 end
-extension = 0.0
-cutoff_visc = (1.0e17, 1.0e23)
-fric_angle = 30.0e0 # friction angle in degrees
+# extension = 0.0
+# cutoff_visc = (1.0e17, 1.0e23)
+# fric_angle = 30.0e0 # friction angle in degrees
 main(li, origin, phases_GMG, T_GMG, T_bg, igg; figdir = figdir, nx = nx, ny = ny, do_vtk = do_vtk, fric_angle = fric_angle, extension = extension, cutoff_visc = (1.0e17, 1.0e23), V_total = V_total, V_eruptible = V_eruptible, layers = layers, air_phase = air_phase, progressiv_extension = progressiv_extension, plotting = plotting, displacement=displacement);
