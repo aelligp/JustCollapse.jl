@@ -292,7 +292,10 @@ end
 
 function compute_vertical_weights(cells, z; smoothing="cosine")
     weights = @zeros(size(z))
-    z_vals = [z[i,j] for i in 1:size(z,1), j in 1:size(z,2) if cells[i,j] > 0]
+
+    # Convert to CPU arrays for computation
+    z_mask = (cells .> 0)
+    @views z_vals = z[z_mask]
     if isempty(z_vals)
         return weights
     end
@@ -300,22 +303,36 @@ function compute_vertical_weights(cells, z; smoothing="cosine")
     z_max = maximum(z_vals)  # top (shallower)
     z_min = minimum(z_vals)  # bottom (deeper)
 
-    for i in 1:size(z,1), j in 1:size(z,2)
+    @parallel_indices (i, j) function _compute_weights!(weights, cells, z, z_max, z_min, smoothing_type)
         if cells[i,j] > 0
             # Now z_rel = 1 at top, 0 at bottom
             z_rel = (z[i,j] - z_min) / (z_max - z_min)
 
-            weights[i,j] = if smoothing == "linear"
-                z_rel
-            elseif smoothing == "cosine"
-                0.5 * (1 + cos(pi * (1 - z_rel)))  # taper: 1 at top, 0 at bottom
-            elseif smoothing == "exp"
-                exp(-3 * (1 - z_rel))  # also 1 at top, decays downward
+            if smoothing_type == 1  # linear
+                weights[i,j] = z_rel
+            elseif smoothing_type == 2  # cosine
+                weights[i,j] = 0.5 * (1 + cos(pi * (1 - z_rel)))  # taper: 1 at top, 0 at bottom
+            elseif smoothing_type == 3  # exp
+                weights[i,j] = exp(-3 * (1 - z_rel))  # also 1 at top, decays downward
             else
-                z_rel
+                weights[i,j] = z_rel
             end
         end
+        return nothing
     end
+
+    smoothing_type = if smoothing == "linear"
+        1
+    elseif smoothing == "cosine"
+        2
+    elseif smoothing == "exp"
+        3
+    else
+        1
+    end
+
+    ni = size(cells)
+    @parallel (@idx ni) _compute_weights!(weights, cells, z, z_max, z_min, smoothing_type)
 
     # Normalize weights to sum to 1
     s = sum(weights)
@@ -328,7 +345,10 @@ end
 
 function compute_vertical_weights_bottom(cells, z; smoothing="cosine")
     weights = @zeros(size(z))
-    z_vals = [z[i,j] for i in 1:size(z,1), j in 1:size(z,2) if cells[i,j] > 0]
+
+    # Convert to CPU arrays for computation
+    z_mask = (cells.> 0)
+    @views z_vals = z[z_mask]
     if isempty(z_vals)
         return weights
     end
@@ -336,22 +356,36 @@ function compute_vertical_weights_bottom(cells, z; smoothing="cosine")
     z_max = maximum(z_vals)  # top (shallower)
     z_min = minimum(z_vals)  # bottom (deeper)
 
-    for i in 1:size(z,1), j in 1:size(z,2)
+    @parallel_indices (i, j) function _compute_weights_bottom!(weights, cells, z, z_max, z_min, smoothing_type)
         if cells[i,j] > 0
             # Now z_rel = 0 at top, 1 at bottom (inverted from original)
             z_rel = (z_max - z[i,j]) / (z_max - z_min)
 
-            weights[i,j] = if smoothing == "linear"
-                z_rel
-            elseif smoothing == "cosine"
-                0.5 * (1 + cos(pi * (1 - z_rel)))  # taper: 1 at bottom, 0 at top
-            elseif smoothing == "exp"
-                exp(-3 * (1 - z_rel))  # also 1 at bottom, decays upward
+            if smoothing_type == 1  # linear
+                weights[i,j] = z_rel
+            elseif smoothing_type == 2  # cosine
+                weights[i,j] = 0.5 * (1 + cos(pi * (1 - z_rel)))  # taper: 1 at bottom, 0 at top
+            elseif smoothing_type == 3  # exp
+                weights[i,j] = exp(-3 * (1 - z_rel))  # also 1 at bottom, decays upward
             else
-                z_rel
+                weights[i,j] = z_rel
             end
         end
+        return nothing
     end
+
+    smoothing_type = if smoothing == "linear"
+        1
+    elseif smoothing == "cosine"
+        2
+    elseif smoothing == "exp"
+        3
+    else
+        1
+    end
+
+    ni = size(cells)
+    @parallel (@idx ni) _compute_weights_bottom!(weights, cells, z, z_max, z_min, smoothing_type)
 
     # Normalize weights to sum to 1
     s = sum(weights)
@@ -720,18 +754,18 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     VEI_array = Int[]
     eruption_times = Float64[]
     eruption_counters = Int[]
-    volume = Float64[]
+    Volume = Float64[]
     erupted_volume = Float64[]
     volume_times = Float64[]
     overpressure = Float64[]
     overpressure_t = Float64[]
     local iters, er_it, eruption_counter, Vx_v, Vy_v, d18O
 
-    depth = [y for _ in xci[1], y in xci[2]];
+    depth = PTArray(backend)([y for _ in xci[1], y in xci[2]]);
 
 
 
-    while it < 500 #000 # run only for 5 Myrs
+    while it < 500
         if it == 1
             P_lith .= stokes.P
         end
@@ -798,7 +832,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     weights = compute_vertical_weights(cells, depth; smoothing = "cosine")  # or "linear", "exp"
                     T_erupt = mean(thermal.Tc[cells .== true])
                     V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
-                    # @views ρg[end][weights .> 0.0] .= (1000 * 9.81) * 10 .* weights[weights .> 0.0] # [kg/m^3] for the erupted volume
+                    # @views ρg[end][weights .> 0.0] .= (1000 * 9.81) * 10 .* weights[weights .> 0.0] # [kg/m^3] for the erupted Volume
                     # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                     # compute_thermal_source!(thermal.H, T_erupt, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights)
                 end
@@ -813,7 +847,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 push!(eruption_counters, eruption_counter)
             elseif eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
                 any((maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3) #.&& depth .≤ -2500)
-                println("Adding volume to the chamber ")
+                println("Adding Volume to the chamber ")
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
                 compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
@@ -821,7 +855,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 V_tot = V_total
                 T_addition = 900+273e0
                 V_erupt = if rand() < 0.1
-                    (1e-6 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of volume to maybe sustain the heat
+                    (1e-6 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of Volume to maybe sustain the heat
                 else
                     (rand(5e-3:1e-4:5e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 end
@@ -950,7 +984,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         @show it += 1
         t += dt
         if igg.me == 0
-            push!(volume, V_total)
+            push!(Volume, V_total)
             push!(volume_times, (t / (3600 * 24 * 365.25) / 1.0e3))
             CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
@@ -1074,7 +1108,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     fig = Figure(; size = (1200, 900))
 
                     ax2 = Axis(
-                        fig[1, 1], ylabel = "Erupted volume [km³]", yscale = log10, xlabel = "Time [Kyrs]",
+                        fig[1, 1], ylabel = "Erupted Volume [km³]", yscale = log10, xlabel = "Time [Kyrs]",
                         yticklabelsize = 25,
                         xticklabelsize = 25,
                         xlabelsize = 25,
@@ -1133,7 +1167,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         xlabelsize = 25,
                         ylabelsize = 25
                     )
-                    scatterlines!(ax1, volume_times, (round.(ustrip.(uconvert.(u"km^3", (volume)u"m^3")); digits = 5)), color = :blue, markersize = 5)
+                    scatterlines!(ax1, volume_times, (round.(ustrip.(uconvert.(u"km^3", (Volume)u"m^3")); digits = 5)), color = :blue, markersize = 5)
                     fig1
                     save(joinpath(figdir, "volume_change.png"), fig1)
                     save(joinpath(figdir, "volume_change.svg"), fig1)
@@ -1209,9 +1243,9 @@ li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase 
     volcano_size = (3.0e0, 7.0e0),    # height, radius
     conduit_radius = 1.0e-2, # radius of the conduit
     chamber_T = 950.0e0, # temperature of the chamber
-    # chamber_depth  = depth, # depth of the chamber
-    # chamber_radius = radius, # radius of the chamber
-    # aspect_x       = ar, # aspect ratio of the chamber
+    chamber_depth  = depth, # depth of the chamber
+    chamber_radius = radius, # radius of the chamber
+    aspect_x       = ar, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
