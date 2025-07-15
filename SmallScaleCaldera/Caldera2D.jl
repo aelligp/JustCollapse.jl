@@ -263,7 +263,7 @@ function compute_total_eruptible_volume(cells, dx::Float64, dy::Float64)
     @inbounds for j in 1:ny
         # Compute semi-axes for the ellipse at this y-row
         a = sum(@views cells[:, j] .> 0) * dx / 2   # semi-major axis (x-direction)
-        b = dy / 2                                      # semi-minor axis (y-direction, per row)
+        b = dy                                      # semi-minor axis (y-direction, per row)
         V_total += (4/3) * π * a * b * a
     end
     return V_total
@@ -829,7 +829,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                 V_tot = V_total
                 if (V_total - V_erupt) > 0.0
-                    weights = compute_vertical_weights(cells, depth; smoothing = "cosine")  # or "linear", "exp"
+                    weights = compute_vertical_weights(cells, PTArray(backend)(depth); smoothing = "cosine")  # or "linear", "exp"
                     T_erupt = mean(thermal.Tc[cells .== true])
                     V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
                     # @views ρg[end][weights .> 0.0] .= (1000 * 9.81) * 10 .* weights[weights .> 0.0] # [kg/m^3] for the erupted Volume
@@ -851,9 +851,9 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
                 compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
-                weights = compute_vertical_weights_bottom(cells, depth; smoothing = "cosine")  # or "linear", "exp"
+                weights = compute_vertical_weights_bottom(cells, PTArray(backend)(depth); smoothing = "cosine")  # or "linear", "exp"
                 V_tot = V_total
-                T_addition = 900+273e0
+                T_addition = 950+273e0
                 V_erupt = if rand() < 0.1
                     (1e-6 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of Volume to maybe sustain the heat
                 else
