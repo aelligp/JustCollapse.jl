@@ -762,7 +762,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     local iters, er_it, eruption_counter, Vx_v, Vy_v, d18O
 
     depth = PTArray(backend)([y for _ in xci[1], y in xci[2]]);
-
+    compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m)
+    V_total = compute_total_eruptible_volume(cells, di...)
 
 
     while it < 500
@@ -809,8 +810,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             V_max_eruptable = V_total / 2
             V_erupt_fast = -V_total / 3
-            compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m)
-            V_total = compute_total_eruptible_volume(cells, di...)
+            # compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m)
+            # V_total = compute_total_eruptible_volume(cells, di...)
 
             if eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
                 (any(maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp] .≥ 0.3]) .≥ ΔPc .&& Array(ϕ_m)[pp] .≥ 0.5) && any(Array(ϕ_m) .≥ 0.5)) && (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
@@ -857,7 +858,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 V_erupt = if rand() < 0.1
                     (1e-6 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of Volume to maybe sustain the heat
                 else
-                    (rand(5e-3:1e-4:5e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                    (rand(1e-3:1e-4:5e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 end
                 # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.3, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                 V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
@@ -992,8 +993,14 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
             push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
             end
-            if t > 1 && !isempty(overpressure) && overpressure[end] < -30e6
-            eruption = false
+            if it > 1 && !isempty(VEI_array) && VEI_array[end] ≥ 6
+                if !isempty(overpressure) && overpressure[end] < -30e6
+                eruption = false
+                end
+            else
+                if !isempty(overpressure) && overpressure[end] < 0.0
+                    eruption = false
+                end
             end
         end
 
@@ -1153,7 +1160,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         linewidth = 2,
                     )
                     ylims!(ax2, 1e-6, 5000)
-                    # xlims!(ax2, 0, maximum(eruption_times) + 1.0)
+                    xlims!(ax2,(t / (3600 * 24 * 365.25) / 1.0e3) +1.0)
                     fig
                     save(joinpath(figdir, "eruption_data.png"), fig)
                     save(joinpath(figdir, "eruption_data.svg"), fig)
