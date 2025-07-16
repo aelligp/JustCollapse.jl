@@ -903,15 +903,19 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         println("Extrema T[C]: $(extrema(thermal.T .- 273))")
         tensor_invariant!(stokes.ε)
         tensor_invariant!(stokes.ε_pl)
-        if er_it > 4
-            println("Eruption stopped")
-            eruption = false
-        end
+        # if er_it > 4
+        #     println("Eruption stopped")
+        #     eruption = false
+        # end
         if eruption == true
             er_it += 1
             dtmax = 100 * 3600 * 24 * 365.25
         else
+            if it > 3 && !isempty(overpressure) && overpressure[end] < 0.0
+                dtmax = 5e3 * 3600 * 24 * 365.25
+            else
             dtmax = 1.0e3 * 3600 * 24 * 365.25
+            end
         end
         dt = compute_dt(stokes, di, dtmax)
 
@@ -1000,8 +1004,10 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 if !isempty(overpressure) && overpressure[end] < -30e6
                 eruption = false
                 end
-            else
+            elseif it > 1 && !isempty(VEI_array) && VEI_array[end] < 6
                 if !isempty(overpressure) && overpressure[end] < 0.0
+                    eruption = false
+                elseif er_it > 10
                     eruption = false
                 end
             end
