@@ -1044,7 +1044,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         data_v,
                         data_c,
                         velocity_v;
-                        t = round(t / (1.0e3 * 3600 * 24 * 365.25); digits = 3)
+                        t = round(t / (1.0e3 * 3600 * 24 * 365.25); digits = 3),
+                        pvd = joinpath(vtk_dir, "Caldera2D_$(today())")
                     )
                     save_particles(particles, pPhases; conversion = 1.0e3, fname = joinpath(vtk_dir, "particles_" * lpad("$it", 6, "0")))
                     save_marker_chain(joinpath(vtk_dir, "chain_" * lpad("$it", 6, "0")), xvi[1] ./ 1.0e3, Array(chain.h_vertices) ./ 1.0e3)
