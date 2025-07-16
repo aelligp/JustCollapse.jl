@@ -823,9 +823,11 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 eruption = true
                 dt *= 0.1
                 if rand() < 0.1
-                    V_erupt = V_erupt_fast
+                    V_erupt =  max((-rand(1e0:1e0:1e2) * 1e9), -V_total / 3)
+                    # V_erupt = V_erupt_fast
                 else
-                    V_erupt = rand() * V_erupt_fast
+                    V_erupt = (-rand(1e-1:1e-1:1e1) * 1e9)
+                    # V_erupt = rand() * V_erupt_fast
                 end
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                 V_tot = V_total
