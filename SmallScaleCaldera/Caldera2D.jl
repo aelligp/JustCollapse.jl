@@ -810,8 +810,9 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             V_max_eruptable = V_total / 2
             V_erupt_fast = -V_total / 3
-            # compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m)
-            # V_total = compute_total_eruptible_volume(cells, di...)
+            compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m)
+            V_total_cells = compute_total_eruptible_volume(cells, di...)
+            V_total = min(V_total_cells, V_total)
 
             if eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
                 (any(maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp] .≥ 0.3]) .≥ ΔPc .&& Array(ϕ_m)[pp] .≥ 0.5) && any(Array(ϕ_m) .≥ 0.5)) && (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
@@ -1054,10 +1055,11 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         data_c,
                         velocity_v;
                         t = round(t / (1.0e3 * 3600 * 24 * 365.25); digits = 3),
-                        pvd = joinpath(vtk_dir, "Caldera2D_$(today())")
+                        pvd = joinpath(vtk_dir, "Caldera2D")
                     )
-                    save_particles(particles, pPhases; conversion = 1.0e3, fname = joinpath(vtk_dir, "particles_" * lpad("$it", 6, "0")))
-                    save_marker_chain(joinpath(vtk_dir, "chain_" * lpad("$it", 6, "0")), xvi[1] ./ 1.0e3, Array(chain.h_vertices) ./ 1.0e3)
+                    save_particles(particles, pPhases; conversion = 1.0e3, fname = joinpath(vtk_dir, "particles_" * lpad("$it", 6, "0")),
+                        pvd = joinpath(vtk_dir, "Caldera2D_Particles"), t = round(t / (1.0e3 * 3600 * 24 * 365.25); digits = 3))
+                    save_marker_chain(joinpath(vtk_dir, "chain_" * lpad("$it", 6, "0")), xvi[1] ./ 1.0e3, Array(chain.h_vertices) ./ 1.0e3; pvd = joinpath(vtk_dir, "Caldera2D_Markerchain"), t = round(t / (1.0e3 * 3600 * 24 * 365.25); digits = 3))
                 end
 
                 chain_x = chain.coords[1].data[:] ./ 1.0e3
@@ -1162,7 +1164,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         linewidth = 2,
                     )
                     ylims!(ax2, 1e-6, 5000)
-                    xlims!(ax2,(t / (3600 * 24 * 365.25) / 1.0e3) +1.0)
+                    xlims!(ax2,0.0, (t / (3600 * 24 * 365.25) / 1.0e3) +1.0)
                     fig
                     save(joinpath(figdir, "eruption_data.png"), fig)
                     save(joinpath(figdir, "eruption_data.svg"), fig)
