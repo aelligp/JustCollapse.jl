@@ -961,7 +961,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         # Advection --------------------
         copyinn_x!(T_buffer, thermal.T)
         # advect particles in space
-        advection!(particles, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
+        advection_MQS!(particles, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
         # advect particles in memory
         move_particles!(particles, xvi, particle_args)
         # check if we need to inject particles
