@@ -514,7 +514,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     rheology_incomp = init_rheologies(layers, oxd_wt, fric_angle; incompressible = true, magma = true)
     # dt_time = 100 * 3600 * 24 * 365
     dt_time = 1.0e3 * 3600 * 24 * 365
-    κ = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val)) # thermal diffusivity                                 # thermal diffusivity
+    κ = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ.val)) # thermal diffusivity                                 # thermal diffusivity
     dt_diff = 0.5 * min(di...)^2 / κ / 2.01
     dt = min(dt_time, dt_diff)
     # ----------------------------------------------------
@@ -1134,7 +1134,7 @@ li, origin, phases_GMG, T_GMG, T_bg, Grid, V_total, V_eruptible, layers, air_pha
     conduit_radius = 1.0e-2, # radius of the conduit
     chamber_T = 950.0e0, # temperature of the chamber
     chamber_radius = 2.5, # radius of the chamber
-    chamber_depth  = (5.0 + chamber_radius), # depth of the chamber
+    chamber_depth  = (5.0 + 2.0), # depth of the chamber
     aspect_x       = 1.5, # aspect ratio of the chamber
 )
 
