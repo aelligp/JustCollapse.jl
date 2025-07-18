@@ -1,5 +1,5 @@
-const isCUDA = false
-# const isCUDA = true
+# const isCUDA = false
+const isCUDA = true
 
 @static if isCUDA
     using CUDA
@@ -699,7 +699,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m);
     V_total = compute_total_eruptible_volume(cells, di...);
 
-    while it < 25
+    while it < 500
         if it == 1
             P_lith .= stokes.P
         end
@@ -790,7 +790,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 dt,
                 igg;
                 kwargs = (;
-                    iterMax = it < 5 || eruption == true ? 250.0e3 : iterMax,
+                    iterMax = it < 5 || eruption == true ? 150.0e3 : iterMax,
                     strain_increment = displacement,
                     nout = 2.0e3,
                     viscosity_cutoff = viscosity_cutoff,
@@ -904,7 +904,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
         if plotting
             # Data I/O and plotting ---------------------
-            if it == 1 || rem(it, 1) == 0
+            if it == 1 || rem(it, 10) == 0
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
                 end
@@ -1104,7 +1104,6 @@ const progressiv_extension = false
 const displacement = false  #set solver to displacement or velocity
 do_vtk = true # set to true to generate VTK files for ParaView
 
-
 # figdir is defined as Systematics_depth_radius_ar_extension
 figdir = "Analogue_Modelling_Benchmark"
 n = 480
@@ -1125,8 +1124,8 @@ end
 
 li, origin, phases_GMG, T_GMG, T_bg, Grid, V_total, V_eruptible, layers, air_phase = setup2D(
     nx + 1, ny + 1;
-    sticky_air = 4.0e0,
-    dimensions = (40.0e0, 20.0e0), # extent in x and y in km
+    sticky_air = 2.0e0,
+    dimensions = (35.0e0, 20.0e0), # extent in x and y in km
     flat = true, # flat or volcano cone
     chimney = false, # conduit or not
     layers = 0, # number of layers
@@ -1134,7 +1133,7 @@ li, origin, phases_GMG, T_GMG, T_bg, Grid, V_total, V_eruptible, layers, air_pha
     conduit_radius = 1.0e-2, # radius of the conduit
     chamber_T = 950.0e0, # temperature of the chamber
     chamber_radius = 2.5, # radius of the chamber
-    chamber_depth  = (5.0 + 2.0), # depth of the chamber
+    chamber_depth  = 6.0, # depth of the chamber
     aspect_x       = 1.5, # aspect ratio of the chamber
 )
 
