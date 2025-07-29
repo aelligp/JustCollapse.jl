@@ -14,12 +14,12 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
     soft_ϕ = softening_ϕ ? LinearSoftening(fric_angle/2, fric_angle, 0.0, 1.0) : NoSoftening()       # nonlinear softening law
     pl = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
     pl_bot = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ)
-    rng = Xoshiro(1234)
-    pl_cone_1 = DruckerPrager_regularised(; C = ((C / 2) * 0.1*rand(rng)), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
-    pl_cone_2 = DruckerPrager_regularised(; C = ((C / 2) * 0.2*rand(rng)), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
-    pl_cone_3 = DruckerPrager_regularised(; C = ((C / 2) * 0.3*rand(rng)), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
-    pl_cone_4 = DruckerPrager_regularised(; C = ((C / 2) * 0.4*rand(rng)), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
-    pl_cone_5 = DruckerPrager_regularised(; C = ((C / 2) * 0.5*rand(rng)), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+
+    pl_cone_1 = DruckerPrager_regularised(; C = ((C / 2) * 0.3), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone_2 = DruckerPrager_regularised(; C = ((C / 2) * 0.4), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone_3 = DruckerPrager_regularised(; C = ((C / 2) * 0.5), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone_4 = DruckerPrager_regularised(; C = ((C / 2) * 0.6), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone_5 = DruckerPrager_regularised(; C = ((C / 2) * 0.7), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
     G0 = 25.0e9Pa        # elastic shear modulus
     G_magma = 6.0e9Pa        # elastic shear modulus magma
 
