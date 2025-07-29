@@ -495,63 +495,7 @@ function compute_VEI!(V_erupt)
     end
 end
 
-function d18O_anomaly!(
-    d18O, z, phase_ratios,
-    magma_phase,
-    anomaly_phase,
-    lower_crust,
-    air_phase;
-    crust_gradient::Bool = true,
-    crust_min::Float64 = -10.0,
-    crust_max::Float64 = 3.0,
-    crust_const::Float64 = 0.0,
-    magma_const::Float64 = 5.5,
-
-)
-    ni = size(phase_ratios.vertex)
-
-    @parallel_indices (i, j) function _d18O_anomaly!(d18O, z, vertex_ratio, magma_phase, anomaly_phase, lower_crust, air_phase)
-
-        magma_ratio_ij = @index vertex_ratio[magma_phase, i, j]
-        anomaly_ratio_ij = @index vertex_ratio[anomaly_phase, i, j]
-        lower_crust_ratio_ij = @index vertex_ratio[lower_crust, i, j]
-        air_ratio_ij = @index vertex_ratio[air_phase, i, j]
-
-        if magma_ratio_ij > 0.5 || lower_crust_ratio_ij > 0.5 || anomaly_ratio_ij > 0.5
-            d18O[i,j] = magma_const
-        elseif air_ratio_ij > 0.5
-            d18O[i,j] = 3.0
-        elseif z[j] .> -3e3
-            if crust_gradient
-                # Linear gradient from crust_min at shallowest to crust_max at deepest
-                zmin = z[1]
-                zmax = z[end]
-                d18O[i, j] = crust_min + (crust_max - crust_min) * (z[j] - zmin) / (zmax - zmin)
-            else
-                d18O[i, j] = crust_const
-            end
-        elseif z[j] .< -3e3
-            d18O[i,j] = 5.0
-        end
-        return nothing
-    end
-
-    @parallel (@idx ni) _d18O_anomaly!(d18O, z, phase_ratios.vertex, magma_phase, anomaly_phase, lower_crust, air_phase)
-
-    return nothing
-end
-
 # ## END OF HELPER FUNCTION ------------------------------------------------------------
-# ## Custom Colormap by T.Keller
-# using MAT
-# using Colors, ColorSchemes
-
-# matfile = matopen("SmallScaleCaldera/ocean.mat")
-# my_cmap_data = read(matfile, "ocean") # e.g., "colormap_variable" is the variable name in the .mat file
-# close(matfile)
-# ocean = ColorScheme([RGB(r...) for r in eachrow(my_cmap_data)])
-# ocean_rev = ColorScheme([RGB(r...) for r in eachrow(reverse(my_cmap_data, dims=1))])
-# --------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
 function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir = "figs2D", do_vtk = false, fric_angle = 30, extension = 1.0e-15 * 0, cutoff_visc = (1.0e16, 1.0e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase = 6, progressiv_extension = false, plotting = true, displacement=false)
@@ -627,15 +571,12 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     particle_args_reduced = (pT, unwrap(pτ)...)
 
     # ----------------------------------------------------
-    # Track isotope ratios
-    d18O = @zeros(ni.+ 1...)
-    d18O_anomaly!(d18O, xvi[2], phase_ratios, 3, 4, 2, air_phase)
 
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
     pt_stokes = PTStokesCoeffs(li, di; ϵ_rel = 1.0e-5, ϵ_abs = 1.0e-4, Re = 3.0, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
-
+    σ = PrincipalStress(backend, ni)
 
     # randomize cohesion
     perturbation_C = @rand(ni...)
@@ -759,11 +700,11 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     volume_times = Float64[]
     overpressure = Float64[]
     overpressure_t = Float64[]
-    local iters, er_it, eruption_counter, Vx_v, Vy_v, d18O
+    local iters, er_it, eruption_counter, Vx_v, Vy_v
 
     depth = PTArray(backend)([y for _ in xci[1], y in xci[2]]);
-    compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m)
-    V_total = compute_total_eruptible_volume(cells, di...)
+    compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m);
+    V_total = compute_total_eruptible_volume(cells, di...);
 
 
     while it < 500
@@ -953,10 +894,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             pT, thermal.T, thermal.ΔT, subgrid_arrays, particles, xvi, di, dt
         )
         end
-        # ------------------------------
-        # Isotope advection
-        velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
-        WENO_advection!(d18O, (Vx_v, Vy_v), weno, di, dt)
 
         # Advection --------------------
         copyinn_x!(T_buffer, thermal.T)
@@ -976,7 +913,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         )
 
         # advect marker chain
-        advect_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
+        # advect_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
+        semilagrangian_advection_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt)
         update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
 
         compute_melt_fraction!(
@@ -988,6 +926,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         compute_rock_fraction!(ϕ, chain, xvi, di)
 
         tensor_invariant!(stokes.τ)
+        compute_principal_stresses!(stokes, σ)
 
         @show it += 1
         t += dt
@@ -1031,7 +970,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
                     data_v = (;
                         T = Array(T_buffer),
-                        d18O = Array(d18O),
                         stress_xy = Array(stokes.τ.xy),
                         strain_rate_xy = Array(stokes.ε.xy),
                         phase_vertices = [argmax(p) for p in Array(phase_ratios.vertex)],
@@ -1048,6 +986,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         strain_rate_II = Array(stokes.ε.II),
                         plastic_strain_rate_II = Array(stokes.ε_pl.II),
                         density = Array(ρg[2] ./ 9.81),
+                        sigma_1   = Array(σ.σ1),
+                        sigma_2   = Array(σ.σ2),
                     )
                     velocity_v = (
                         Array(Vx_v),
@@ -1258,7 +1198,7 @@ li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase 
     flat = false, # flat or volcano cone
     chimney = false, # conduit or not
     layers = 3, # number of layers
-    volcano_size = (3.0e0, 7.0e0),    # height, radius
+    volcano_size = (3.0e0, 5.0e0),    # height, radius
     conduit_radius = 1.0e-2, # radius of the conduit
     chamber_T = 950.0e0, # temperature of the chamber
     chamber_depth  = depth, # depth of the chamber
