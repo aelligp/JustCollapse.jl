@@ -1131,7 +1131,7 @@ li, origin, phases_GMG, T_GMG, T_bg, Grid, V_total, V_eruptible, layers, air_pha
     layers = 0, # number of layers
     volcano_size = (3.0e0, 7.0e0),    # height, radius
     conduit_radius = 1.0e-2, # radius of the conduit
-    chamber_T = 950.0e0, # temperature of the chamber
+    chamber_T = 850.0e0, # temperature of the chamber
     chamber_radius = 2.5, # radius of the chamber
     chamber_depth  = 6.0, # depth of the chamber
     aspect_x       = 1.5, # aspect ratio of the chamber
