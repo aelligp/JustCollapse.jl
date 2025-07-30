@@ -699,7 +699,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m);
     V_total = compute_total_eruptible_volume(cells, di...);
 
-    while it < 500
+    while it < 5000
         if it == 1
             P_lith .= stokes.P
         end
@@ -872,7 +872,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         )
 
         # advect marker chain
-        advect_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
+        semilagrangian_advection_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, xvi, dt)
         update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
 
         compute_melt_fraction!(
@@ -906,7 +906,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             # Data I/O and plotting ---------------------
             if it == 1 || rem(it, 10) == 0
                 if igg.me == 0 && it == 1
-                    metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
+                    metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D_sinkhole.jl"), joinpath(@__DIR__, "Caldera_setup_sinkhole.jl"), joinpath(@__DIR__, "Caldera_rheology_sinkhole.jl"))
                 end
                 checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
                 checkpointing_particles(checkpoint, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt)
@@ -1105,8 +1105,8 @@ const displacement = false  #set solver to displacement or velocity
 do_vtk = true # set to true to generate VTK files for ParaView
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-figdir = "Analogue_Modelling_Benchmark"
-n = 480
+figdir = "Analogue_Modelling_Benchmark_Topo_granit_UL_diabase_BL"
+n = 256
 nx, ny = n, n >> 1
 
 # IO -------------------------------------------------
@@ -1124,12 +1124,12 @@ end
 
 li, origin, phases_GMG, T_GMG, T_bg, Grid, V_total, V_eruptible, layers, air_phase = setup2D(
     nx + 1, ny + 1;
-    sticky_air = 2.0e0,
+    sticky_air = 5.0e0,
     dimensions = (35.0e0, 20.0e0), # extent in x and y in km
-    flat = true, # flat or volcano cone
+    flat = false, # flat or volcano cone
     chimney = false, # conduit or not
-    layers = 0, # number of layers
-    volcano_size = (3.0e0, 7.0e0),    # height, radius
+    layers = 3, # number of layers
+    volcano_size = (3.0e0, 5.0e0),    # height, radius
     conduit_radius = 1.0e-2, # radius of the conduit
     chamber_T = 850.0e0, # temperature of the chamber
     chamber_radius = 2.5, # radius of the chamber
