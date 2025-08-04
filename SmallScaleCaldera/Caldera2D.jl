@@ -399,11 +399,11 @@ end
 numcells(A::AbstractArray) = count(x -> x == 1.0, A)
 
 function compute_thermal_source!(
-    H, T_erupt, threshold, V_erupt, cells, ϕ,
+    H, T_addition, threshold, V_erupt, cells, ϕ,
     phase_ratios, dt, args, di, magma_phase, anomaly_phase, rheology; α=1.0
 )
     @parallel_indices (I...) function _compute_thermal_source!(
-        H, T_erupt, threshold, V_erupt, cells, center_ratio, dt, args,
+        H, T_addition, threshold, V_erupt, cells, center_ratio, dt, args,
         dx, dy, magma_phase, anomaly_phase, rheology, α
     )
         magma_ratio_ij = @index center_ratio[magma_phase, I...]
@@ -419,11 +419,11 @@ function compute_thermal_source!(
 
         if ((anomaly_ratio_ij > 0.5 || magma_ratio_ij > 0.5) && ϕ_ij ≥ threshold)
             # Ensure temperature does not go below Temp_bg
-            ΔT = max(T_erupt - max(Tij, Tij_bg), 0.0)
+            ΔT = max(T_addition - Tij, 0.0)
             H[I...] = ((V_eruptij / dt) * ρCp[I...] * ΔT) / (dx * dy * dx)
             # H[I...] = ((V_eruptij / dt) * ρCp[I...] * ΔT / (dx * dy * dx)
 
-        #   [W/m^3] = [[m3/[s]] * [[kg/m^3] * [J/kg/K]] * [K]] / [[m] * [m] * [m]]
+        #   [W/m^3] = [[m3/[s]] * ([kg/m^3] * [J/kg/K]) * [K]] / [[m] * [m] * [m]]
         end
         return nothing
     end
@@ -431,19 +431,19 @@ function compute_thermal_source!(
     ni = size(phase_ratios.center)
 
     @parallel (@idx ni) _compute_thermal_source!(
-        H, T_erupt, threshold, V_erupt, cells, phase_ratios.center, dt, args,
+        H, T_addition, threshold, V_erupt, cells, phase_ratios.center, dt, args,
         di..., magma_phase, anomaly_phase, rheology, α
     )
 end
 
 
 function compute_thermal_source!(
-    H, T_erupt, threshold, V_erupt, cells, ϕ,
+    H, T_addition, threshold, V_erupt, ϕ,
     phase_ratios, dt, args, di, magma_phase, anomaly_phase, rheology, weights;
     α = 0.3
 )
     @parallel_indices (I...) function _compute_thermal_source!(
-        H, T_erupt, threshold, V_erupt, cells, weights,
+        H, T_addition, threshold, V_erupt, weights,
         center_ratio, dt, args, dx, dy, magma_phase, anomaly_phase, rheology, α
     )
         magma_ratio_ij = @index center_ratio[magma_phase, I...]
@@ -458,8 +458,9 @@ function compute_thermal_source!(
         ρCp = JustRelax.JustRelax2D.compute_ρCp(rheology, phase_ij, args_ij)
 
         if ((anomaly_ratio_ij > 0.5 || magma_ratio_ij > 0.5) && ϕ_ij ≥ threshold)
-            ΔT = max(T_erupt - max(Tij, Tij_bg), 0.0) * α       # ← partial ΔT removal
+            ΔT = max(T_addition - Tij, 0.0) * α       # ← partial ΔT removal
             H[I...] = ((V_eruptij / dt) * ρCp[I...] * ΔT) / (dx * dy * dx)
+        #  [W/m^3] = [[m3/[s]]      * ([kg/m^3] * [J/kg/K]) * [K]] / [[m] * [m] * [m]]
         end
 
         return nothing
@@ -468,7 +469,7 @@ function compute_thermal_source!(
     ni = size(phase_ratios.center)
 
     @parallel (@idx ni) _compute_thermal_source!(
-        H, T_erupt, threshold, V_erupt, cells, weights, phase_ratios.center,
+        H, T_addition, threshold, V_erupt, weights, phase_ratios.center,
         dt, args, di..., magma_phase, anomaly_phase, rheology, α
     )
 end
@@ -806,7 +807,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 end
                 # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.3, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                 V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
-                compute_thermal_source!(thermal.H, T_addition, 0.3, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology)
+                compute_thermal_source!(thermal.H, T_addition, 0.3, V_erupt, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights; α = 1.0)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
             end
