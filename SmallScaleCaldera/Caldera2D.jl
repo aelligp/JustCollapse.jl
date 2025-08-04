@@ -853,11 +853,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             er_it += 1
             dtmax = 100 * 3600 * 24 * 365.25
         else
-            if it > 3 && !isempty(overpressure) && overpressure[end] < 0.0
-                dtmax = 5e3 * 3600 * 24 * 365.25
-            else
             dtmax = 1.0e3 * 3600 * 24 * 365.25
-            end
         end
         dt = compute_dt(stokes, di, dtmax)
 
@@ -1198,7 +1194,7 @@ li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase 
     layers = 3, # number of layers
     volcano_size = (3.0e0, 5.0e0),    # height, radius
     conduit_radius = 1.0e-2, # radius of the conduit
-    chamber_T = 900.0e0, # temperature of the chamber
+    chamber_T = 950.0e0, # temperature of the chamber
     chamber_depth  = depth, # depth of the chamber
     chamber_radius = radius, # radius of the chamber
     aspect_x       = ar, # aspect ratio of the chamber
