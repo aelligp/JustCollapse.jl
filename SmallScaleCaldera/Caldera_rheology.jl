@@ -1,5 +1,4 @@
 using GeoParams.Dislocation
-using GeoParams.Diffusion
 using Random
 
 function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressible = true, plastic = true, magma = false, softening_C=true, softening_ϕ=false)
@@ -36,9 +35,10 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
     #dislocation laws
     # disl_top  = linear ? LinearViscous(η=1e23) : DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
     # disl_top  = linear ? LinearViscous(η=1e23) : SetDislocationCreep(Dislocation.dry_olivine_Karato_2003)
-    disl_top = linear ? LinearViscous(η = 1.0e23) : SetDislocationCreep(Dislocation.strong_diabase_Mackwell_1998)
+    disl_top = linear ? LinearViscous(η = 1.0e23) : SetDislocationCreep(Dislocation.granite_Carter_1987)
 
-    disl_bot = linear ? LinearViscous(η = 1.0e21) : SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
+    disl_bot = linear ? LinearViscous(η = 1.0e21) : SetDislocationCreep(Dislocation.strong_diabase_Mackwell_1998)
+    # disl_bot = linear ? LinearViscous(η = 1.0e21) : SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
 
 
     # Define the Volcano cone rheology

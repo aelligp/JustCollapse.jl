@@ -765,7 +765,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 eruption = true
                 dt *= 0.1
                 if rand() < 0.1
-                    V_erupt =  max((-rand(1e0:1e0:1e2) * 1e9), -V_total / 3)
+                    V_erupt =  max((-rand(2e1:1e0:1e2) * 1e9), -V_total / 3)
                     # V_erupt = V_erupt_fast
                 else
                     V_erupt = (-rand(1e-1:1e-1:1e1) * 1e9)
@@ -864,7 +864,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         # ------------------------------
 
         # Thermal solver ---------------
-        if it ≥ 3
+        if it ≥ 3 && !(!isempty(VEI_array) && VEI_array[end] ≥ 6)
         heatdiffusion_PT!(
             thermal,
             pt_thermal,
@@ -913,8 +913,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         )
 
         # advect marker chain
-        # advect_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
-        semilagrangian_advection_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt)
+        advect_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
+        # semilagrangian_advection_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt)
         update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
 
         compute_melt_fraction!(
@@ -939,11 +939,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             push!(overpressure, maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
             push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
             end
-            if it > 1 && !isempty(VEI_array) && VEI_array[end] ≥ 6
-                if !isempty(overpressure) && overpressure[end] < -30e6
-                eruption = false
-                end
-            elseif it > 1 && !isempty(VEI_array) && VEI_array[end] < 6
+            # Only allow eruption to be set to false if VEI < 6
+            if it > 1 && !isempty(VEI_array) && VEI_array[end] < 6
                 if !isempty(overpressure) && overpressure[end] < 0.0
                     eruption = false
                 elseif er_it > 10

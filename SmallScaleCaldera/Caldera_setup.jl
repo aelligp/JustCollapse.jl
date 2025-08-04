@@ -12,8 +12,8 @@ function setup2D(
         conduit_radius = 0.2,
         chamber_T = 1.0e3,
         chamber_depth = 5.0e0,
-        chamber_radius = 2.0e0,
-        aspect_x = 1.5,
+        chamber_radius = 2.5e0,
+        aspect_x = 1.0,
     )
 
     Lx = Ly = dimensions[1]
