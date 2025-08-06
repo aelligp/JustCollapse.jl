@@ -934,7 +934,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             push!(overpressure_t, t / (3600 * 24 * 365.25) / 1.0e3)
             end
             # Only allow eruption to be set to false if VEI < 6
-            if it > 1 && !isempty(VEI_array) && VEI_array[end] < 6
+            if it > 1 && !isempty(VEI_array) && VEI_array[end] < 6 && eruption == true
                 if !isempty(overpressure) && overpressure[end] < 0.0
                     eruption = false
                     println("Eruption stopped")
