@@ -761,7 +761,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
             if eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
                 (any(maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp] .≥ 0.3]) .≥ ΔPc .&& Array(ϕ_m)[pp] .≥ 0.5) && any(Array(ϕ_m) .≥ 0.5)) && (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
-                println("Critical overpressure reached - erupting with fast rate")
+                println("Critical overpressure reached")
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
                 eruption_counter += 1
@@ -770,10 +770,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 dt *= 0.1
                 if rand() < 0.1
                     V_erupt =  max((-rand(2e1:1e0:1e2) * 1e9), -V_total / 3)
-                    # V_erupt = V_erupt_fast
                 else
                     V_erupt = (-rand(1e-1:1e-1:1e1) * 1e9)
-                    # V_erupt = rand() * V_erupt_fast
                 end
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                 V_tot = V_total
@@ -781,9 +779,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     weights = compute_vertical_weights(cells, PTArray(backend)(depth); smoothing = "cosine")  # or "linear", "exp"
                     T_erupt = mean(thermal.Tc[cells .== true])
                     V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
-                    # @views ρg[end][weights .> 0.0] .= (1000 * 9.81) * 10 .* weights[weights .> 0.0] # [kg/m^3] for the erupted Volume
-                    # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.5, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
-                    # compute_thermal_source!(thermal.H, T_erupt, 0.5, V_erupt, cells, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights)
                 end
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
                 println("Erupted Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 2)) km³")
@@ -795,8 +790,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 push!(eruption_times, (t / (3600 * 24 * 365.25) / 1.0e3))
                 push!(eruption_counters, eruption_counter)
             elseif eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
-                any((maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3) #.&& depth .≤ -2500)
-                println("Adding Volume to the chamber ")
+                any((maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3)
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
                 compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
@@ -808,7 +802,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 else
                     (rand(1.5e-3:1e-4:1e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 end
-                # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.3, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                 V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
                 compute_thermal_source_weights!(thermal.H, T_addition, 0.3, V_erupt, V_tot, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights, cells; α = 1.0)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
@@ -944,8 +937,10 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             if it > 1 && !isempty(VEI_array) && VEI_array[end] < 6
                 if !isempty(overpressure) && overpressure[end] < 0.0
                     eruption = false
+                    println("Eruption stopped")
                 elseif er_it > 10
                     eruption = false
+                    println("Eruption stopped after $er_it iterations")
                 end
             end
         end
