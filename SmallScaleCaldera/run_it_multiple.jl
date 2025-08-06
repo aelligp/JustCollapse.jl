@@ -9,8 +9,8 @@ function main()
         conduits = 1.5e-1
         depths = 5e0
         radii = 1.5:0.25:2.5e0
-        ars = 1.0:0.5:2.5e0
-        extensions = 1e-15 #, 5e-15, 1e-14, 5e-14, 1e-13
+        ars = 0.5:0.5:2.5e0
+        extensions = -1e-15, 0.0, 1e-15 #, 5e-15, 1e-14, 5e-14, 1e-13
         friction = 15:5:30.0
         max_jobs = 4
         job_counter = 0
