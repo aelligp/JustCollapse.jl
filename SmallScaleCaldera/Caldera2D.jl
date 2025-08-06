@@ -527,9 +527,9 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     Vx_v = @zeros(ni.+1...)
     Vy_v = @zeros(ni.+1...)
     # Initialize particles -------------------------------
-    nxcell = 100
-    max_xcell = 150
-    min_xcell = 75
+    nxcell = 75
+    max_xcell = 100
+    min_xcell = 50
     particles = init_particles(
         backend_JP, nxcell, max_xcell, min_xcell, xvi, di, ni
     )
