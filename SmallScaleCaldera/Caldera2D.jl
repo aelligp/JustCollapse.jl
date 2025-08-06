@@ -422,7 +422,6 @@ function compute_thermal_source!(
             # Ensure temperature does not go below Temp_bg
             ΔT = max(T_addition - Tij, 0.0)
             H[I...] = ((V_eruptij / dt) * ρCp[I...] * ΔT) / (dx * dy * 1.0)
-            # H[I...] = ((V_eruptij / dt) * ρCp[I...] * ΔT / (dx * dy * dx)
 
         #   [W/m^3] = [[m3/[s]] * ([kg/m^3] * [J/kg/K]) * [K]] / [[m] * [m] * [m]]
         end
@@ -441,7 +440,7 @@ end
 function compute_thermal_source_weights!(
     H, T_addition, threshold, V_erupt, V_tot, ϕ,
     phase_ratios, dt, args, di, magma_phase, anomaly_phase, rheology, weights, cells;
-    α = 0.3
+    α = 1.0
 )
     @parallel_indices (I...) function _compute_thermal_source!(
         H, T_addition, threshold, V_erupt, V_tot, ϕ, weights, cells,
@@ -673,11 +672,11 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     grid2particle!(pT, xvi, T_buffer, particles)
 
     # ## Plot initial T and P profile
-    let
-        compo = [oxd_wt[1] (oxd_wt[7]+oxd_wt[8])]
-        fig=Plot_TAS_diagram(compo; sz=(1000, 1000))
-        save(joinpath(figdir, "TAS_diagram.png"), fig)
-    end
+    # let
+    #     compo = [oxd_wt[1] (oxd_wt[7]+oxd_wt[8])]
+    #     fig=Plot_TAS_diagram(compo; sz=(1000, 1000))
+    #     save(joinpath(figdir, "TAS_diagram.png"), fig)
+    # end
 
     τxx_v = @zeros(ni .+ 1...)
     τyy_v = @zeros(ni .+ 1...)
@@ -804,15 +803,16 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 weights = compute_vertical_weights_bottom(cells, PTArray(backend)(depth); smoothing = "cosine")  # or "linear", "exp"
                 V_tot = V_total
                 T_addition = 950+273e0
-                V_erupt = if rand() < 0.1
-                    (1e-6 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of Volume to maybe sustain the heat
+                V_erupt = if rand() < 0.05
+                    (1e-5 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of Volume to maybe sustain the heat
                 else
-                    (rand(1e-3:1e-4:5e-3) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                    (rand(1.5e-3:1e-4:1e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 end
                 # V_total, V_erupt = make_it_go_boom!(stokes.Q, 0.3, cells, ϕ_m, V_erupt, V_tot, di, phase_ratios, 3, 4)
                 V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
                 compute_thermal_source_weights!(thermal.H, T_addition, 0.3, V_erupt, V_tot, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights, cells; α = 1.0)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
+                println("Magma flux per year: $(round((V_erupt / dt) * (3600 * 24 * 365.25) / 1.0e9; digits = 5)) km³/year")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
             end
         end
