@@ -1020,7 +1020,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 # Plot temperature
                 h1 = heatmap!(ax1, xvi[1] .* 1.0e-3, xvi[2] .* 1.0e-3, Array(thermal.T[2:(end - 1), :] .- 273), colormap = :batlow)
                 # Plot velocity
-                h2 = heatmap!(ax2, xvi[1] .* 1.0e-3, xvi[2] .* 1.0e-3, ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")), colormap = :vik) #, colorrange= (-(ustrip.(1u"cm/yr")), (ustrip(1u"cm/yr"))))
+                V_range = maximum(abs.(extrema(ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")))))
+                h2 = heatmap!(ax2, xvi[1] .* 1.0e-3, xvi[2] .* 1.0e-3, ustrip.(uconvert.(u"cm/yr", Array(stokes.V.Vy)u"m/s")), colormap = :vik, colorrange= (-V_range, V_range))
                 scatter!(ax2, Array(chain_x), Array(chain_y), color = :red, markersize = 3)
                 # Plot 2nd invariant of stress
                 h3 = heatmap!(ax3, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(stokes.τ.II) ./ 1.0e6, colormap = :batlow)
