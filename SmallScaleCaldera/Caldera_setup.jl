@@ -6,10 +6,8 @@ function setup2D(
         sticky_air = 5.0e0,
         dimensions = (30.0e0, 20.0e0), # extent in x and y in km
         flat = true,
-        chimney = false,
         layers = 1,
         volcano_size = (3.0e0, 5.0e0),
-        conduit_radius = 0.2,
         chamber_T = 1.0e3,
         chamber_depth = 5.0e0,
         chamber_radius = 2.5e0,
@@ -23,7 +21,7 @@ function setup2D(
     Grid = CartData(xyz_grid(x, y, z))
 
     # Allocate Phase and Temp arrays
-    air_phase = layers + 7
+    air_phase = layers + 6
     # Phases = fill(6, nx, 2, nz);
     Phases = fill(air_phase, nx, 2, nz)
     Temp = fill(0.0, nx, 2, nz)
@@ -82,24 +80,16 @@ function setup2D(
         T = ConstantTemp(T = chamber_T)
     )
 
-    # add_sphere!(Phases, Temp, Grid;
-    #     cen    = (mean(Grid.x.val), 0, -(chamber_depth-(chamber_radius/2))),
-    #     radius = (chamber_radius/2),
-    #     phase  = ConstantPhase(4),
-    #     T      = ConstantTemp(T=chamber_T+100)
-    # )
-
-
-    if chimney
-        add_cylinder!(
-            Phases, Temp, Grid;
-            base = (mean(Grid.x.val), 0, -(chamber_depth - chamber_radius)),
-            cap = (mean(Grid.x.val), 0, flat ? 0.0e0 : volcano_size[1]),
-            radius = conduit_radius,
-            phase = ConstantPhase(layers + 6),
-            # T      = ConstantTemp(T=chamber_T),
-        )
-    end
+    # if chimney
+    #     add_cylinder!(
+    #         Phases, Temp, Grid;
+    #         base = (mean(Grid.x.val), 0, -(chamber_depth - chamber_radius)),
+    #         cap = (mean(Grid.x.val), 0, flat ? 0.0e0 : volcano_size[1]),
+    #         radius = conduit_radius,
+    #         phase = ConstantPhase(layers + 6),
+    #         # T      = ConstantTemp(T=chamber_T),
+    #     )
+    # end
 
     Grid = addfield(Grid, (; Phases, Temp))
     li = (abs(last(x) - first(x)), abs(last(z) - first(z))) .* 1.0e3

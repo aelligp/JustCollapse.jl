@@ -399,12 +399,12 @@ end
 numcells(A::AbstractArray) = count(x -> x == 1.0, A)
 
 function compute_thermal_source!(
-    H, T_addition, threshold, V_erupt, V_tot, cells, ϕ,
-    phase_ratios, dt, args, di, magma_phase, anomaly_phase, rheology; α=1.0
+    H, T_addition, threshold, V_erupt, V_tot, ϕ,
+    phase_ratios, dt, args, di, magma_phase, anomaly_phase, rheology, cells
 )
     @parallel_indices (I...) function _compute_thermal_source!(
         H, T_addition, threshold, V_erupt, V_tot, cells, center_ratio, dt, args,
-        dx, dy, magma_phase, anomaly_phase, rheology, α
+        dx, dy, magma_phase, anomaly_phase, rheology
     )
         magma_ratio_ij = @index center_ratio[magma_phase, I...]
         anomaly_ratio_ij = @index center_ratio[anomaly_phase, I...]
@@ -415,7 +415,7 @@ function compute_thermal_source!(
         phase_ij = center_ratio[I...]
         args_ij = (; T = Tij, P = args.P[I...])
 
-        V_eruptij = V_erupt * ((numcells(cells) * dx * dy * 1.0) / V_tot)
+        V_eruptij = (V_erupt * ((numcells(cells) * dx * dy * 1.0) / V_tot)) * ((total_fraction * cells[I...]) * inv(numcells(cells)))
         ρCp = JustRelax.JustRelax2D.compute_ρCp(rheology, phase_ij, args_ij)
 
         if ((anomaly_ratio_ij > 0.5 || magma_ratio_ij > 0.5) && ϕ_ij ≥ threshold)
@@ -432,7 +432,7 @@ function compute_thermal_source!(
 
     @parallel (@idx ni) _compute_thermal_source!(
         H, T_addition, threshold, V_erupt, V_tot, cells, phase_ratios.center, dt, args,
-        di..., magma_phase, anomaly_phase, rheology, α
+        di..., magma_phase, anomaly_phase, rheology
     )
 end
 
@@ -753,14 +753,14 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         if it > 3
             CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
-            V_max_eruptable = V_total / 2
-            V_erupt_fast = -V_total / 3
             compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m)
             V_total_cells = compute_total_eruptible_volume(cells, di...)
             V_total = min(V_total_cells, V_total)
+            V_max_eruptable = V_total / 2
+            V_erupt_fast = -V_total / 3
 
             if eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
-                (any(maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp] .≥ 0.3]) .≥ ΔPc .&& Array(ϕ_m)[pp] .≥ 0.5) && any(Array(ϕ_m) .≥ 0.5)) && (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
+                (maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp] .≥ 0.3]) ≥ ΔPc && any(Array(ϕ_m)[pp] .≥ 0.5)) && (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
                 println("Critical overpressure reached")
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
@@ -771,7 +771,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 if rand() < 0.1
                     V_erupt =  max((-rand(2e1:1e0:1e2) * 1e9), -V_total / 3)
                 else
-                    V_erupt = (-rand(1e-1:1e-1:1e1) * 1e9)
+                    V_erupt = max((-rand(1e-1:1e-1:1e1) * 1e9), -V_total / 3)
                 end
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                 V_tot = V_total
@@ -790,7 +790,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 push!(eruption_times, (t / (3600 * 24 * 365.25) / 1.0e3))
                 push!(eruption_counters, eruption_counter)
             elseif eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
-                any((maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3])) .< ΔPc .&& Array(ϕ_m)[pp]  .≥ 0.3)
+                (maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]) < ΔPc) && any(Array(ϕ_m)[pp]  .≥ 0.3)
                 @views stokes.Q .= 0.0
                 @views thermal.H .= 0.0
                 compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
@@ -803,7 +803,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     (rand(1.5e-3:1e-4:1e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                 end
                 V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
-                compute_thermal_source_weights!(thermal.H, T_addition, 0.3, V_erupt, V_tot, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights, cells; α = 1.0)
+                # compute_thermal_source_weights!(thermal.H, T_addition, 0.3, V_erupt, V_tot, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights, cells; α = 1.0)
+                compute_thermal_source!(thermal.H, T_addition, 0.3, V_erupt, V_tot, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, cells)
                 println("Added Volume: $(round(ustrip.(uconvert(u"km^3", (V_erupt)u"m^3")); digits = 5)) km³")
                 println("Magma flux per year: $(round((V_erupt / dt) * (3600 * 24 * 365.25) / 1.0e9; digits = 5)) km³/year")
                 println("Volume total: $(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³")
@@ -938,7 +939,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 if !isempty(overpressure) && overpressure[end] < 0.0
                     eruption = false
                     println("Eruption stopped")
-                elseif er_it > 10
+                elseif er_it > 10 && !isempty(overpressure) && overpressure[end] < 20e6
                     eruption = false
                     println("Eruption stopped after $er_it iterations")
                 end
@@ -1035,7 +1036,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 hideydecorations!(ax4)
                 hideydecorations!(ax6)
 
-                Colorbar(fig[1, 2], h1)
+                Colorbar(fig[1, 2], h1, ticks = 0.0:100:maximum(thermal.T .- 273))
                 Colorbar(fig[2, 2], h2)
                 Colorbar(fig[1, 4], h3)
                 Colorbar(fig[2, 4], h4)
@@ -1154,12 +1155,12 @@ const progressiv_extension = false
 const displacement = false  #set solver to displacement or velocity
 do_vtk = true # set to true to generate VTK files for ParaView
 
-conduit, depth, radius, ar, extension, fric_angle = parse.(Float64, ARGS[1:end])
+depth, radius, ar, extension, fric_angle = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-figdir   = "Systematics/Caldera2D_$(today())_compression_strong_diabase_softeningC_$(depth)_$(radius)_$(ar)_$(extension)_$(fric_angle)"
+figdir   = "Systematics/Caldera2D_$(today())_granite_d_$(depth)_r_$(radius)_ar_$(ar)_ex_$(extension)_phi_$(fric_angle)"
 # figdir = "Systematics/Caldera2D_$(today())"
-n = 360
+n = 384
 nx, ny = n, n >> 1
 
 # IO -------------------------------------------------
@@ -1176,7 +1177,6 @@ end
 # ----------------------------------------------------
 
 open(joinpath(checkpoint, "setup_args.txt"), "w") do io
-    println(io, "conduit: $conduit")
     println(io, "depth: $depth")
     println(io, "radius: $radius")
     println(io, "aspect ratio (ar): $ar")
@@ -1190,10 +1190,8 @@ li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase 
     sticky_air = 4.0e0,
     dimensions = (40.0e0, 20.0e0), # extent in x and y in km
     flat = false, # flat or volcano cone
-    chimney = false, # conduit or not
     layers = 3, # number of layers
     volcano_size = (3.0e0, 5.0e0),    # height, radius
-    conduit_radius = 1.0e-2, # radius of the conduit
     chamber_T = 950.0e0, # temperature of the chamber
     chamber_depth  = depth, # depth of the chamber
     chamber_radius = radius, # radius of the chamber

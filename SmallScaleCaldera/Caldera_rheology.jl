@@ -9,8 +9,8 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
     Ψ = 0.0
     # soft_C = NonLinearSoftening(; ξ₀ = C, Δ = C / 2, σ = 0.001)       # nonlinear softening law
     # soft_ϕ = NonLinearSoftening(; ξ₀ = ϕ, Δ = ϕ / 2, σ = 0.001)       # nonlinear softening law
-    soft_C = softening_C ? LinearSoftening(0e6, C, 0.0, 1.0) : NoSoftening()       # nonlinear softening law
-    soft_ϕ = softening_ϕ ? LinearSoftening(fric_angle/2, fric_angle, 0.0, 1.0) : NoSoftening()       # nonlinear softening law
+    soft_C = softening_C ? LinearSoftening(C/2, C, 0.0, 0.5) : NoSoftening()       # nonlinear softening law
+    soft_ϕ = softening_ϕ ? LinearSoftening(fric_angle/2, fric_angle, 0.0, 0.5) : NoSoftening()       # nonlinear softening law
     pl = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
     pl_bot = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ)
 
