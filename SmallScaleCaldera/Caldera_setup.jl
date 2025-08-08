@@ -11,7 +11,7 @@ function setup2D(
         chamber_T = 1.0e3,
         chamber_depth = 5.0e0,
         chamber_radius = 2.5e0,
-        aspect_x = 1.0,
+        aspect_x = 1.5,
     )
 
     Lx = Ly = dimensions[1]
