@@ -757,7 +757,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             V_total_cells = compute_total_eruptible_volume(cells, di...)
             V_total = min(V_total_cells, V_total)
             V_max_eruptable = V_total / 2
-            V_erupt_fast = -V_total / 3
+            V_erupt_fast = -V_total / 2
 
             if eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
                 (maximum(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp] .≥ 0.3]) ≥ ΔPc && any(Array(ϕ_m)[pp] .≥ 0.5)) && (V_total - abs(V_erupt_fast)) ≥ V_max_eruptable
