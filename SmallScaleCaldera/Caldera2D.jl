@@ -796,11 +796,16 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
                 weights = compute_vertical_weights_bottom(cells, PTArray(backend)(depth); smoothing = "cosine")  # or "linear", "exp"
                 V_tot = V_total
-                T_addition = 950+273e0
-                V_erupt = if rand() < 0.05
-                    (1e-5 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of Volume to maybe sustain the heat
+                T_addition = 1000+273e0
+                if rand() < 0.05
+                    V_erupt =  (1e-5 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of Volume to maybe sustain the heat
+                    printstyled("Almost Dormant, adding a bit of volume\n"; color = :blue)
+                elseif rand() < 0.15
+                    V_erupt = (rand(1e-2:1e-3:5e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by https://doi.org/10.1029/2018GC008103
+                    printstyled("Episodic increase in recharge\n"; color = :red)
                 else
-                    (rand(1.5e-3:1e-4:1e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                    V_erupt = (rand(1.5e-3:1e-4:1e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                    printstyled("Normal recharge\n"; color = :green)
                 end
                 V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
                 # compute_thermal_source_weights!(thermal.H, T_addition, 0.3, V_erupt, V_tot, ϕ_m, phase_ratios, dt, args, di,  3, 4, rheology, weights, cells; α = 1.0)
