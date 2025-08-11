@@ -958,7 +958,11 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 end
                 checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
                 checkpointing_particles(checkpoint, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt)
-                jldsave(joinpath(checkpoint,"OEV_arrays.jld2"); VEI_array = VEI_array, eruption_times = eruption_times, eruption_counters = eruption_counters, Volume = Volume, erupted_volume = erupted_volume, volume_times = volume_times, overpressure = overpressure, overpressure_t = overpressure_t)
+                mktempdir() do tmpdir
+                    tmpname = joinpath(tmpdir, "OEV_arrays.jld2")
+                    jldsave(tmpname; VEI_array = VEI_array, eruption_times = eruption_times, eruption_counters = eruption_counters, Volume = Volume, erupted_volume = erupted_volume, volume_times = volume_times, overpressure = overpressure, overpressure_t = overpressure_t)
+                    return mv(tmpname, joinpath(checkpoint, "OEV_arrays.jld2"); force = true)
+                end
                 η_eff = @. stokes.τ.II / (2 * stokes.ε.II)
                 (; η_vep, η) = stokes.viscosity
                 if do_vtk
@@ -1176,13 +1180,14 @@ if plotting
     take(checkpoint)
 end
 # ----------------------------------------------------
-
+RoofRatio =  ((depth - radius)) / (radius * ar)
 open(joinpath(checkpoint, "setup_args.txt"), "w") do io
     println(io, "depth: $depth")
     println(io, "radius: $radius")
     println(io, "aspect ratio (ar): $ar")
     println(io, "extension: $extension")
     println(io, "friction angle: $fric_angle")
+    println(io, "Roof Ratio: $RoofRatio")
 end
 
 
