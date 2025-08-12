@@ -29,7 +29,7 @@ function main()
 export MPICH_GPU_SUPPORT_ENABLED=1
 export IGG_CUDAAWARE_MPI=1 # IGG
 export JULIA_CUDA_USE_COMPAT=false # IGG
-export LD_PRELOAD=/capstor/scratch/cscs/paellig/.julia/gh200/juliaup/depot/artifacts/4c845485a01f4a5c51481d9714303da1309c266f/lib/libcrypto.so.3
+export LD_PRELOAD=export LD_PRELOAD=/capstor/scratch/cscs/paellig/.julia/gh200/juliaup/depot/artifacts/e313763c2521efed920ca04560b24511b37d35ea/lib/libcrypto.so.3
 
 # mount the uenv prgenv-gnu with the view named default
 srun --constraint=gpu --gpu-bind=per_task:1 --cpu_bind=sockets -- julia --project -t 12 SmallScaleCaldera/Caldera2D.jl $(depth) $(radius) $(ar) $(extension) $(fric_angle) """
