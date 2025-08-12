@@ -2,21 +2,20 @@ using DataFrames, CSV, Dates
 
 function main()
     Systematics = true
-    results = DataFrame(conduit=Float64[], depth=Float64[], radius=Float64[], ar=Float64[], extension=Float64[], diameter=Float64[], friction_angle=Float64[])
+    results = DataFrame(depth=Float64[], radius=Float64[], ar=Float64[], extension=Float64[], diameter=Float64[], friction_angle=Float64[])
 
     for systematic in Systematics
 
-        conduits = 1.5e-1
         depths = 5e0
         radii = 1.5:0.25:2.5e0
-        ars = 0.5:0.5:2.5e0
+        ars = 1.0:0.5:2.5e0
         extensions = -1e-15, 0.0, 1e-15 #, 5e-15, 1e-14, 5e-14, 1e-13
         friction = 15:5:30.0
         max_jobs = 4
         job_counter = 0
         batch_counter = 0
 
-        for conduit in conduits, depth in depths, radius in radii, ar in ars, extension in extensions, fric_angle in friction
+        for depth in depths, radius in radii, ar in ars, extension in extensions, fric_angle in friction
             diameter = 2 * (radius * ar)
             if diameter <= 8.0
                 if job_counter == 0
@@ -50,16 +49,16 @@ export LD_PRELOAD=/capstor/scratch/cscs/paellig/.julia/gh200/juliaup/depot/artif
                 open("runme_batch_$(batch_counter).sh", "a") do io
                     if job_counter == max_jobs-1  # Last job in the batch
                         println(io, """
-srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) $(fric_angle) &
+srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(depth) $(radius) $(ar) $(extension) $(fric_angle) &
 wait""")
                     else
                         println(io, """
-srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(conduit) $(depth) $(radius) $(ar) $(extension) $(fric_angle) &""")
+srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(depth) $(radius) $(ar) $(extension) $(fric_angle) &""")
                     end
                 end
 
                 job_counter += 1
-                push!(results, (conduit, depth, radius, ar, extension, diameter, fric_angle))
+                push!(results, (depth, radius, ar, extension, diameter, fric_angle))
 
                 if job_counter == max_jobs
                     job_counter = 0
