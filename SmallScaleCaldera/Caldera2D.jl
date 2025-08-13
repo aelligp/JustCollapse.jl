@@ -579,7 +579,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
-    pt_stokes = PTStokesCoeffs(li, di; ϵ_rel = 1.0e-5, ϵ_abs = 1.0e-4, Re = 3.0, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
+    pt_stokes = PTStokesCoeffs(li, di; ϵ_rel = 1.0e-5, ϵ_abs = 1.0e-4, Re = 2.8, r = 0.7, CFL = 0.8 / √2.1) # Re=3π, r=0.7
     σ = PrincipalStress(backend, ni)
 
     # randomize cohesion
@@ -957,7 +957,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
         if plotting
             # Data I/O and plotting ---------------------
-            if it == 1 || rem(it, 1) == 0
+            if it == 1 || rem(it, 10) == 0
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
                 end
@@ -980,6 +980,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                     )
                     data_c = (;
                         P = Array(stokes.P),
+                        P_lith = Array(P_lith),
                         viscosity_vep = Array(η_vep),
                         viscosity_eff = Array(η_eff),
                         viscosity = Array(η),
