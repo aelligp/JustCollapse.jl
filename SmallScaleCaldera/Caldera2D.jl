@@ -701,6 +701,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     eruption_counters = Int[]
     Volume = Float64[]
     erupted_volume = Float64[]
+    increased_recharge = 0
     volume_times = Float64[]
     overpressure = Float64[]
     overpressure_t = Float64[]
@@ -768,8 +769,9 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 er_it = 0
                 eruption = true
                 dt *= 0.1
-                if rand() < 0.1
-                    V_erupt =  max((-rand(2e1:1e0:1e2) * 1e9), -V_total / 2)
+                if rand() < 0.15 || increased_recharge > 0
+                    V_erupt =  max((-rand(11:1e0:1e2) * 1e9), -V_total / 2)
+                    increased_recharge = 0
                 else
                     V_erupt = max((-rand(1e-1:1e-1:1e1) * 1e9), -V_total / 2)
                 end
@@ -797,12 +799,13 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 weights = compute_vertical_weights_bottom(cells, PTArray(backend)(depth); smoothing = "cosine")  # or "linear", "exp"
                 V_tot = V_total
                 T_addition = 1000+273e0
-                if rand() < 0.05
+                if rand() < 0.05 && increased_recharge == 0
                     V_erupt =  (1e-5 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of Volume to maybe sustain the heat
                     printstyled("Almost Dormant, adding a bit of volume\n"; color = :blue)
-                elseif rand() < 0.15
+                elseif rand() < 0.15 || increased_recharge > 0
                     V_erupt = (rand(1e-2:1e-3:5e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by https://doi.org/10.1029/2018GC008103
                     printstyled("Episodic increase in recharge\n"; color = :red)
+                    increased_recharge ≥ 5 ? increased_recharge = 0 : increased_recharge += 1
                 else
                     V_erupt = (rand(1.5e-3:1e-4:1e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                     printstyled("Normal recharge\n"; color = :green)
@@ -1073,6 +1076,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
                     ax2 = Axis(
                         fig[1, 1], ylabel = "Erupted Volume [km³]", yscale = log10, xlabel = "Time [Kyrs]",
+                        title = "Eruptions over time  - $(eruption_counters[end])", yminorticks = IntervalsBetween(9),
+                        yminorticksvisible = true,
                         yticklabelsize = 25,
                         xticklabelsize = 25,
                         xlabelsize = 25,
