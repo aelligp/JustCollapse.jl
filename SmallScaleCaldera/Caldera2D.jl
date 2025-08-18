@@ -512,7 +512,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     # ----------------------------------------------------
 
     # Physical properties using GeoParams ----------------
-    oxd_wt = (61.6, 0.9, 17.7, 3.65, 2.35, 5.38, 4.98, 1.27, 3.0)
+    oxd_wt = (61.6, 0.9, 17.7, 3.65, 2.35, 5.38, 4.98, 1.27, 3.0) # LSr hypothetical parent liquid for climactic magma chambers (https://doi.org/10.1007/BF00402114 Table 7)
     rheology = init_rheologies(layers, oxd_wt, fric_angle; incompressible = false, magma = true)
     rheology_incomp = init_rheologies(layers, oxd_wt, fric_angle; incompressible = true, magma = true)
     # dt_time = 100 * 3600 * 24 * 365
