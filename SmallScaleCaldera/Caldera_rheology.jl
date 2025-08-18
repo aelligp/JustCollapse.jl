@@ -31,7 +31,7 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
     # magma_visc = magma ? ViscosityPartialMelt_Costa_etal_2009(η=LinearViscous(η=1e15)) : LinearViscous(η=1e15)
     # magma_visc = magma ? GiordanoMeltViscosity(oxd_wt = oxd_wt, η0 = 1.0e12Pas) : LinearViscous(η = 1.0e15)
     magma_visc = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt, η0 = 1.0Pas)) : LinearViscous(η = 1.0e15)
-    melting = MeltingParam_Assimilation(T_s = (725+273)K, T_l= (1140+273)K),
+    melting = MeltingParam_Assimilation(T_s = (725+273)K, T_l= (1140+273)K)
     # conduit_visc = magma  ? ViscosityPartialMelt_Costa_etal_2009(η=LinearViscous(η=1e15)) : LinearViscous(η=1e15)
 
     #dislocation laws
