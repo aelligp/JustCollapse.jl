@@ -698,7 +698,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     # Initialize the tracking arrays
     VEI_array = Int[]
     eruption_times = Float64[]
-    eruption_counters = Int[]
+    eruption_counters = Int[0]
     Volume = Float64[]
     erupted_volume = Float64[]
     increased_recharge = 0
@@ -964,13 +964,13 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
                 end
-                checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
-                checkpointing_particles(checkpoint, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt)
-                mktempdir() do tmpdir
-                    tmpname = joinpath(tmpdir, "OEV_arrays.jld2")
-                    jldsave(tmpname; VEI_array = VEI_array, eruption_times = eruption_times, eruption_counters = eruption_counters, Volume = Volume, erupted_volume = erupted_volume, volume_times = volume_times, overpressure = overpressure, overpressure_t = overpressure_t)
-                    return mv(tmpname, joinpath(checkpoint, "OEV_arrays.jld2"); force = true)
-                end
+                checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg; it = it, VEI_array = VEI_array, eruption_times = eruption_times, eruption_counters = eruption_counters, Volume = Volume, erupted_volume = erupted_volume, volume_times = volume_times, overpressure = overpressure, overpressure_t = overpressure_t)
+                checkpointing_particles(checkpoint, particles; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt, it = it)
+                # mktempdir() do tmpdir
+                #     tmpname = joinpath(tmpdir, "OEV_arrays.jld2")
+                #     jldsave(tmpname; VEI_array = VEI_array, eruption_times = eruption_times, eruption_counters = eruption_counters, Volume = Volume, erupted_volume = erupted_volume, volume_times = volume_times, overpressure = overpressure, overpressure_t = overpressure_t)
+                #     return mv(tmpname, joinpath(checkpoint, "OEV_arrays.jld2"); force = true)
+                # end
                 η_eff = @. stokes.τ.II / (2 * stokes.ε.II)
                 (; η_vep, η) = stokes.viscosity
                 if do_vtk
