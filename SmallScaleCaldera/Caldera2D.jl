@@ -770,7 +770,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 eruption = true
                 dt *= 0.1
                 if rand() < 0.15 || increased_recharge > 0
-                    V_erupt =  max((-rand(11:1e0:1e2) * 1e9), -V_total / 2)
+                    V_erupt =  max((-rand(25:1e0:1e2) * 1e9), -V_total / 2)
                     increased_recharge = 0
                 else
                     V_erupt = max((-rand(1e-1:1e-1:1e1) * 1e9), -V_total / 2)
