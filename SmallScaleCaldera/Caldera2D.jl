@@ -499,7 +499,7 @@ function compute_VEI!(V_erupt)
     end
 end
 
-# ## END OF HELPER FUNCTION ------------------------------------------------------------
+## END OF HELPER FUNCTION ------------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
 function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir = "figs2D", do_vtk = false, fric_angle = 30, extension = 1.0e-15 * 0, cutoff_visc = (1.0e16, 1.0e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase = 6, progressiv_extension = false, plotting = true, displacement=false)
@@ -527,9 +527,9 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     Vx_v = @zeros(ni.+1...)
     Vy_v = @zeros(ni.+1...)
     # Initialize particles -------------------------------
-    nxcell = 75
-    max_xcell = 100
-    min_xcell = 50
+    nxcell = 100
+    max_xcell = 125
+    min_xcell = 75
     particles = init_particles(
         backend_JP, nxcell, max_xcell, min_xcell, xvi, di, ni
     )
@@ -712,7 +712,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     V_total = compute_total_eruptible_volume(cells, di...);
 
 
-    while it < 500
+    while it < 1e3
         if it == 1
             P_lith .= stokes.P
         end
@@ -772,6 +772,10 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 if rand() < 0.15 || increased_recharge > 0
                     V_erupt =  max((-rand(25:1e0:1e2) * 1e9), -V_total / 2)
                     increased_recharge = 0
+                    εbg = 0.0
+                    apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
+                    flow_bcs!(stokes, flow_bcs) # apply boundary conditions
+                    update_halo!(@velocity(stokes)...)
                 else
                     V_erupt = max((-rand(1e-1:1e-1:1e1) * 1e9), -V_total / 2)
                 end
@@ -916,8 +920,9 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         )
 
         # advect marker chain
-        advect_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
-        # semilagrangian_advection_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt)
+        # advect_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
+        # semilagrangian!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt)
+        semilagrangian_advection_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt; max_slope_angle=60)
         update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
 
         compute_melt_fraction!(
@@ -1111,7 +1116,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                             align = (:left, :center),
                             fontsize = 16,
                             color = :black,
-                            font = "bold"
+                            font = "TeX Gyre Heros Makie"
                         )
                     end
                     scatterlines!(
