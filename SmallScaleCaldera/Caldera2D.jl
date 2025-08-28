@@ -697,7 +697,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
     # Initialize the tracking arrays
     VEI_array = Int[]
-    eruption_times = Float64[]
+    eruption_times = Float64[0]
     eruption_counters = Int[0]
     Volume = Float64[]
     erupted_volume = Float64[]
@@ -1046,7 +1046,14 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 # contour!(ax5, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, Array(ϕ_m), levels = [0.5, 0.75, 1.0], color = :white, linewidth = 1.5, labels=true)
                 # h6  = heatmap!(ax6, xci[1].*1e-3, xci[2].*1e-3, Array(ϕ_m) , colormap=:lipari, colorrange=(0.0,1.0))
                 h6 = heatmap!(ax6, xci[1] .* 1.0e-3, xci[2] .* 1.0e-3, (Array(stokes.P) .- Array(P_lith)) ./ 1.0e6, colormap = :roma)
-
+                P_level = 5.353955978584176e7        # Pa
+                contour!(ax6,
+                         xci[1] .* 1.0e-3,
+                         xci[2] .* 1.0e-3,
+                         Array(stokes.P);            # absolute pressure field
+                         levels = [P_level],
+                         color = :white,
+                         linewidth = 2)
                 hidexdecorations!(ax1)
                 hidexdecorations!(ax2)
                 hidexdecorations!(ax3)
@@ -1081,7 +1088,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
                     ax2 = Axis(
                         fig[1, 1], ylabel = "Erupted Volume [km³]", yscale = log10, xlabel = "Time [Kyrs]",
-                        title = "Eruptions over time  - $(eruption_counters[end])", yminorticks = IntervalsBetween(9),
+                        title = "Eruptions over time  - number of eruptions: $(eruption_counters[end]), last eruption occured at $(eruption_times[end]) kyr", yminorticks = IntervalsBetween(9),
                         yminorticksvisible = true,
                         yticklabelsize = 25,
                         xticklabelsize = 25,
