@@ -1127,7 +1127,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         )
                     end
                     scatterlines!(
-                        ax2, eruption_times, (round.(ustrip.(uconvert.(u"km^3", (erupted_volume)u"m^3")); digits = 5)),
+                        ax2, eruption_times[2:end], (round.(ustrip.(uconvert.(u"km^3", (erupted_volume)u"m^3")); digits = 5)),
                         color = :blue,
                         markersize = 10,
                         linewidth = 2,
