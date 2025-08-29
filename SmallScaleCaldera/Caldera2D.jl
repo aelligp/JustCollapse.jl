@@ -862,8 +862,10 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         if eruption == true
             er_it += 1
             dtmax = 100 * 3600 * 24 * 365.25
+        elseif it < 3
+            dtmax = Inf
         else
-            dtmax = 1.0e3 * 3600 * 24 * 365.25
+            dtmax = 1e3 * 3600 * 24 * 365.25
         end
         dt = compute_dt(stokes, di, dtmax)
 
