@@ -537,7 +537,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     # velocity grids
     grid_vxi = velocity_grids(xci, xvi, di)
     # material phase & temperature
-    pPhases, pT, pδ18O = init_cell_arrays(particles, Val(3))
+    pPhases, pT = init_cell_arrays(particles, Val(2))
 
     # Assign particles phases anomaly
     phases_device = PTArray(backend)(phases_GMG)
@@ -571,7 +571,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
     # particle fields for the stress rotation
     pτ = StressParticles(particles)
-    particle_args = (pT, pδ18O, pPhases, unwrap(pτ)...)
+    particle_args = (pT, pPhases, unwrap(pτ)...)
     particle_args_reduced = (pT, unwrap(pτ)...)
 
     # ----------------------------------------------------
@@ -705,7 +705,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     volume_times = Float64[]
     overpressure = Float64[]
     overpressure_t = Float64[]
-    local iters, er_it, eruption_counter, Vx_v, Vy_v
+    local iters, er_it, eruption_counter
 
     depth = PTArray(backend)([y for _ in xci[1], y in xci[2]]);
     compute_cells_for_Q!(cells, 0.01, phase_ratios, 3, 4, ϕ_m);
@@ -768,7 +768,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 eruption_counter += 1
                 er_it = 0
                 eruption = true
-                dt *= 0.1
                 if rand() < 0.15 || increased_recharge > 0
                     V_erupt =  max((-rand(25:1e0:1e2) * 1e9), -V_total / 2)
                     increased_recharge = 0
@@ -803,10 +802,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 weights = compute_vertical_weights_bottom(cells, PTArray(backend)(depth); smoothing = "cosine")  # or "linear", "exp"
                 V_tot = V_total
                 T_addition = 1000+273e0
-                if rand() < 0.05 && increased_recharge == 0
-                    V_erupt =  (1e-5 * 1e9) / (3600 * 24 * 365.25) * dt # mimic almost dormancy but add a bit of Volume to maybe sustain the heat
-                    printstyled("Almost Dormant, adding a bit of volume\n"; color = :blue)
-                elseif rand() < 0.15 || increased_recharge > 0
+                if rand() < 0.15 || increased_recharge > 0
                     V_erupt = (rand(1e-2:1e-3:5e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by https://doi.org/10.1029/2018GC008103
                     printstyled("Episodic increase in recharge\n"; color = :red)
                     increased_recharge ≥ 5 ? increased_recharge = 0 : increased_recharge += 1
