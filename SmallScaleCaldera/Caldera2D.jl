@@ -885,6 +885,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
             kwargs = (
                 igg = igg,
                 phase = phase_ratios,
+                stokes = stokes,
                 iterMax = 100.0e3,
                 nout = 1.0e2,
                 verbose = true,
