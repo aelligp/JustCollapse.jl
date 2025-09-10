@@ -801,7 +801,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
                 weights = compute_vertical_weights_bottom(cells, PTArray(backend)(depth); smoothing = "cosine")  # or "linear", "exp"
                 V_tot = V_total
-                T_addition = 1000+273e0
+                T_addition = 950+273e0
                 if rand() < 0.15 || increased_recharge > 0
                     V_erupt = (rand(1e-2:1e-3:5e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by https://doi.org/10.1029/2018GC008103
                     printstyled("Episodic increase in recharge\n"; color = :red)
