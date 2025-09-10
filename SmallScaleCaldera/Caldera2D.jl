@@ -700,7 +700,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     eruption_times = Float64[0]
     eruption_counters = Int[0]
     Volume = Float64[]
-    erupted_volume = Float64[]
+    erupted_volume = Float64[0]
+    vol_tot = Float64[0]
     increased_recharge = 0
     volume_times = Float64[]
     overpressure = Float64[]
@@ -792,6 +793,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 VEI = compute_VEI!(abs(V_erupt))
                 push!(VEI_array, VEI)
                 push!(erupted_volume, abs(V_erupt))
+                push!(vol_tot, V_tot)
                 push!(eruption_times, (t / (3600 * 24 * 365.25) / 1.0e3))
                 push!(eruption_counters, eruption_counter)
             elseif eruption == false && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3]) &&
@@ -1087,7 +1089,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
                     ax2 = Axis(
                         fig[1, 1], ylabel = "Erupted Volume [km³]", yscale = log10, xlabel = "Time [Kyrs]",
-                        title = "Eruptions over time  - number of eruptions: $(eruption_counters[end]), last eruption occured at $(eruption_times[end]) kyr", yminorticks = IntervalsBetween(9),
+                        title = "Eruptions over time  - number of eruptions: $(eruption_counters[end]), last eruption occured at $(round(eruption_times[end], digits=3)) kyr, \n erupted volume: $(round(erupted_volume[end]./1e9, digits=3)) km³, total volume: $(round(vol_tot[end]./1e9, digits=3)), ratio ΔV/V_tot: $(round(erupted_volume[end]./vol_tot[end], digits = 3))", yminorticks = IntervalsBetween(9),
                         yminorticksvisible = true,
                         yticklabelsize = 25,
                         xticklabelsize = 25,
@@ -1126,7 +1128,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                         )
                     end
                     scatterlines!(
-                        ax2, eruption_times[2:end], (round.(ustrip.(uconvert.(u"km^3", (erupted_volume)u"m^3")); digits = 5)),
+                        ax2, eruption_times[2:end], (round.(ustrip.(uconvert.(u"km^3", (erupted_volume[2:end])u"m^3")); digits = 5)),
                         color = :blue,
                         markersize = 10,
                         linewidth = 2,
