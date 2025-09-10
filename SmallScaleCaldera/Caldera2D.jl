@@ -230,8 +230,8 @@ function make_it_go_boom_smooth!(
         weight = weights[i,j]
         cells_ij = cells[i,j]
 
-        if cells_ij > 0 && weight > 0
-            Q[i, j] = (V_erupt * inv(V_tot)) * weight
+        if cells_ij > 0 && weight > 0 && total_fraction > 0
+           Q[i, j] = (V_erupt * inv(V_tot)) * weight * total_fraction
         else
             Q[i, j] = 0.0
         end
@@ -521,11 +521,6 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     dt_diff = 0.5 * min(di...)^2 / κ / 2.01
     dt = min(dt_time, dt_diff)
     # ----------------------------------------------------
-    # Weno model -----------------------------------------
-    weno = WENO5(backend, Val(2), ni.+1) # ni.+1 for ∂18O
-    # WENO arrays
-    Vx_v = @zeros(ni.+1...)
-    Vy_v = @zeros(ni.+1...)
     # Initialize particles -------------------------------
     nxcell = 100
     max_xcell = 125
@@ -687,7 +682,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     t, it, er_it = 0.0, 0, 0
     interval = 1
     eruption_counter = 0
-    iterMax = 150.0e3
+    iterMax = 50.0e3
     thermal.Told .= thermal.T
 
     eruption = false
@@ -713,18 +708,18 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     V_total = compute_total_eruptible_volume(cells, di...);
 
 
-    while it < 1e3
-        if it == 1
+    while it < 2e3
+        if it < 3
             P_lith .= stokes.P
         end
 
-        if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ_abs * 5
-            iterMax += 10e3
-            iterMax = min(iterMax, 200e3)
-            println("Increasing maximum pseudo timesteps to $iterMax")
-        else
-            iterMax = 150e3
-        end
+        # if it >1 && iters.iter > iterMax && iters.err_evo1[end] > pt_stokes.ϵ_abs * 5
+        #     iterMax += 10e3
+        #     iterMax = min(iterMax, 200e3)
+        #     println("Increasing maximum pseudo timesteps to $iterMax")
+        # else
+        #     iterMax = 150e3
+        # end
 
         if progressiv_extension
             if it > 4 && round(t/(3600 * 24 *365.25); digits=2) >= 6e3*interval
@@ -838,7 +833,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 dt,
                 igg;
                 kwargs = (;
-                    iterMax = it < 5 || eruption == true ? 250.0e3 : iterMax,
+                    iterMax = it < 5 || eruption == true ? 50.0e3 : iterMax,
                     strain_increment = displacement,
                     nout = 2.0e3,
                     viscosity_cutoff = viscosity_cutoff,
