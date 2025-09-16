@@ -49,11 +49,11 @@ export LD_PRELOAD=export LD_PRELOAD=/capstor/scratch/cscs/paellig/.julia/gh200/j
                 open("runme_batch_$(batch_counter).sh", "a") do io
                     if job_counter == max_jobs-1  # Last job in the batch
                         println(io, """
-srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(depth) $(radius) $(ar) $(extension) $(fric_angle) &
+srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(depth) $(radius) $(ar) $(extension) $(fric_angle) > $(today())_$(depth)$(radius)$(ar)$(extension)_$job_counter.out 2> $(today())_$(depth)$(radius)$(ar)$(extension)_$job_counter.err &
 wait""")
                     else
                         println(io, """
-srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(depth) $(radius) $(ar) $(extension) $(fric_angle) &""")
+srun --cpu-bind=sockets --mem-bind=local --exclusive julia --project -t auto SmallScaleCaldera/Caldera2D.jl $(depth) $(radius) $(ar) $(extension) $(fric_angle) > $(today())_$(depth)$(radius)$(ar)$(extension)_$job_counter.out 2> $(today())_$(depth)$(radius)$(ar)$(extension)_$job_counter.err &""")
                     end
                 end
 
