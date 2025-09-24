@@ -138,7 +138,8 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
         # Name              = "magma chamber",
         SetMaterialParams(;
             Phase = 3,
-            Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt=BubbleFlow_Density(ρgas = ConstantDensity(ρ = 10.0), ρmelt = Melt_DensityX(oxd_wt = oxd_wt), c0 = 3.0e-2)),
+            # Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt=BubbleFlow_Density(ρgas = ConstantDensity(ρ = 10.0), ρmelt = Melt_DensityX(oxd_wt = oxd_wt), c0 = 3.0e-2)),
+            Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt= Melt_DensityX(oxd_wt = oxd_wt)),
             Conductivity = ConstantConductivity(; k = 3.0),
             ShearHeat = ConstantShearheating(Χ=0.0NoUnits),
             HeatCapacity = Latent_HeatCapacity(Cp = ConstantHeatCapacity(), Q_L = 350.0e3J / kg),
@@ -149,7 +150,8 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
         # Name              = "magma chamber - hot anomaly",
         SetMaterialParams(;
             Phase = 4,
-            Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt=BubbleFlow_Density(ρgas = ConstantDensity(ρ = 10.0), ρmelt = Melt_DensityX(oxd_wt = oxd_wt), c0 = 3.0e-2)),
+            # Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt=BubbleFlow_Density(ρgas = ConstantDensity(ρ = 10.0), ρmelt = Melt_DensityX(oxd_wt = oxd_wt), c0 = 3.0e-2)),
+            Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt= Melt_DensityX(oxd_wt = oxd_wt)),
             Conductivity = ConstantConductivity(; k = 3.0),
             ShearHeat = ConstantShearheating(Χ=0.0NoUnits),
             HeatCapacity = Latent_HeatCapacity(Cp = ConstantHeatCapacity(), Q_L = 350.0e3J / kg),
