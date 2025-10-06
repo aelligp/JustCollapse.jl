@@ -499,6 +499,11 @@ function compute_VEI!(V_erupt)
     end
 end
 
+@parallel_indices (i, j) function update_Dirichlet_mask!(mask, phase_ratio_vertex, air_phase)
+    @inbounds mask[i + 1, j] = @index(phase_ratio_vertex[air_phase, i, j]) ≈ 1
+    nothing
+end
+
 ## END OF HELPER FUNCTION ------------------------------------------------------------
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
@@ -589,9 +594,12 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     # Add thermal anomaly BC's
     T_chamber = 1223.0e0
     T_air = 273.0e0
+    Ω_T = @zeros(size(thermal.T)...)
+    @parallel (@idx ni .+ 1) update_Dirichlet_mask!(Ω_T, phase_ratios.vertex, air_phase)
 
     thermal_bc = TemperatureBoundaryConditions(;
         no_flux = (; left = true, right = true, top = false, bot = false),
+        dirichlet   = (; constant = T_air, mask = Ω_T)
     )
     thermal_bcs!(thermal, thermal_bc)
     temperature2center!(thermal)
@@ -746,7 +754,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         thermal_bcs!(thermal, thermal_bc)
         temperature2center!(thermal)
 
-        args = (; ϕ = ϕ_m, T = thermal.Tc, P = stokes.P, dt = Inf, perturbation_C = perturbation_C, ΔTc=thermal.ΔTc,  Temp_bg = Temp_bg)
+        # args = (; ϕ = ϕ_m, T = thermal.Tc, P = stokes.P, dt = Inf, perturbation_C = perturbation_C, ΔTc=thermal.ΔTc,  Temp_bg = Temp_bg)
+        eruption == true ? args = (; ϕ = ϕ_m, T = thermal.Tc, P = stokes.P, dt = dt, perturbation_C = perturbation_C, Temp_bg = Temp_bg) :  args = (; ϕ = ϕ_m, T = thermal.Tc, P = stokes.P, dt = Inf, perturbation_C = perturbation_C, ΔTc=thermal.ΔTc,  Temp_bg = Temp_bg)
         if it > 3
             CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
@@ -867,6 +876,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
         # Thermal solver ---------------
         if it ≥ 3 && !(!isempty(VEI_array) && VEI_array[end] ≥ 6)
+        @parallel (@idx ni .+ 1) update_Dirichlet_mask!(thermal_bc.dirichlet.mask, phase_ratios.vertex, air_phase)
+
         heatdiffusion_PT!(
             thermal,
             pt_thermal,
