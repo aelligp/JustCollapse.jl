@@ -594,12 +594,12 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
     # Add thermal anomaly BC's
     T_chamber = 1223.0e0
     T_air = 273.0e0
-    Ω_T = @zeros(size(thermal.T)...)
-    @parallel (@idx ni .+ 1) update_Dirichlet_mask!(Ω_T, phase_ratios.vertex, air_phase)
+    # Ω_T = @zeros(size(thermal.T)...)
+    # @parallel (@idx ni .+ 1) update_Dirichlet_mask!(Ω_T, phase_ratios.vertex, air_phase)
 
     thermal_bc = TemperatureBoundaryConditions(;
         no_flux = (; left = true, right = true, top = false, bot = false),
-        dirichlet   = (; constant = T_air, mask = Ω_T)
+        # dirichlet   = (; constant = T_air, mask = Ω_T)
     )
     thermal_bcs!(thermal, thermal_bc)
     temperature2center!(thermal)
