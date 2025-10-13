@@ -1,7 +1,7 @@
 using GeoParams.Dislocation
 using Random
 
-function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressible = true, plastic = true, magma = false, softening_C=true, softening_ϕ=false)
+function init_rheologies(layers, oxd_wt, fric_angle; CharDim = nothing, linear = false, incompressible = true, plastic = true, magma = false, softening_C=true, softening_ϕ=false)
 
     η_reg = 1.0e15
     C = plastic ? 10.0e6 : Inf
@@ -11,22 +11,23 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
     # soft_ϕ = NonLinearSoftening(; ξ₀ = ϕ, Δ = ϕ / 2, σ = 0.001)       # nonlinear softening law
     soft_C = softening_C ? LinearSoftening(C/2, C, 0.0, 0.5) : NoSoftening()       # nonlinear softening law
     soft_ϕ = softening_ϕ ? LinearSoftening(fric_angle/2, fric_angle, 0.0, 0.5) : NoSoftening()       # nonlinear softening law
-    pl = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
-    pl_bot = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ)
+    pl = DruckerPrager_regularised(; C = C * Pa, ϕ = ϕ, η_vp = (η_reg)*Pas, Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_bot = DruckerPrager_regularised(; C = C * Pa, ϕ = ϕ, η_vp = (η_reg)*Pas, Ψ = Ψ)
 
-    pl_cone_1 = DruckerPrager_regularised(; C = ((C / 2) * 0.3), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
-    pl_cone_2 = DruckerPrager_regularised(; C = ((C / 2) * 0.4), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
-    pl_cone_3 = DruckerPrager_regularised(; C = ((C / 2) * 0.5), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
-    pl_cone_4 = DruckerPrager_regularised(; C = ((C / 2) * 0.6), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
-    pl_cone_5 = DruckerPrager_regularised(; C = ((C / 2) * 0.7), ϕ = ϕ , η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone_1 = DruckerPrager_regularised(; C = ((C / 2) * 0.3) * Pa, ϕ = ϕ , η_vp = (η_reg)*Pas, Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone_2 = DruckerPrager_regularised(; C = ((C / 2) * 0.4) * Pa, ϕ = ϕ , η_vp = (η_reg)*Pas, Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone_3 = DruckerPrager_regularised(; C = ((C / 2) * 0.5) * Pa, ϕ = ϕ , η_vp = (η_reg)*Pas, Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone_4 = DruckerPrager_regularised(; C = ((C / 2) * 0.6) * Pa, ϕ = ϕ , η_vp = (η_reg)*Pas, Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
+    pl_cone_5 = DruckerPrager_regularised(; C = ((C / 2) * 0.7) * Pa, ϕ = ϕ , η_vp = (η_reg)*Pas, Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
     G0 = 25.0e9Pa        # elastic shear modulus
     G_magma = 6.0e9Pa        # elastic shear modulus magma
 
     el = incompressible ? ConstantElasticity(; G = G0, ν = 0.45) : ConstantElasticity(; G = G0, ν = 0.25)
     el_magma = incompressible ? ConstantElasticity(; G = G_magma, ν = 0.45) : ConstantElasticity(; G = G_magma, ν = 0.25)
-    β = 1 / el.Kb.val
-    β_magma = 1 / el_magma.Kb.val
-    Cp = 1050.0
+    β = 1 / el.Kb.val / Pa
+    β_magma = 1 / el_magma.Kb.val / Pa
+    Cp = 1050.0 * J / kg / K
+    k  = 3.0 * Watt / K / m
 
     # magma_visc = magma ? ViscosityPartialMelt_Costa_etal_2009(η=LinearViscous(η=1e15)) : LinearViscous(η=1e15)
     # magma_visc = magma ? GiordanoMeltViscosity(oxd_wt = oxd_wt, η0 = 1.0e12Pas) : LinearViscous(η = 1.0e15)
@@ -38,9 +39,9 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
     #dislocation laws
     # disl_top  = linear ? LinearViscous(η=1e23) : DislocationCreep(; A=1.67e-24, n=3.5, E=1.87e5, V=6e-6, r=0.0, R=8.3145)
     # disl_top  = linear ? LinearViscous(η=1e23) : SetDislocationCreep(Dislocation.dry_olivine_Karato_2003)
-    disl_top = linear ? LinearViscous(η = 1.0e23) : SetDislocationCreep(Dislocation.granite_Carter_1987)
+    disl_top = linear ? LinearViscous(η = 1.0e23Pas) : SetDislocationCreep(Dislocation.granite_Carter_1987)
 
-    disl_bot = linear ? LinearViscous(η = 1.0e21) : SetDislocationCreep(Dislocation.granite_Carter_1987)
+    disl_bot = linear ? LinearViscous(η = 1.0e21Pas) : SetDislocationCreep(Dislocation.granite_Carter_1987)
     # disl_bot = linear ? LinearViscous(η = 1.0e21) : SetDislocationCreep(Dislocation.strong_diabase_Mackwell_1998)
     # disl_bot = linear ? LinearViscous(η = 1.0e21) : SetDislocationCreep(Dislocation.wet_quartzite_Hirth_2001)
 
@@ -49,61 +50,66 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
     layer_rheology(::Val{1}) =
         SetMaterialParams(;
         Phase = 5,
-        Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),
+        Density = PT_Density(; ρ0 = 2.7e3kg / m^3, T0 = 273.15K, β = β),
         HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
-        Conductivity = ConstantConductivity(; k = 3.0),
+        Conductivity = ConstantConductivity(; k = k),
         ShearHeat = ConstantShearheating(Χ=1.0NoUnits),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone_1)),
         Melting = melting,
-        Gravity = ConstantGravity(; g = 9.81),
+        Gravity = ConstantGravity(; g = 9.81m / s^2),
+        CharDim = CharDim,
     )
 
     layer_rheology(::Val{2}) =
         SetMaterialParams(;
         Phase = 6,
-        Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),
+        Density = PT_Density(; ρ0 = 2.7e3kg / m^3, T0 = 273.15K, β = β),
         HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
-        Conductivity = ConstantConductivity(; k = 3.0),
+        Conductivity = ConstantConductivity(; k = k),
         ShearHeat = ConstantShearheating(Χ=1.0NoUnits),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone_2)),
         Melting = melting,
-        Gravity = ConstantGravity(; g = 9.81),
+        Gravity = ConstantGravity(; g = 9.81m / s^2),
+        CharDim = CharDim,
     )
 
     layer_rheology(::Val{3}) =
         SetMaterialParams(;
         Phase = 7,
-        Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),
+        Density = PT_Density(; ρ0 = 2.7e3kg / m^3, T0 = 273.15K, β = β),
         HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
-        Conductivity = ConstantConductivity(; k = 3.0),
+        Conductivity = ConstantConductivity(; k = k),
         ShearHeat = ConstantShearheating(Χ=1.0NoUnits),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone_3)),
         Melting = melting,
-        Gravity = ConstantGravity(; g = 9.81),
+        Gravity = ConstantGravity(; g = 9.81m / s^2),
+        CharDim = CharDim,
     )
 
     layer_rheology(::Val{4}) =
         SetMaterialParams(;
         Phase = 8,
-        Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),
+        Density = PT_Density(; ρ0 = 2.7e3kg / m^3, T0 = 273.15K, β = β),
         HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
-        Conductivity = ConstantConductivity(; k = 3.0),
+        Conductivity = ConstantConductivity(; k = k),
         ShearHeat = ConstantShearheating(Χ=1.0NoUnits),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone_4)),
         Melting = melting,
-        Gravity = ConstantGravity(; g = 9.81),
+        Gravity = ConstantGravity(; g = 9.81m / s^2),
+        CharDim = CharDim,
     )
 
     layer_rheology(::Val{5}) =
         SetMaterialParams(;
         Phase = 9,
-        Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),
+        Density = PT_Density(; ρ0 = 2.7e3kg / m^3, T0 = 273.15K, β = β),
         HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
-        Conductivity = ConstantConductivity(; k = 3.0),
+        Conductivity = ConstantConductivity(; k = k),
         ShearHeat = ConstantShearheating(Χ=1.0NoUnits),
         CompositeRheology = CompositeRheology((disl_top, el, pl_cone_5)),
         Melting = melting,
-        Gravity = ConstantGravity(; g = 9.81),
+        Gravity = ConstantGravity(; g = 9.81m / s^2),
+        CharDim = CharDim,
     )
 
 
@@ -115,49 +121,53 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
         # Name = "Upper crust",
         SetMaterialParams(;
             Phase = 1,
-            Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),
+            Density = PT_Density(; ρ0 = 2.7e3kg / m^3, T0 = 273.15K, β = β),
             HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
-            Conductivity = ConstantConductivity(; k = 3.0),
+            Conductivity = ConstantConductivity(; k = k),
             ShearHeat = ConstantShearheating(Χ=1.0NoUnits),
             CompositeRheology = CompositeRheology((disl_top, el, pl)),
             Melting = melting,
-            Gravity = ConstantGravity(; g = 9.81),
+            Gravity = ConstantGravity(; g = 9.81m / s^2),
+            CharDim = CharDim,
         ),
         # Name = "Lower crust",
         SetMaterialParams(;
             Phase = 2,
-            Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),
+            Density = PT_Density(; ρ0 = 2.7e3kg / m^3, T0 = 273.15K, β = β),
             HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
-            Conductivity = ConstantConductivity(; k = 3.0),
+            Conductivity = ConstantConductivity(; k = k),
             ShearHeat = ConstantShearheating(Χ=1.0NoUnits),
             CompositeRheology = CompositeRheology((disl_bot, el, pl_bot)),
             Melting = melting,
-            Gravity = ConstantGravity(; g = 9.81),
+            Gravity = ConstantGravity(; g = 9.81m / s^2),
+            CharDim = CharDim,
         ),
 
         # Name              = "magma chamber",
         SetMaterialParams(;
             Phase = 3,
             # Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt=BubbleFlow_Density(ρgas = ConstantDensity(ρ = 10.0), ρmelt = Melt_DensityX(oxd_wt = oxd_wt), c0 = 3.0e-2)),
-            Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt= Melt_DensityX(oxd_wt = oxd_wt)),
-            Conductivity = ConstantConductivity(; k = 3.0),
+            Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3kg / m^3, T0=273.15K, β=β_magma), ρmelt= Melt_DensityX(oxd_wt = oxd_wt)),
+            Conductivity = ConstantConductivity(; k = k),
             ShearHeat = ConstantShearheating(Χ=0.0NoUnits),
             HeatCapacity = Latent_HeatCapacity(Cp = ConstantHeatCapacity(), Q_L = 350.0e3J / kg),
             LatentHeat = ConstantLatentHeat(Q_L = 350.0e3J / kg),
             CompositeRheology = CompositeRheology((magma_visc, el_magma)),
             Melting = melting,
+            CharDim = CharDim,
         ),
         # Name              = "magma chamber - hot anomaly",
         SetMaterialParams(;
             Phase = 4,
             # Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt=BubbleFlow_Density(ρgas = ConstantDensity(ρ = 10.0), ρmelt = Melt_DensityX(oxd_wt = oxd_wt), c0 = 3.0e-2)),
-            Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3, T0=273.15, β=β_magma), ρmelt= Melt_DensityX(oxd_wt = oxd_wt)),
-            Conductivity = ConstantConductivity(; k = 3.0),
+            Density = MeltDependent_Density(ρsolid=PT_Density(ρ0=2.65e3kg / m^3, T0=273.15K, β=β_magma), ρmelt= Melt_DensityX(oxd_wt = oxd_wt)),
+            Conductivity = ConstantConductivity(; k = k),
             ShearHeat = ConstantShearheating(Χ=0.0NoUnits),
             HeatCapacity = Latent_HeatCapacity(Cp = ConstantHeatCapacity(), Q_L = 350.0e3J / kg),
             LatentHeat = ConstantLatentHeat(Q_L = 350.0e3J / kg),
             CompositeRheology = CompositeRheology((magma_visc, el_magma)),
             Melting = melting,
+            CharDim = CharDim,
         ),
 
         rheology_volcano...,
@@ -165,25 +175,27 @@ function init_rheologies(layers, oxd_wt, fric_angle; linear = false, incompressi
         # Name              = "Layers",
         SetMaterialParams(;
         Phase = Int64(layers + 5),
-            Density = PT_Density(; ρ0 = 2.7e3, T0 = 273.15, β = β),
+            Density = PT_Density(; ρ0 = 2.7e3kg / m^3, T0 = 273.15K, β = β),
             # Density = Melt_DensityX(oxd_wt = oxd_wt; β=β_magma),
             HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
-            Conductivity = ConstantConductivity(; k = 3.0),
+            Conductivity = ConstantConductivity(; k = k),
             ShearHeat = ConstantShearheating(Χ=1.0NoUnits),
             CompositeRheology = CompositeRheology((disl_top, el, pl)),
             Melting = melting,
-            Gravity = ConstantGravity(; g = 9.81),
+            Gravity = ConstantGravity(; g = 9.81m / s^2),
+            CharDim = CharDim,
         ),
 
         # Name              = "StickyAir",
         SetMaterialParams(;
             Phase = Int64(layers + 6),
-            Density = ConstantDensity(; ρ = 1.0e0),
+            Density = ConstantDensity(; ρ = 1.0e0kg / m^3),
             HeatCapacity = ConstantHeatCapacity(; Cp = Cp),
-            Conductivity = ConstantConductivity(; k = 3.0),
+            Conductivity = ConstantConductivity(; k = k),
             ShearHeat = ConstantShearheating(Χ=1.0NoUnits),
             CompositeRheology = CompositeRheology((LinearViscous(; η = 1.0e22), el, pl)),
-            Gravity = ConstantGravity(; g = 9.81),
+            Gravity = ConstantGravity(; g = 9.81m / s^2),
+            CharDim = CharDim,
         ),
     )
 end
