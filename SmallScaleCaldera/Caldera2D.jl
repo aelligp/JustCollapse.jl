@@ -774,14 +774,15 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 er_it = 0
                 eruption = true
                 if rand() < 0.15 || increased_recharge > 0
-                    V_erupt =  max((-rand(25:1e0:1e2) * 1e9), -V_total / 2)
+                    # V_erupt =  max((-50 * 1e9), -V_total / 2)
+                    V_erupt =  -V_total / 2
                     increased_recharge = 0
                     εbg = 0.0
                     apply_pure_shear(@velocity(stokes)..., εbg, xvi, li...)
                     flow_bcs!(stokes, flow_bcs) # apply boundary conditions
                     update_halo!(@velocity(stokes)...)
                 else
-                    V_erupt = max((-rand(1e-1:1e-1:1e1) * 1e9), -V_total / 2)
+                    V_erupt = max(-5e0 * 1e9, -V_total / 2)
                 end
                 compute_cells_for_Q!(cells, 0.5, phase_ratios, 3, 4, ϕ_m)
                 V_tot = V_total
@@ -807,13 +808,13 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
                 compute_cells_for_Q!(cells, 0.3, phase_ratios, 3, 4, ϕ_m)
                 weights = compute_vertical_weights_bottom(cells, PTArray(backend)(depth); smoothing = "cosine")  # or "linear", "exp"
                 V_tot = V_total
-                T_addition = 900+273e0
-                if rand() < 0.15 || increased_recharge > 0
-                    V_erupt = (rand(1e-2:1e-3:5e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by https://doi.org/10.1029/2018GC008103
+                T_addition = 925+273e0
+                if rem(it, 10) == 0 || increased_recharge > 0
+                    V_erupt = (1e-2 * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by https://doi.org/10.1029/2018GC008103
                     printstyled("Episodic increase in recharge\n"; color = :red)
                     increased_recharge ≥ 5 ? increased_recharge = 0 : increased_recharge += 1
                 else
-                    V_erupt = (rand(1.5e-3:1e-4:1e-2) * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
+                    V_erupt = (3e-3 * 1.0e9) / (3600 * 24 * 365.25) * dt # [m3/s * dt] Constrained by  https://doi.org/10.1029/2018GC008103
                     printstyled("Normal recharge\n"; color = :green)
                 end
                 V_total, V_erupt = make_it_go_boom_smooth!(stokes.Q, cells, ϕ_m, V_erupt, V_tot, weights, phase_ratios, 3, 4)
@@ -930,7 +931,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         # advect_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
         # semilagrangian!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt)
         semilagrangian_advection_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt; max_slope_angle=60)
-        update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
+        update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase, particle_args)
 
         compute_melt_fraction!(
             ϕ_m, phase_ratios, rheology, (T = thermal.Tc, P = stokes.P)
@@ -1273,7 +1274,7 @@ li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase 
     flat = false, # flat or volcano cone
     layers = 3, # number of layers
     volcano_size = (3.0e0, 5.0e0),    # height, radius
-    chamber_T = 950.0e0, # temperature of the chamber
+    chamber_T = 925.0e0, # temperature of the chamber
     chamber_depth  = depth, # depth of the chamber
     chamber_radius = radius, # radius of the chamber
     aspect_x       = ar, # aspect ratio of the chamber
