@@ -24,7 +24,7 @@ function main()
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=1
 #SBATCH --constraint=gpu
-#SBATCH --account=c44
+#SBATCH --account=sm109
 
 export MPICH_GPU_SUPPORT_ENABLED=1
 export IGG_CUDAAWARE_MPI=1 # IGG

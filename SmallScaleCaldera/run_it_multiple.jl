@@ -33,7 +33,7 @@ function main()
 #SBATCH --partition=normal
 #SBATCH --cpus-per-task=72
 #SBATCH --gpus-per-task=1
-#SBATCH --account=c44
+#SBATCH --account=sm109
 
 export MPICH_GPU_SUPPORT_ENABLED=1
 export IGG_CUDAAWARE_MPI=1 # IGG
