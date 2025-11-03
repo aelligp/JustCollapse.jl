@@ -2,8 +2,8 @@
 
 function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e0, magma = true, CharDim = nothing)
     # Define parameters
-    sill = magma ? GiordanoMeltViscosity(oxd_wt = oxd_wt_sill, η0=scaling) : LinearViscous(η = 1.0e8Pa*s)
-    host_rock = magma ? GiordanoMeltViscosity(oxd_wt = oxd_wt_host_rock, η0=scaling) : LinearViscous(η = 1.0e13Pa*s)
+    sill = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt_sill, η0 = scaling)) : LinearViscous(η = 1.0e8Pa*s)
+    host_rock = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt_host_rock, η0 = scaling)) : LinearViscous(η = 1.0e13Pa*s)
 
 
     # Define rheolgy struct
