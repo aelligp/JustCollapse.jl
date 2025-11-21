@@ -4,11 +4,14 @@ using Adapt
 function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e0Pas, magma = true, CharDim = nothing)
     # Define parameters
 
-    sill_PD = "./Phase_diagrams/Heise_Sill.in"
+    # sill_PD = "./Phase_diagrams/Heise_Sill.in"
+    host_rock_PD = "./Phase_diagrams/Heise_Sill.in"
+    sill_PD = "./Phase_diagrams/Heise_Host_rock.in"
+
     PD_Sill = PerpleX_LaMEM_Diagram(sill_PD)
     # PD_Sill_GPU = Adapt.adapt(CuArray, PD_Sill)
     PD_Sill_GPU = PD_Sill
-    host_rock_PD = "./Phase_diagrams/Heise_Host_rock.in"
+    # host_rock_PD = "./Phase_diagrams/Heise_Host_rock.in"
     PD_Host_Rock = PerpleX_LaMEM_Diagram(host_rock_PD)
     # PD_Host_Rock_GPU = Adapt.adapt(CuArray, PD_Host_Rock)
     PD_Host_Rock_GPU = PD_Host_Rock
