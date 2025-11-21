@@ -1,9 +1,19 @@
+using Adapt
 
-
-function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e0, magma = true, CharDim = nothing)
+## Phase diagram
+function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e0Pas, magma = true, CharDim = nothing)
     # Define parameters
-    sill = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt_sill, η0 = scaling)) : LinearViscous(η = 1.0e8Pa*s)
-    host_rock = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt_host_rock, η0 = scaling)) : LinearViscous(η = 1.0e13Pa*s)
+
+    sill_PD = "./Phase_diagrams/Heise_Sill.in"
+    PD_Sill = PerpleX_LaMEM_Diagram(sill_PD)
+    # PD_Sill_GPU = Adapt.adapt(CuArray, PD_Sill)
+    PD_Sill_GPU = PD_Sill
+    host_rock_PD = "./Phase_diagrams/Heise_Host_rock.in"
+    PD_Host_Rock = PerpleX_LaMEM_Diagram(host_rock_PD)
+    # PD_Host_Rock_GPU = Adapt.adapt(CuArray, PD_Host_Rock)
+    PD_Host_Rock_GPU = PD_Host_Rock
+    sill = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt_sill, η0 = scaling)) : LinearViscous(η = 1.0e13Pa*s)
+    host_rock = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt_host_rock, η0 = scaling)) : LinearViscous(η = 1.0e16Pa*s)
 
 
     # Define rheolgy struct
@@ -11,26 +21,37 @@ function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e0, magma = t
         # Name              = "host_rock",
         SetMaterialParams(;
             Phase             = 1,
-            Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0 = 2700kg/m^3,α=3e-5/K), ρmelt=Melt_DensityX(oxd_wt = oxd_wt_host_rock)),
+            # Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0 = 2700kg/m^3,α=3e-5/K), ρmelt=Melt_DensityX(oxd_wt = oxd_wt_host_rock)),
+            # Density           = PerpleX_LaMEM_Diagram(host_rock_PD),
+            Density           = PD_Host_Rock_GPU,
             HeatCapacity      = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
-            Conductivity      = ConstantConductivity(; k = 3.0),
+            # HeatCapacity      = PD_Host_Rock_GPU,
+            Conductivity      = ConstantConductivity(; k = 3.0Watt/m/K),
             CompositeRheology = CompositeRheology((host_rock,)),
-            Melting           = SmoothMelting(p=MeltingParam_Quadratic(T_s=(625+273)K,T_l=(875+273)K), k_liq=0.21/K),
-            Gravity           = ConstantGravity(; g = 9.81),
+            # Melting           = SmoothMelting(p=MeltingParam_Quadratic(T_s=(625+273)K,T_l=(875+273)K), k_liq=0.21/K),
+            # Melting           = PerpleX_LaMEM_Diagram(host_rock_PD),
+            Melting           = PD_Host_Rock_GPU,
+            Gravity           = ConstantGravity(),
             CharDim           = CharDim,
         ),
         # Name              = "Sill",
         SetMaterialParams(;
             Phase             = 2,
-            Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0 = 2700kg/m^3,α=3e-5/K), ρmelt=Melt_DensityX(oxd_wt = oxd_wt_sill)),
+            # Density           = MeltDependent_Density(ρsolid=T_Density(; ρ0 = 2700kg/m^3,α=3e-5/K), ρmelt=Melt_DensityX(oxd_wt = oxd_wt_sill)),
+            # Density           = PerpleX_LaMEM_Diagram(sill_PD),
+            Density           = PD_Sill_GPU,
             HeatCapacity      = Latent_HeatCapacity(Cp=T_HeatCapacity_Whittington(), Q_L=350e3J/kg),
-            Conductivity      = ConstantConductivity(),
+            # HeatCapacity      = PD_Sill_GPU,
+            Conductivity      = ConstantConductivity(; k = 3.0Watt/m/K),
             CompositeRheology = CompositeRheology((sill,)),
             # Melting           = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0),
-            Melting           = SmoothMelting(p=MeltingParam_Quadratic(T_s=(675+273)K,T_l=(1125+273)K), k_liq=0.21/K),
+            # Melting           = SmoothMelting(p=MeltingParam_Quadratic(T_s=(675+273)K,T_l=(1125+273)K), k_liq=0.21/K),
+            # Melting           = PerpleX_LaMEM_Diagram(sill_PD),
+            Melting           = PD_Sill_GPU,
             CharDim           = CharDim,
         ),
     )
+    return rheology
 end
 
 function init_phases!(phases, phase_grid, particles, xvi)

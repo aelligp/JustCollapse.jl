@@ -76,7 +76,7 @@ end
 function compute_Ra!(Ra, ΔT, ρ, α, g, L, κ, η)
     # Rayleigh number: Ra = (ρ * α * g * ΔT * L^3) / (η * κ)
     # where:           Ra = (kg/m3 * 1/K * m/s2 * K * m^3) / (Pa s * m2/s)
-    @. Ra = (ρ * α * g * ΔT * L^3) / (η * κ)  # Ensure all arrays have the same shape
+    @. Ra = (ρ * α * g * ΔT * L^3) / (η * κ)
     return nothing
 end
 
@@ -86,9 +86,11 @@ function d18O_anomaly!(
     crust_min::Float64 = -5.0,
     crust_max::Float64 = 3.0,
     crust_const::Float64 = 0.0,
+    crust_normal::Float64 = 5.5,
     sill_value::Float64 = 5.5,
     crust_phase::Int = 1,
-    sill_phase::Int = 2
+    sill_phase::Int = 2,
+    low_bottom_crust::Bool = false
 )
     ni = size(phase_ratios.vertex)
 
@@ -121,17 +123,25 @@ function init_sill!(
     phases,
     dimensions::NTuple{2, Float64},
     sill_size,
-    z
+    grid;
+    perturbation_amplitude::Float64 = 0.0,
+    wavelength::Float64 = 100.0,
+    bottom_pertubation = false
     )
 
     @parallel_indices (i, j) function _init_sill!(
-        phases, dimensions, sill_size, z
+        phases, dimensions, sill_size, x, z, perturbation_amplitude, wavelength, bottom_pertubation
         )
-
+        x_coord = x[i]
         depth = -z[j]
-        sill_top = (dimensions[2] - (dimensions[2] - sill_size) / 2)
-        sill_bottom = (dimensions[2] - sill_size) / 2
-        if depth <= sill_top && depth >= sill_bottom
+
+        # Add sinusoidal perturbation to sill top and bottom
+        perturbation = perturbation_amplitude * sin.(2π * x_coord / wavelength)
+        perturbation_bot = perturbation * bottom_pertubation
+
+        sill_bottom = (dimensions[2] - (dimensions[2] - sill_size) / 2) + perturbation_bot
+        sill_top = (dimensions[2] - sill_size) / 2 + perturbation
+        if depth <= sill_bottom && depth >= sill_top
             phases[i, j] = 2
         else
             phases[i, j] = 1
@@ -140,24 +150,60 @@ function init_sill!(
     end
 
     @parallel (@idx size(phases)) _init_sill!(
-        phases, dimensions, sill_size, z
+        phases, dimensions, sill_size, grid..., perturbation_amplitude, wavelength, bottom_pertubation
     )
     return nothing
 end
 
-@parallel_indices (i, j) function init_T!(T, host_rock_temp, sill_temp,  dimensions, sill_size, z)
-    depth = -z[j]
-    sill_top = (dimensions[2] - (dimensions[2] - sill_size) / 2)
-    sill_bottom = (dimensions[2] - sill_size) / 2
-    if depth <= sill_top && depth >= sill_bottom
-        T[i + 1, j] = sill_temp
-    else
-        T[i + 1, j] = host_rock_temp
+function init_T!(
+    T,
+    host_rock_temp::Float64,
+    sill_temp::Float64,
+    dimensions::NTuple{2, Float64},
+    sill_size::Float64,
+    grid;
+    perturbation_amplitude::Float64 = 0.0,
+    wavelength::Float64 = 100.0,
+    bottom_pertubation = false
+    )
+
+    @parallel_indices (i, j) function _init_T!(T, host_rock_temp, sill_temp,  dimensions, sill_size, x, z, perturbation_amplitude, wavelength, bottom_pertubation)
+
+        x_coord = x[i]
+        depth = -z[j]
+
+        # Add sinusoidal perturbation to sill top and bottom
+        perturbation = perturbation_amplitude * sin.(2π * x_coord / wavelength)
+        perturbation_bot = perturbation * bottom_pertubation
+
+
+        sill_bottom = (dimensions[2] - (dimensions[2] - sill_size) / 2) + perturbation_bot
+        sill_top = (dimensions[2] - sill_size) / 2 + perturbation
+        if depth ≤ sill_bottom && depth ≥ sill_top
+            T[i + 1, j] = sill_temp + 10*rand()
+        else
+            T[i + 1, j] = host_rock_temp
+        end
+        if (sill_top + 10 < depth ≤ sill_top + 20) && ((dimensions[1] / 2 - 5) < x[i] ≤  (dimensions[1] / 2 + 5))
+            T[i + 1, j] = sill_temp + 75
+        end
+        return nothing
     end
-    return nothing
+
+    nx, ny = size(T)
+    @parallel (1:(nx - 2), 1:ny) _init_T!(T, host_rock_temp, sill_temp, dimensions, sill_size, grid..., perturbation_amplitude, wavelength, bottom_pertubation)
+
+
 end
 
+## Strontuum function to compute Sr in melt and its isotope ratios
+# I need to have the Sr table computed for a range of pressures and temperatures
+# create an interpolation object similr to the Phase_diagram but right now I have a T_X diagram at fixed P
+#
+
+
 ## END OF HELPER FUNCTION ------------------------------------------------------------
+
 
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
 function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vtk = false, cutoff_visc = (-Inf, Inf), plotting = true, sill_temp = 1000, host_rock_temp = 500, sill_size = 0.1, depth = 5e3)
@@ -174,47 +220,42 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
 
     # Physical properties using GeoParams ----------------
                      # (SiO2   TiO2  Al2O3  FeO   MgO   CaO   Na2O  K2O   H2O)
-    oxd_wt_sill      = (70.78, 0.55, 15.86, 3.93, 1.11, 1.20, 2.54, 3.84, 2.0)
-    oxd_wt_host_rock = (75.75, 0.28, 12.48, 2.14, 0.09, 0.48, 3.53, 5.19, 2.0)
-    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e3, magma = true)
+    # oxd_wt_sill      = (70.78, 0.55, 15.86, 3.93, 1.11, 1.20, 2.54, 3.84, 3.0)
+    oxd_wt_sill       = (68.78, 0.53, 15.41, 3.82, 1.08, 1.17, 2.47, 3.73, 3.0)
+    # oxd_wt_host_rock = (75.75, 0.28, 12.48, 2.14, 0.09, 0.48, 3.53, 5.19, 3.0)
+    oxd_wt_host_rock  = (73.51, 0.27, 12.11, 2.08, 0.08, 0.46, 3.43, 5.04, 3.0)
+
+    # Sr_87_86_sill = 0.71071 # "06HS-14"
+    # Sr_87_86_host_rock = 0.71028 # "TNP96-43
+
+    # Sr_87_86_mix = Sr_sill * Sr_87_86_sill + Sr_host_rock * Sr_87_86_host_rock
+
+
+    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e4Pas, magma = true)
     # rheology     = init_rheologies(;)
     dt_time = 1.0 * 3600 * 24 * 365
-    κ            = (4 / (1050 * rheology[1].Density[1].ρ))
+    # κ            = (4 / (1050 * rheology[1].Density[1].ρ))
+    κ            = (4 / (1050 * mean(rheology[1].Density[1].Rho.coefs)))
     # κ = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val)) # thermal diffusivity                                 # thermal diffusivity
     dt_diff = 0.5 * min(di...)^2 / κ / 2.01
     dt = min(dt_time, dt_diff)
     # ----------------------------------------------------
+
     # Weno model -----------------------------------------
     weno = WENO5(backend, Val(2), ni.+1) # ni.+1 for Temp
     weno_c = WENO5(backend, Val(2), ni) # ni.+1 for Temp
 
-    # Initialize particles -------------------------------
-    # nxcell, max_xcell, min_xcell = 100, 150, 75
-    # particles = init_particles(
-    #     backend_JP, nxcell, max_xcell, min_xcell, xvi...
-    # )
-    # subgrid_arrays = SubgridDiffusionCellArrays(particles)
-    # velocity grids
-    # grid_vxi = velocity_grids(xci, xvi, di)
-
-    # temperature
-    # pT, pPhases, pδ18O      = init_cell_arrays(particles, Val(3));
-    # particle fields for the stress rotation
-    # pτ = StressParticles(particles)
-    # particle_args = (pT, pδ18O, pPhases, unwrap(pτ)...)
-    # particle_args_reduced = (pT, unwrap(pτ)...)
-
     # Assign material phases --------------------------
     phases_dev   = @zeros(ni...)
     phase_ratios = PhaseRatios(backend_JP, length(rheology), ni);
-    init_sill!(phases_dev, li, sill_size, xci[2])
+    init_sill!(phases_dev, li, sill_size, xci; perturbation_amplitude = 2.0, wavelength = 100.0, bottom_pertubation = true)
 
     phase_sill = @zeros(ni...) # initialize phase_sill array
     phase_host = @zeros(ni...) # initialize phase_host array
-    @views phase_sill[phases_dev .== 1.0] .= 0.0 # set the blob to 1.0 where phases == 2.0
+    # @views phase_sill[phases_dev .== 1.0] .= 0.0 # set the blob to 1.0 where phases == 2.0
     @views phase_sill[phases_dev .== 2.0] .= 1.0 # set the blob to 1.0 where phases == 2.0
     @views phase_host[phases_dev .== 1.0] .= 1.0 # set the blob to 1.0 where phases == 2.0
-    @views phase_host[phases_dev .== 2.0] .= 0.0 # set the blob to 1.0 where phases == 2.0
+    # @views phase_host[phases_dev .== 2.0] .= 0.0 # set the blob to 1.0 where phases == 2.0
     clamp!(phase_sill, 0.0, 1.0) # clamp
     clamp!(phase_host, 0.0, 1.0) # clamp phase_host to 0.0 and 1.0
     update_phase_ratios_2D!(phase_ratios, (phase_host, phase_sill), xci, xvi)
@@ -222,12 +263,12 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes          = StokesArrays(backend, ni)
-    pt_stokes       = PTStokesCoeffs(li, di; Re = 14.9, ϵ_rel=1e-5, ϵ_abs=1e-5, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
+    pt_stokes       = PTStokesCoeffs(li, di; Re = π / 2, ϵ_rel=1e-5, ϵ_abs=1e-5, CFL=0.98 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
     # ----------------------------------------------------
 
     thermal         = ThermalArrays(backend, ni)
     # @views thermal.T[2:end-1, :] .= PTArray(backend)(T_GMG)
-    @parallel (@idx ni .+ 1) init_T!(thermal.T, host_rock_temp, sill_temp, li, sill_size, xvi[2])
+    init_T!(thermal.T, host_rock_temp, sill_temp, li, sill_size, xvi; perturbation_amplitude = 2.0, wavelength = 100.0, bottom_pertubation = true)
     thermal_bc      = TemperatureBoundaryConditions(;
         no_flux     = (left = true, right = true, top = false, bot = false),
     )
@@ -256,6 +297,9 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
     # Rheology
     compute_melt_fraction!(
         ϕ, phase_ratios, rheology, (T=thermal.Tc, P=stokes.P)
+    )
+    compute_viscosity!(
+        stokes, phase_ratios, args, rheology, cutoff_visc
     )
     # Track isotope ratios
     d18O = @zeros(ni.+ 1...)
@@ -326,10 +370,10 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
     d18O_evo = Float64[5.5]
     melt_fraction_evo = Float64[1.0]
 
-    while it < 100e3 && round(maximum(ϕ), digits=2) > 0.3 && t < (60 * 3600 * 24 * 365)
-    # while it < 50
+    while it < 100e3 && round(maximum(ϕ), digits=2) > 0.3 && t < (650 * 3600 * 24 * 365)
+    # while it < 50000
 
-        args = (; ϕ= ϕ,T = thermal.Tc, P = stokes.P, dt = dt, ΔTc = thermal.ΔTc)
+        args = (; ϕ= ϕ,T = thermal.Tc, P = stokes.P, dt = dt)
         compute_ρg!(ρg[end], phase_ratios, rheology, (T = thermal.Tc, P = stokes.P))
         # ------------------------------
 
@@ -346,7 +390,7 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
             Inf,
             igg;
             kwargs = (;
-                iterMax = 100.0e3,
+                iterMax = 50.0e3,
                 nout = 2.0e3,
                 viscosity_cutoff = cutoff_visc,
             )
@@ -360,7 +404,7 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
         ## Save the checkpoint file before a possible thermal solver blow up
         # checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
 
-        dt   = compute_dt(stokes, di, dt_diff)
+        dt   = compute_dt(stokes, di, dt_diff, igg)
         println("dt = $(dt/(3600*24)) days")
         # Thermal solver ---------------
         heatdiffusion_PT!(
@@ -374,7 +418,7 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
             kwargs =(;
                 igg     = igg,
                 phase   = phase_ratios,
-                iterMax = 100e3,
+                iterMax = 10e3,
                 nout    = 1e3,
                 verbose = true,
             )
@@ -435,7 +479,7 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
         push!(melt_fraction_evo, round(maximum(ϕ), digits=2))
 
         # Data I/O and plotting ---------------------
-        if it == 1 || rem(it, 15) == 0
+        if it == 1 || rem(it, 1) == 0
             if igg.me == 0 && it == 1
                 metadata(pwd(), checkpoint, joinpath(@__DIR__, "SillConvection.jl"), joinpath(@__DIR__, "SillModelSetup.jl"), joinpath(@__DIR__, "SillRheology.jl"))
             end
@@ -580,11 +624,13 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
             #h4  = heatmap!(ax4, xci[1], xci[2], Array(log10.(η_vep)) , colormap=:batlow)
 
             # Plot melt fraction
-            h4  = heatmap!(ax4,
+            h4  = contourf!(ax4,
                 xci...,
                 Array(ϕ);
                 colormap=:lipari,
-                colorrange=(0.0, 1.0))
+                levels=0:0.1:1.0,
+                # colorrange=(0.0, 1.0)
+            )
 
             # h5  = heatmap!(ax5,
             #     xci...,
@@ -812,16 +858,16 @@ const plotting = true
 do_vtk = true
 
 # (Path)/folder where output data and figures are stored
-figdir   = "WENO5_SillConvection2D_$(today())"
+figdir   = "PD_LARGE__SillConvection2D_$(today())"
 n = 128
 nx, ny = n, n #>> 1
 
 sill_temp = 1273.15 # in K
 host_rock_temp = 500.0 + 273.15 # in C
-sill_size = 100 # in m
+sill_size = 1000.0 # in m
 depth = 5e3 # in m
 li = dimensions = (300.0, 200.0) # in m
-
+origin = (0.0, -li[2])
 igg = if !(JustRelax.MPI.Initialized())
     IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
 else
@@ -829,7 +875,7 @@ else
 end
 
 # run main script
-main(li, origin, igg; nx = nx, ny = ny, figdir = figdir, do_vtk = do_vtk, cutoff_visc = (1e1, 1.0e18), plotting = plotting, sill_temp = sill_temp, host_rock_temp = host_rock_temp, sill_size = sill_size, depth = depth);
+main(li, origin, igg; nx = nx, ny = ny, figdir = figdir, do_vtk = do_vtk, cutoff_visc = (1e1, 1.0e16), plotting = plotting, sill_temp = sill_temp, host_rock_temp = host_rock_temp, sill_size = sill_size, depth = depth);
 
 
 ## move away from GMG and initialize the phase distribution manually
