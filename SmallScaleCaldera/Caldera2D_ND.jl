@@ -158,24 +158,6 @@ function thermal_anomaly!(Temp, Ω_T, phase_ratios, T_chamber, T_air, conduit_ph
     return nothing
 end
 
-function plot_particles(particles, pPhases, chain; clrmap = :roma)
-    p = particles.coords
-    # pp = [argmax(p) for p in phase_ratios.center] #if you want to plot it in a heatmap rather than scatter
-    ppx, ppy = p
-    pxv = ppx.data[:] ./ 1.0e3
-    pyv = ppy.data[:] ./ 1.0e3
-    clr = pPhases.data[:]
-    chain_x = chain.coords[1].data[:] ./ 1.0e3
-    chain_y = chain.coords[2].data[:] ./ 1.0e3
-    idxv = particles.index.data[:]
-    f = Figure(size = (800, 600))
-    ax = Axis(f[1, 1], title = "Particle positions", xlabel = "x [km]", ylabel = "y [km]", aspect = DataAspect())
-    h = scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color = Array(clr[idxv]), colormap = clrmap, markersize = 1)
-    scatter!(ax, Array(chain_x), Array(chain_y), color = :red, markersize = 1)
-    Colorbar(f[1, 2], h)
-    return f
-end
-
 function make_it_go_boom!(Q, threshold, cells, ϕ, V_erupt, V_tot, di, phase_ratios, magma_phase, anomaly_phase)
 
     @parallel_indices (i, j) function _make_it_go_boom!(Q, threshold, cells, ϕ, V_erupt, V_tot, dx, dy, center_ratio, magma_phase, anomaly_phase)
@@ -510,8 +492,8 @@ end
 function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 16, ny = 16, figdir = "figs2D", do_vtk = false, fric_angle = 30, extension = 1.0e-15 * 0, cutoff_visc = (1.0e16, 1.0e23), V_total = 0.0, V_eruptible = 0.0, layers = 1, air_phase = 6, progressiv_extension = false, plotting = true, displacement=false)
 
     # nondimensionalize
-    li = nondimensionalize(li .* m, CharDim)
-    origin = nondimensionalize(origin .* m, CharDim)
+    li = nondimensionalize(li_GMG .* m, CharDim)
+    origin = nondimensionalize(origin_GMG .* m, CharDim)
     # Physical domain ------------------------------------
     ni = nx, ny           # number of cells
     di = @. li / ni       # grid steps
@@ -525,6 +507,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 
     rheology_incomp = init_rheologies(layers, oxd_wt, fric_angle; CharDim = CharDim, incompressible = true, magma = true, plastic = false)
     # dt_time = 100 * 3600 * 24 * 365
     dt_time = nondimensionalize((1.0e3 * 3600 * 24 * 365)*s, CharDim)
+    # κ = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ.val)) # thermal diffusivity                                 # thermal diffusivity
     κ = (4 / (rheology[1].HeatCapacity[1].Cp.val * rheology[1].Density[1].ρ0.val)) # thermal diffusivity                                 # thermal diffusivity
     dt_diff = 0.5 * min(di...)^2 / κ / 2.01
     dt = min(dt_time, dt_diff)
@@ -560,7 +543,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 
     topo_y = extract_topo_from_GMG_phases(phases_GMG, xvi, air_phase)
 
     fill_chain_from_vertices!(chain, PTArray(backend)(topo_y))
-    update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase, particle_args)
+    update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)#, particle_args)
 
     for _ in 1:3
         @views hn = 0.5 .* (topo_y[1:(end - 1)] .+ topo_y[2:end])
@@ -583,6 +566,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 
     # Allocate arrays needed for every Stokes problem
     stokes = StokesArrays(backend, ni)
     pt_stokes = PTStokesCoeffs(li, di; ϵ_rel = 1.0e-5, ϵ_abs = 1.0e-4, Re = 3.1, r = 0.7, CFL = 0.98 / √2.1) # Re=3π, r=0.7
+    # pt_stokes = PTStokesCoeffs(li, di; ϵ_rel = 1.0e-5, ϵ_abs = 1.0e-4, Re = π /2, r = 0.7, CFL = 0.98 / √2.1) # Re=3π, r=0.7
     σ = PrincipalStress(backend, ni)
 
     # randomize cohesion
@@ -845,7 +829,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 
                 dt,
                 igg;
                 kwargs = (;
-                    iterMax = it < 5 || eruption == true ? 150.0e3 : 150e3,
+                    air_phase = air_phase,
+                    iterMax = it < 5 || eruption == true ? 50.0e3 : 50e3,
                     strain_increment = displacement,
                     nout = 2.0e3,
                     viscosity_cutoff = viscosity_cutoff,
@@ -865,7 +850,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 
             er_it += 1
             dtmax = nondimensionalize((100 * 3600 * 24 * 365.25)*s, CharDim)
         elseif it < 3
-            dtmax = Inf
+            dtmax = nondimensionalize((12e3*3600 * 24 * 365.25)*s, CharDim)
         else
             dtmax = nondimensionalize((1e3 * 3600 * 24 * 365.25)*s, CharDim)
         end
@@ -930,7 +915,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 
         # advect_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi, dt)
         # semilagrangian!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt)
         semilagrangian_advection_markerchain!(chain, RungeKutta4(), @velocity(stokes), grid_vxi,  xvi, dt; max_slope_angle=60)
-        update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase, particle_args)
+        # update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase, particle_args)
+        update_phases_given_markerchain!(pPhases, chain, particles, origin, di, air_phase)
 
         compute_melt_fraction!(
             ϕ_m, phase_ratios, rheology, (T = thermal.Tc, P = stokes.P)
@@ -976,8 +962,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
                 end
-                checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg; it = it, VEI_array = VEI_array, eruption_times = eruption_times, eruption_counters = eruption_counters, Volume = Volume, erupted_volume = erupted_volume, volume_times = volume_times, overpressure = overpressure, overpressure_t = overpressure_t)
-                checkpointing_particles(checkpoint, particles, igg.me; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt, it = it)
+                # checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg; it = it, VEI_array = VEI_array, eruption_times = eruption_times, eruption_counters = eruption_counters, Volume = Volume, erupted_volume = erupted_volume, volume_times = volume_times, overpressure = overpressure, overpressure_t = overpressure_t)
+                # checkpointing_particles(checkpoint, particles, igg.me; phases = pPhases, phase_ratios = phase_ratios, chain = chain, particle_args = particle_args, t = t, dt = dt, it = it)
                 # mktempdir() do tmpdir
                 #     tmpname = joinpath(tmpdir, "OEV_arrays.jld2")
                 #     jldsave(tmpname; VEI_array = VEI_array, eruption_times = eruption_times, eruption_counters = eruption_counters, Volume = Volume, erupted_volume = erupted_volume, volume_times = volume_times, overpressure = overpressure, overpressure_t = overpressure_t)
@@ -1072,8 +1058,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 
                         t = round(ustrip.(dimensionalize(t, yr, CharDim)) /1e3; digits = 3),
                         pvd = joinpath(vtk_dir, "Caldera2D")
                     )
-                    save_particles(particles, pPhases; conversion = 1.0e3, fname = joinpath(vtk_dir, "particles_" * lpad("$it", 6, "0")),
-                        pvd = joinpath(vtk_dir, "Caldera2D_Particles"), t = round(t / (1.0e3 * 3600 * 24 * 365.25); digits = 3))
+                    # save_particles(particles, pPhases; conversion = 1.0e3, fname = joinpath(vtk_dir, "particles_" * lpad("$it", 6, "0")),
+                    #     pvd = joinpath(vtk_dir, "Caldera2D_Particles"), t = round(t / (1.0e3 * 3600 * 24 * 365.25); digits = 3))
                     # save_marker_chain(joinpath(vtk_dir, "chain_" * lpad("$it", 6, "0")), (ustrip.(dimensionalize(xvi[1], km, CharDim))), ustrip.(dimensionalize(Array(chain.h_vertices), km, CharDim)); pvd = joinpath(vtk_dir, "Caldera2D_Markerchain"), t = round(ustrip.(dimensionalize(t, yr, CharDim)); digits = 3))
                 end
 
@@ -1141,61 +1127,61 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; CharDim = nothing, nx = 
                     fig
                     save(joinpath(figdir, "DruckerPrager_$it.png"), fig)
                 end
-                fig2 = let
-                    fig = Figure(; size = (1200, 900))
+                # fig2 = let
+                #     fig = Figure(; size = (1200, 900))
 
-                    ax2 = Axis(
-                        fig[1, 1], ylabel = "Erupted Volume [km³]", yscale = log10, xlabel = "Time [Kyrs]",
-                        title = "Eruptions over time  - number of eruptions: $(eruption_counters[end]), last eruption occured at $(round(eruption_times[end], digits=3)) kyr, \n erupted volume: $(round(erupted_volume[end]./1e9, digits=3)) km³, total volume: $(round(vol_tot[end]./1e9, digits=3)), ratio ΔV/V_tot: $(round(erupted_volume[end]./vol_tot[end], digits = 3))", yminorticks = IntervalsBetween(9),
-                        yminorticksvisible = true,
-                        yticklabelsize = 25,
-                        xticklabelsize = 25,
-                        xlabelsize = 25,
-                        ylabelsize = 25,
-                    )
-                    vei_boundaries = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+                #     ax2 = Axis(
+                #         fig[1, 1], ylabel = "Erupted Volume [km³]", yscale = log10, xlabel = "Time [Kyrs]",
+                #         title = "Eruptions over time  - number of eruptions: $(eruption_counters[end]), last eruption occured at $(round(eruption_times[end], digits=3)) kyr, \n erupted volume: $(round(erupted_volume[end]./1e9, digits=3)) km³, total volume: $(round(vol_tot[end]./1e9, digits=3)), ratio ΔV/V_tot: $(round(erupted_volume[end]./vol_tot[end], digits = 3))", yminorticks = IntervalsBetween(9),
+                #         yminorticksvisible = true,
+                #         yticklabelsize = 25,
+                #         xticklabelsize = 25,
+                #         xlabelsize = 25,
+                #         ylabelsize = 25,
+                #     )
+                #     vei_boundaries = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-                    cmap = Makie.to_colormap(:lipari10)
-                    vei_colors = [cmap[i] for i in round.(Int, range(1, length(cmap), length=9))]  # 8 colors for VEI 0-8
+                #     cmap = Makie.to_colormap(:lipari10)
+                #     vei_colors = [cmap[i] for i in round.(Int, range(1, length(cmap), length=9))]  # 8 colors for VEI 0-8
 
-                    vei_labels = ["VEI 0\n(non-explosive)", "VEI 1\n(small)", "VEI 2\n(moderate)", "VEI 3\n(moderate-large)",
-                                    "VEI 4\n(large)", "VEI 5\n(very large)", "VEI 6\n(colossal)", "VEI 7\n(super-colossal)", "VEI 8 \n (Mega-colossal)"]
-                    vei_volume_thresholds = [1e-6, 0.00001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 5000.0]
-                    x_band = [0.0, (ustrip.(dimensionalize(t, yr, CharDim))./1e3) +1.0]
+                #     vei_labels = ["VEI 0\n(non-explosive)", "VEI 1\n(small)", "VEI 2\n(moderate)", "VEI 3\n(moderate-large)",
+                #                     "VEI 4\n(large)", "VEI 5\n(very large)", "VEI 6\n(colossal)", "VEI 7\n(super-colossal)", "VEI 8 \n (Mega-colossal)"]
+                #     vei_volume_thresholds = [1e-6, 0.00001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 5000.0]
+                #     x_band = [0.0, (ustrip.(dimensionalize(t, yr, CharDim))./1e3) +1.0]
 
-                    for i in 1:length(vei_boundaries)-1
-                        y_bottom = vei_volume_thresholds[i]
-                        y_top = vei_volume_thresholds[i+1]
-                        band!(
-                            ax2,
-                            x_band,
-                            [y_bottom, y_bottom],
-                            [y_top, y_top],
-                            color = (vei_colors[i], 0.5)
-                        )
-                        text!(
-                            ax2,
-                            0.0 + 0.02 * (0.0),
-                            (y_bottom + y_top) / 2,
-                            text = vei_labels[i],
-                            align = (:left, :center),
-                            fontsize = 16,
-                            color = :black,
-                            font = "TeX Gyre Heros Makie"
-                        )
-                    end
-                    scatterlines!(
-                        ax2, eruption_times[2:end], round.(erupted_volume[2:end]; digits = 5),
-                        color = :blue,
-                        markersize = 10,
-                        linewidth = 2,
-                    )
-                    ylims!(ax2, 1e-6, 5000)
-                    xlims!(ax2,0.0, (ustrip.(dimensionalize(t, yr, CharDim))./1e3) +1.0)
-                    fig
-                    save(joinpath(figdir, "eruption_data.png"), fig)
-                    save(joinpath(figdir, "eruption_data.svg"), fig)
-                end
+                #     for i in 1:length(vei_boundaries)-1
+                #         y_bottom = vei_volume_thresholds[i]
+                #         y_top = vei_volume_thresholds[i+1]
+                #         band!(
+                #             ax2,
+                #             x_band,
+                #             [y_bottom, y_bottom],
+                #             [y_top, y_top],
+                #             color = (vei_colors[i], 0.5)
+                #         )
+                #         text!(
+                #             ax2,
+                #             0.0 + 0.02 * (0.0),
+                #             (y_bottom + y_top) / 2,
+                #             text = vei_labels[i],
+                #             align = (:left, :center),
+                #             fontsize = 16,
+                #             color = :black,
+                #             font = "TeX Gyre Heros Makie"
+                #         )
+                #     end
+                #     scatterlines!(
+                #         ax2, eruption_times[2:end], round.(erupted_volume[2:end]; digits = 5),
+                #         color = :blue,
+                #         markersize = 10,
+                #         linewidth = 2,
+                #     )
+                #     ylims!(ax2, 1e-6, 5000)
+                #     xlims!(ax2,0.0, (ustrip.(dimensionalize(t, yr, CharDim))./1e3) +1.0)
+                #     fig
+                #     save(joinpath(figdir, "eruption_data.png"), fig)
+                #     save(joinpath(figdir, "eruption_data.svg"), fig)
+                # end
                 fig3 = let
                     fig1 = Figure(; size = (1200, 900))
                     ax1 = Axis(
@@ -1246,7 +1232,7 @@ do_vtk = true # set to true to generate VTK files for ParaView
 # figdir is defined as Systematics_depth_radius_ar_extension
 # figdir   = "Systematics/Caldera2D_$(today())_granite_d_$(depth)_r_$(radius)_ar_$(ar)_ex_$(extension)_phi_$(fric_angle)"
 figdir = "Systematics/Caldera2D_$(today())"
-n = 128
+n = 64
 nx, ny = n, n >> 1
 
 # IO -------------------------------------------------
@@ -1272,7 +1258,7 @@ end
 # end
 
 
-li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase = setup2D(
+li_GMG, origin_GMG, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase = setup2D(
     nx + 1, ny + 1;
     sticky_air = 4.0e0,
     dimensions = (40.0e0, 20.0e0), # extent in x and y in km
@@ -1293,7 +1279,7 @@ end
 
 CharDim = GEO_units(;
 length = 40km, # characteristic length scale in km)
-viscosity = 1.0e20Pas,
+viscosity = 1.0e17Pas,
 temperature = (500+273.15)K,
 )
 # CharDim = nothing
