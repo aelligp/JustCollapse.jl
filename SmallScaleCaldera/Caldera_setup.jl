@@ -10,8 +10,8 @@ function setup2D(
         volcano_size = (3.0e0, 5.0e0),
         chamber_T = 1.0e3,
         chamber_depth = 5.0e0,
-        chamber_radius = 2.5e0,
-        aspect_x = 1.5,
+        chamber_radius = 1.75e0,
+        aspect_x = 2.5,
     )
 
     Lx = Ly = dimensions[1]

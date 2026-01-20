@@ -1,5 +1,6 @@
 const isCUDA = false
 # const isCUDA = true
+using CairoMakie
 
 @static if isCUDA
     using CUDA
@@ -32,7 +33,7 @@ else
 end
 
 # Load script dependencies
-using GeoParams, CairoMakie, CellArrays, Statistics, Dates, JLD2
+using GeoParams, CellArrays, Statistics, Dates, JLD2
 
 # Load file with all the rheology configurations
 include("Caldera_setup.jl")
@@ -925,8 +926,8 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
         if igg.me == 0
             push!(Volume, V_total)
             push!(volume_times, (t / (3600 * 24 * 365.25) / 1.0e3))
-            CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
-            # pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            # CUDA.@allowscalar pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
+            pp = [p[3] > 0 || p[4] > 0 for p in phase_ratios.center]
             if it > 1 && !isempty(Array(stokes.P)[pp][Array(ϕ_m)[pp] .≥ 0.3])
                 if eruption == true
                     push!(overpressure, minimum(Array(stokes.P)[pp][Array(ϕ_m)[pp]  .≥ 0.3] .- Array(P_lith)[pp][Array(ϕ_m)[pp]  .≥ 0.3]))
@@ -953,7 +954,7 @@ function main(li, origin, phases_GMG, T_GMG, T_bg, igg; nx = 16, ny = 16, figdir
 
         if plotting
             # Data I/O and plotting ---------------------
-            if it == 1 || rem(it, 1) == 0
+            if it == 1 || rem(it, 5) == 0
                 if igg.me == 0 && it == 1
                     metadata(pwd(), checkpoint, joinpath(@__DIR__, "Caldera2D.jl"), joinpath(@__DIR__, "Caldera_setup.jl"), joinpath(@__DIR__, "Caldera_rheology.jl"))
                 end
@@ -1193,8 +1194,8 @@ do_vtk = true # set to true to generate VTK files for ParaView
 depth, radius, ar, extension, fric_angle = parse.(Float64, ARGS[1:end])
 
 # figdir is defined as Systematics_depth_radius_ar_extension
-figdir   = "Systematics/Caldera2D_$(today())_granite_d_$(depth)_r_$(radius)_ar_$(ar)_ex_$(extension)_phi_$(fric_angle)"
-n = 128
+figdir   = "Systematics/Additional_Runs/Caldera2D_$(today())_granite_d_$(depth)_r_$(radius)_ar_$(ar)_ex_$(extension)_phi_$(fric_angle)"
+n = 384
 nx, ny = n, n >> 1
 
 # IO -------------------------------------------------
@@ -1228,9 +1229,9 @@ li, origin, phases_GMG, T_GMG, T_bg, _, V_total, V_eruptible, layers, air_phase 
     layers = 3, # number of layers
     volcano_size = (3.0e0, 5.0e0),    # height, radius
     chamber_T = 950.0e0, # temperature of the chamber
-    # chamber_depth  = depth, # depth of the chamber
-    # chamber_radius = radius, # radius of the chamber
-    # aspect_x       = ar, # aspect ratio of the chamber
+    chamber_depth  = depth, # depth of the chamber
+    chamber_radius = radius, # radius of the chamber
+    aspect_x       = ar, # aspect ratio of the chamber
 )
 
 igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
