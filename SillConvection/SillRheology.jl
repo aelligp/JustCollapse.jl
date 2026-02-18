@@ -5,16 +5,16 @@ function init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e0Pas, magma 
     # Define parameters
 
     # sill_PD = "./Phase_diagrams/Heise_Sill.in"
-    host_rock_PD = "./Phase_diagrams/Heise_Sill.in"
-    sill_PD = "./Phase_diagrams/Heise_Host_rock.in"
+    host_rock_PD = "./SillConvection/Phase_diagrams/Heise_Sill.in"
+    sill_PD = "./SillConvection/Phase_diagrams/Heise_Host_rock.in"
 
-    PD_Sill = PerpleX_LaMEM_Diagram(sill_PD)
-    # PD_Sill_GPU = Adapt.adapt(CuArray, PD_Sill)
-    PD_Sill_GPU = PD_Sill
+    PD_Sill = MAGEMin_Diagram(sill_PD)
+    PD_Sill_GPU = Adapt.adapt(CuArray, PD_Sill)
+    # PD_Sill_GPU = PD_Sill
     # host_rock_PD = "./Phase_diagrams/Heise_Host_rock.in"
-    PD_Host_Rock = PerpleX_LaMEM_Diagram(host_rock_PD)
-    # PD_Host_Rock_GPU = Adapt.adapt(CuArray, PD_Host_Rock)
-    PD_Host_Rock_GPU = PD_Host_Rock
+    PD_Host_Rock = MAGEMin_Diagram(host_rock_PD)
+    PD_Host_Rock_GPU = Adapt.adapt(CuArray, PD_Host_Rock)
+    # PD_Host_Rock_GPU = PD_Host_Rock
     sill = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt_sill, η0 = scaling)) : LinearViscous(η = 1.0e13Pa*s)
     host_rock = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt_host_rock, η0 = scaling)) : LinearViscous(η = 1.0e16Pa*s)
 
