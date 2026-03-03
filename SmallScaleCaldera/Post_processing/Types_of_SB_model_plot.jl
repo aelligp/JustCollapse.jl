@@ -1,5 +1,5 @@
 # Underpressure vs roof Ratio SB propagation type
-using CairoMakie, CSV, XLSX, DataFrames
+using CairoMakie, XLSX, DataFrames
 
 data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Systematics"))
 # data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Reference_run_variations"))
@@ -34,7 +34,7 @@ ax = Axis(fig[1, 1];
     xlabel = "Roof ratio of chamber (depth / width)",
     ylabel = "Underpressure [MPa]",
     # title = "Onset of caldera collapse vs roof ratio of chamber with Topo added",
-    xticks = 0.5:0.5:2.25,
+    xticks = [0.7, 1.1, collect(0.5:0.5:2.25)...],
     xticklabelsize = 18,
     yticklabelsize = 18,
     xlabelsize = 22,
