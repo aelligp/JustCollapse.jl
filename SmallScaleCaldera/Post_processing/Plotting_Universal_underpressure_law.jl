@@ -1,6 +1,7 @@
 using CairoMakie, GeoParams, LaTeXStrings, CSV, XLSX, DataFrames, LsqFit
 
-data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Systematics"))
+# data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Systematics"))
+data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "All_models"))
 
 tectonic_setting = data[:, 2]
 diameter_caldera = data[:, 3]
@@ -32,7 +33,7 @@ g = gravity
 tau_DP_eff(H_km, phi) = C_rock * cosd(phi) + (ρ * g * H_km * 1e3 / 2.0) / 1e6 * sind(phi)
 tau_DP_eff_total(H_km, phi) = C_rock * cosd(phi) + (ρ * g * H_km * 1e3) / 1e6 * sind(phi)
 
-Roof_ratio_lines = collect(LinRange(0.1, 3.0, length(total_radius)))
+Roof_ratio_lines = collect(LinRange(0.1, 3.25, length(total_radius)))
 
 all_angles = [15.0, 20.0, 25.0, 30.0]
 
@@ -93,24 +94,51 @@ for (i, phi) in enumerate(all_angles)
     )
 
 
-    mask = (friction_angle .== phi) #.& (tectonic_setting .== 0.0)
-    s1 = scatter!(ax, roof_ratio_chamber[mask], abs.(underpressure_MPa[mask]); color = :black, alpha = 0.2, marker = markers[i], markersize = 8, label = "Models (ϕ=$(Int(phi))°)")
+    mask = (friction_angle[1:265] .== phi) #.& (tectonic_setting .== 0.0)
+    s1 = scatter!(ax, roof_ratio_chamber[1:265][mask], abs.(underpressure_MPa[1:265][mask]); color = :black, alpha = 0.2, marker = markers[i], markersize = 8, label = "Models")
 
-    mask1 = (friction_angle .== phi) .& (tectonic_setting .== 0.0)
-    s2 = scatter!(ax2, roof_ratio_chamber[mask1], abs.(underpressure_MPa[mask1]); color = :black, alpha = 1.0, marker = markers[i], markersize = 8, label = "Models (ϕ=$(Int(phi))°)")
+    mask1 = (friction_angle[1:265] .== phi) .& (tectonic_setting[1:265] .== 0.0)
+    s2 = scatter!(ax2, roof_ratio_chamber[1:265][mask1], abs.(underpressure_MPa[1:265][mask1]); color = :black, alpha = 1.0, marker = markers[i], markersize = 8, label = "Models")
 
-    (i == 4 && phi == 30.0) ? fig[3, 1] = Legend(fig, [b1, ln1, ln2, ln3, s2], ["Range for H=5.6-9.45 km", "Universal Fit", "Hollow Sphere (A = 2)", "Cylinder (A = 2/√3)", "Models"], tellheight = true, merge = true, unique = true, orientation = :horizontal, fontsize = 22, labelsize = 22) : nothing
+    mask_variations = (friction_angle[266:end] .== phi) .& (tectonic_setting[266:end] .== 0.0)
+    s3 = scatter!(ax, roof_ratio_chamber[266:end][mask_variations], abs.(underpressure_MPa[266:end][mask_variations]); color = :blue, alpha = 0.3, marker = :star6, markersize = 8, label = "Ref model Variations")
+    s3 = scatter!(ax2, roof_ratio_chamber[266:end][mask_variations], abs.(underpressure_MPa[266:end][mask_variations]); color = :blue, alpha = 1.0, marker = :star6, markersize = 8, label = "Ref model Variations")
+
+    if i == 4 && phi == 30.0
+        sc1 = scatter!(ax, [2.0], [(166 + 205)/2], color = cmap[1], markersize = 20, marker = :star5, label = "Katmai")
+        rangebars!(ax, [2.0], [166.0], [205.0], color = cmap[1])
+
+        # # Pinatubo: Roof ratio 2.4, Underpressure 265-312 MPa
+        sc2 = scatter!(ax, [(2.4 + 3.2) /2], [(265 + 312)/2], color = cmap[3], markersize = 20, marker = :star5, label = "Pinatubo")
+        rangebars!(ax, [(2.4 + 3.2) /2], [265.0], [312.0], color = cmap[3])
+        rangebars!(ax, [(265 + 312)/2], [2.4], [3.2],direction = :x, color = cmap[3])
+
+        # # Fernandina: Roof ratio 0.31, Underpressure 3-9 MPa
+        sc3 = scatter!(ax, [0.31], [(3 + 9)/2], color = cmap[5], markersize = 20, marker = :star5, label = "Fernandina")
+        rangebars!(ax, [0.31], [3.0], [9.0], color = cmap[5])
+
+        range       = PolyElement(color = (cmap[7], 0.3), strokecolor = cmap[7])
+        scaling     = LineElement(color = cmap[6], linestyle = :solid, linewidth = 3)
+        sphere      = LineElement(color = (:black, 0.5), linestyle = :dot, linewidth = 2)
+        cylinder    = LineElement(color = (:black, 0.5), linestyle = :dashdot, linewidth = 2)
+        models      = MarkerElement(color = :black, marker = :circle, markersize = 18)
+        ref_var     = MarkerElement(color = :blue, marker = :star6, markersize = 18)
+        katmai      = MarkerElement(color = cmap[1], marker = :star5, markersize = 18)
+        pinatuno    = MarkerElement(color = cmap[3], marker = :star5, markersize = 18)
+        fernandina  = MarkerElement(color = cmap[5], marker = :star5, markersize = 18)
+        fig[3, 1]   = Legend(fig,
+            [range, scaling, sphere, cylinder, models, ref_var, katmai, pinatuno, fernandina],
+            ["Range for Depth=5.6-9.45 km", "Universal Fit", "Hollow Sphere (A = 2)", "Cylinder (A = 2/√3)", "Models", "Ref model variations", "Katmai", "Pinatubo", "Fernandina"],
+            tellheight = true, tellwidth = false,
+            orientation = :horizontal, nbanks = 2, fontsize = 22, labelsize = 22
+        )
+    end
+
 end
-scatter!(ax, [2.0], [(166 + 205)/2], color = cmap[1], markersize = 15, marker = :star5, label = "Katmai")
-rangebars!(ax, [2.0], [166.0], [205.0], color = cmap[1])
-
-# # Pinatubo: Roof ratio 2.4, Underpressure 265-312 MPa
-scatter!(ax, [2.4], [(265 + 312)/2], color = cmap[3], markersize = 15, marker = :star5, label = "Pinatubo")
-rangebars!(ax, [2.4], [265.0], [312.0], color = cmap[3])
 
 ylims!(ax, -50, 325)
-xlims!(ax, 0.0, 2.75)
-xlims!(ax2, 0.0, 2.75)
+xlims!(ax, 0.0, 3.25)
+xlims!(ax2, 0.0, 3.25)
 
 text!(ax, 0.752, -5;  text = L"P_{under} = (1.84 \ln(R) + 3.2\ln(2)) \cdot [C \ \cos(\phi) + \bar{P} \ \sin(\phi)]", color = :black, fontsize = 24)
 
