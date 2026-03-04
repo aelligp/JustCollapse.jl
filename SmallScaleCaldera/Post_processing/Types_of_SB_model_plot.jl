@@ -27,6 +27,8 @@ total_radius = radius_chamber .* aspect_ratio
 density_host_rock = 2700.0 # kg/m^3
 gravity = 9.81 # m/s^2
 
+gradient_background = false
+
 let
 fig = Figure(size = (1000, 750))
 ax = Axis(fig[1, 1];
@@ -42,6 +44,7 @@ ax = Axis(fig[1, 1];
 )
 
 # Smooth horizontal gradient background: left→white at 0.7, white plateau to 1.1, white→right
+if gradient_background == true
 _grad_vals = [x < 0.75f0  ? (x / 0.75f0) * 0.5f0 :
               x < 1.0f0  ? 0.5f0 :
               0.5f0 + ((x - 1.0f0) / (2.25f0 - 1.0f0)) * 0.5f0
@@ -51,6 +54,13 @@ image!(ax,
     reshape(_grad_vals, 512, 1) .* ones(Float32, 1, 2);
     colormap = :roma, alpha = 0.750, interpolate = true
 )
+else
+    # add solid colored backgrounds for each region
+    cmap_bg = CairoMakie.categorical_colors(:roma10, 10)
+    poly!(ax, Rect2f(0.0, 0.0, 0.7, 200.0); color = (cmap_bg[2], 0.4))
+    poly!(ax, Rect2f(0.7, 0.0, 0.4, 200.0); color = (cmap_bg[5], 0.4))
+    poly!(ax, Rect2f(1.1, 0.0, 1.15, 200.0); color = (cmap_bg[8], 0.4))
+end
 
 # cmap = CairoMakie.categorical_colors(:roma10, 10)
 # cmap = CairoMakie.categorical_colors(:berlin10, 10)
@@ -79,6 +89,8 @@ for angle in friction_angles_unique
                         color = friction_colors[j],
                         markersize = 18,
                         marker = marker_shapes[j],
+                        strokecolor = :white,
+                        strokewidth = 0.5,
                         label = "$(setting_label[j])"
                     )
                 end

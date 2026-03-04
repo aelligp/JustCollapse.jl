@@ -64,11 +64,11 @@ for (i_idx, i) in enumerate(models), (j_idx, j) in enumerate(melt_fractions)
 end
 for (i, label) in enumerate(["Ref", "Lower end-member", "Upper end-member"])
     Box(fig[i, 4], color = :gray90)
-    Label(fig[i, 4], label, rotation = pi/2, tellheight = false, fontsize = 19, color = :black)
+    Label(fig[i, 4], label, rotation = pi/2, tellheight = false, fontsize = 18, color = :black)
 end
 for (j, label) in enumerate(["30%", "40%", "50%"])
     Box(fig[0, j], color = :gray90)
-    Label(fig[0, j], label, tellwidth = false, fontsize = 19, color = :black)
+    Label(fig[0, j], label, tellwidth = false, fontsize = 18, color = :black)
 end
 
 display(fig)
