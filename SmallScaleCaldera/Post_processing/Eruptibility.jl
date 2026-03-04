@@ -10,7 +10,7 @@ files = readdir(dir)
 models = ["d_5.0_r_1.75_ar_2.5_ex_0.0_phi_30.0", "d_5.0_r_2.5_ar_2.0_ex_0.0_phi_30.0", "d_5.0_r_1.75_ar_0.85_ex_0.0_phi_30.0"]
 
 melt_fractions = [03, 04, 05]
-
+let
 fig = Figure(size = (1200, 800))
 
 for (i_idx, i) in enumerate(models), (j_idx, j) in enumerate(melt_fractions)
@@ -58,13 +58,17 @@ for (i_idx, i) in enumerate(models), (j_idx, j) in enumerate(melt_fractions)
     xlims!(ax_i, 0, maximum(overpressure_time) + 15)
     (i_idx == 3 && j_idx == 3) ? fig[4, 1:3] = Legend(fig, [ln0, ln2, ln3], ["30% melt fraction", "40% melt fraction", "50% melt fraction"], orientation = :horizontal, fontsize = 24, "Eruption triggered at", titleposition = :top, titlesize = 24, labelsize = 20) : nothing
 end
-for (i, label) in enumerate(["Ref", "Lower Endmember", "Upper Endmember"])
+for (i, label) in enumerate(["Ref", "Lower end-member", "Upper end-member"])
     Box(fig[i, 4], color = :gray90)
-    Label(fig[i, 4], label, rotation = pi/2, tellheight = false, fontsize = 20, color = :black)
+    Label(fig[i, 4], label, rotation = pi/2, tellheight = false, fontsize = 19, color = :black)
+end
+for (j, label) in enumerate(["30%", "40%", "50%"])
+    Box(fig[0, j], color = :gray90)
+    Label(fig[0, j], label, tellwidth = false, fontsize = 19, color = :black)
 end
 
 display(fig)
-
 save("./SmallScaleCaldera/Post_processing/Eruptibility_testing.png", fig)
 save("./SmallScaleCaldera/Post_processing/Eruptibility_testing.pdf", fig)
 save("./SmallScaleCaldera/Post_processing/Eruptibility_testing.svg", fig)
+end
