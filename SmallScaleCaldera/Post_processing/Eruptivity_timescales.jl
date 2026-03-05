@@ -97,14 +97,14 @@ colors = cmap[1:1:10]
 fig = Figure(size = (1200, 800))
 
 ax = Axis(fig[1, 1],
-    xlabel = L"θ₁ = τ_\textrm{cool} / τ_\textrm{in}",
-    ylabel = L"θ₂ = τ_\textrm{relax} / τ_\textrm{in}",
+    xlabel = L"θ_1 = τ_\textrm{cool} / τ_\textrm{in}",
+    ylabel = L"θ_2 = τ_\textrm{relax} / τ_\textrm{in}",
     xscale = log10,
     yscale = log10,
     xticklabelsize = 20,
     yticklabelsize = 20,
-    xlabelsize = 24,
-    ylabelsize = 24,
+    xlabelsize = 30,
+    ylabelsize = 30,
     # xticks = [1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3],
     # yticks = [1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3, 1e4],
     # title = "Relaxation and Eruption Criteria"
@@ -283,10 +283,10 @@ scatter!(ax,
 )
 
 # xlims!(ax, 1e-3, 1e3)
-xlims!(ax, 1e0, 1e3)
+xlims!(ax, 1e-3, 1e3)
 ylims!(ax, 1e-3, 1e5)
 # hlines!(ax, [1.0], color=:black, linestyle=:dash)
-# vlines!(ax, [1.0], color=:black, linestyle=:dashdot)
+vlines!(ax, [1.0]; ymin = 0.3, color=:black, linestyle=:dashdot)
 
 lines!(ax, θ1_vector, θ2_degruyter, color=:black, linestyle=:dash, label = "Degruyter & Huber 2014 - \n Scaling law for number of eruptions")
 # fig[1,2] = Legend(fig, ax, "Townsend et al 2019 - Relaxation and Eruption Criteria", framevisible = true, merge=true, unique=true)
@@ -301,11 +301,12 @@ models_1e19 = MarkerElement(color = colors[6], marker = :circle, markersize = 18
 scaling_degruyter = LineElement(color = :black, linestyle = :dash, linewidth = 2)
 axislegend(ax, [ref_model, models_normal, models_increased, models_1e22, models_1e20, models_1e19, scaling_degruyter],
     ["Reference model", "Normal injection rate", "Increased injection rate", L"\eta_r =  10^{22} ", L"\eta_r =  10^{20} ", L"\eta_r =  10^{19} ", "Degruyter & Huber 2014 -\nScaling law for number of eruptions"],
-    framevisible = true, merge=true, unique=true, position = :rt, fontsize = 22, labelsize = 22
+    framevisible = true, merge=true, unique=true, position = :lt, fontsize = 22, labelsize = 22
 )
 
 text!(ax, "Eruption triggered \nby mass injection", position = (8.5e1, 2.5e0), fontsize = 24)
 text!(ax, "No eruption", position = (8.5e1, 5e-2), fontsize = 24)
+text!(ax, "Eruption triggered \nby second boiling", position = (2.5e-2, 2.5e0), fontsize = 24)
 display(fig)
 
 save("./SmallScaleCaldera/Post_processing/Eruptibility_criteria.png", fig)
