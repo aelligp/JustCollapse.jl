@@ -63,7 +63,6 @@ let
                     ref_mask = x_vals[valid] .≈ 7.440
                     upper_ref_mask = x_vals[valid] .≈ 7.510
                     lower_ref_mask = x_vals[valid] .≈ 6.980
-                    # 0.691428571
                     if any(.!ref_mask)
                         scatter!(ax, x_vals[valid][.!ref_mask], y_vals[valid][.!ref_mask];
                             color = friction_colors[2],

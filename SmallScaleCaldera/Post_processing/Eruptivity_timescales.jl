@@ -83,16 +83,18 @@ b1 = 2.4
 b2 = 3.5
 b3 = 2.5
 
-θ1_vector = collect(LinRange(1e-3, 1e3, 200))
+θ1_vector = collect(LinRange(1e-3, 1e3, 400))
 
 θ2_degruyter = @. (b3 * θ1_vector) * inv(b1*θ1_vector + b2 -1)
-N_eruptions = @. b1 * θ1_vector + b2 - b3 * θ1_vector * inv(θ2_degruyter)
+N_eruptions = @. b1 * θ1_vector + b2 - b3 * (θ1_vector * inv(θ2_degruyter))
 
 
 let
 
 cmap = Makie.categorical_colors(:lipari10, 10)
+cmap_bg = Makie.categorical_colors(:vik10, 10)
 colors = cmap[1:1:10]
+colors_bg = cmap_bg[1:1:10]
 # First lets plot the Townsend et al 2019 values with η_hostrock 1e19
 fig = Figure(size = (1200, 800))
 
@@ -105,11 +107,35 @@ ax = Axis(fig[1, 1],
     yticklabelsize = 20,
     xlabelsize = 30,
     ylabelsize = 30,
-    # xticks = [1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3],
-    # yticks = [1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3, 1e4],
-    # title = "Relaxation and Eruption Criteria"
+    xminorticksvisible=true,
+    xminorticks=IntervalsBetween(9),
+    yminorticksvisible=true,
+    yminorticks=IntervalsBetween(9),
 )
 
+idx_split = findfirst(x -> x >= 1.0, θ1_vector)
+
+second_boiling_pts = [
+    Point2f(1e-3, 1e-3),
+    Point2f(1.0,  0.32),
+    Point2f(1.0,  1e5),
+    Point2f(1e-3, 1e5),
+]
+poly!(ax, second_boiling_pts; color = (colors_bg[2], 0.25))
+
+mass_inj_pts = vcat(
+    [Point2f(1.0, 0.32)],
+    [Point2f(x, y) for (x, y) in zip(θ1_vector[idx_split:end], θ2_degruyter[idx_split:end])],
+    [Point2f(1e3, 1e5)],
+    [Point2f(1.0, 1e5)],
+)
+poly!(ax, mass_inj_pts; color = (colors_bg[8], 0.25))
+
+no_erupt_pts = vcat(
+    [Point2f(1e3, θ2_degruyter[1])],
+    [Point2f(x, y) for (x, y) in zip(θ1_vector, θ2_degruyter)],
+)
+poly!(ax, no_erupt_pts; color = (:grey, 0.25))
 
 # Now the models w/ normal injection ra
 scatter!(ax,
@@ -286,7 +312,7 @@ scatter!(ax,
 xlims!(ax, 1e-3, 1e3)
 ylims!(ax, 1e-3, 1e5)
 # hlines!(ax, [1.0], color=:black, linestyle=:dash)
-vlines!(ax, [1.0]; ymin = 0.3, color=:black, linestyle=:dashdot)
+vlines!(ax, [1.0]; ymin = 0.32, color=:black, linestyle=:dashdot)
 
 lines!(ax, θ1_vector, θ2_degruyter, color=:black, linestyle=:dash, label = "Degruyter & Huber 2014 - \n Scaling law for number of eruptions")
 # fig[1,2] = Legend(fig, ax, "Townsend et al 2019 - Relaxation and Eruption Criteria", framevisible = true, merge=true, unique=true)
@@ -304,9 +330,9 @@ axislegend(ax, [ref_model, models_normal, models_increased, models_1e22, models_
     framevisible = true, merge=true, unique=true, position = :lt, fontsize = 22, labelsize = 22
 )
 
-text!(ax, "Eruption triggered \nby mass injection", position = (8.5e1, 2.5e0), fontsize = 24)
-text!(ax, "No eruption", position = (8.5e1, 5e-2), fontsize = 24)
-text!(ax, "Eruption triggered \nby second boiling", position = (2.5e-2, 2.5e0), fontsize = 24)
+text!(ax, "Eruption triggered \nby mass injection", position = (5e1, 2e2), fontsize = 26)
+text!(ax, "No eruption", position = (5e1, 5e-2), fontsize = 26)
+text!(ax, "Eruption triggered \nby second boiling", position = (5e-3, 2.5e0), fontsize = 26)
 display(fig)
 
 save("./SmallScaleCaldera/Post_processing/Eruptibility_criteria.png", fig)

@@ -83,7 +83,7 @@ for angle in friction_angles_unique
 
             if any(valid)
 
-                ref_mask = x_vals[valid] .≈ 0.691428571
+                ref_mask = x_vals[valid] .≈ 0.68
                 if any(.!ref_mask)
                     scatter!(ax, x_vals[valid][.!ref_mask], y_vals[valid][.!ref_mask];
                         color = friction_colors[j],
