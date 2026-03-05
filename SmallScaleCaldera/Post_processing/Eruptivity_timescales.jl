@@ -87,6 +87,8 @@ b3 = 2.5
 θ1_vector = collect(LinRange(1e-3, 1e3, 200))
 
 θ2_degruyter = @. (b3 * θ1_vector) * inv(b1*θ1_vector + b2 -1)
+N_eruptions = @. b1 * θ1_vector + b2 - b3 * θ1_vector * inv(θ2_degruyter)
+
 
 let
 
@@ -96,8 +98,8 @@ colors = cmap[1:1:10]
 fig = Figure(size = (1200, 800))
 
 ax = Axis(fig[1, 1],
-    xlabel = "θ₁ = τ_cool / τ_in",
-    ylabel = "θ₂ = τ_relax / τ_in",
+    xlabel = L"θ₁ = τ_\textrm{cool} / τ_\textrm{in}",
+    ylabel = L"θ₂ = τ_\textrm{relax} / τ_\textrm{in}",
     xscale = log10,
     yscale = log10,
     xticklabelsize = 20,
@@ -287,23 +289,26 @@ ylims!(ax, 1e-3, 1e4)
 lines!(ax, θ1_vector, θ2_degruyter, color=:black, linestyle=:dash, label = "Degruyter & Huber 2014 - \n Scaling law for number of eruptions")
 # fig[1,2] = Legend(fig, ax, "Townsend et al 2019 - Relaxation and Eruption Criteria", framevisible = true, merge=true, unique=true)
 # fig[1,2] = Legend(fig, ax, framevisible = true, merge=true, unique=true)
-axislegend(ax, framevisible = true, merge=true, unique=true, position = :rt, fontsize = 24, labelsize = 20, title = "Relaxation and Eruption Criteria", titlesize = 24)
+ref_model = MarkerElement(color = :grey, marker = :star5, markersize = 18)
+models_normal = MarkerElement(color = colors[1], marker = :circle, markersize = 18)
+models_normal = MarkerElement(color = colors[1], marker = :circle, markersize = 18)
+models_increased = MarkerElement(color = colors[3], marker = :diamond, markersize = 18)
+models_1e22 = MarkerElement(color = colors[3], marker = :circle, markersize = 18)
+models_1e20 = MarkerElement(color = colors[5], marker = :circle, markersize = 18)
+models_1e19 = MarkerElement(color = colors[6], marker = :circle, markersize = 18)
+scaling_degruyter = LineElement(color = :black, linestyle = :dash, linewidth = 2)
+axislegend(ax, [ref_model, models_normal, models_increased, models_1e22, models_1e20, models_1e19, scaling_degruyter],
+    ["Reference model", "Normal injection rate", "Increased injection rate", L"\eta_r =  10^{22} ", L"\eta_r =  10^{20} ", L"\eta_r =  10^{19} ", "Degruyter & Huber 2014 -\nScaling law for number of eruptions"],
+    framevisible = true, merge=true, unique=true, position = :rt, fontsize = 22, labelsize = 22
+)
 
-
-# text!(ax, "Region 1: \n Eruption triggered by second boiling", position = (5e-3, 1e1), fontsize = 18)
-# text!(ax, "Region 2: \n Eruption triggered \n by mass injection", position = (5e1, 2.5e0), fontsize = 18)
-# text!(ax, "Region 3: \n No eruption", position = (5e1, 5e-2), fontsize = 18)
-text!(ax, "Eruption triggered \n by mass injection", position = (1e2, 2.5e0), fontsize = 24)
-text!(ax, "No eruption", position = (1e2, 5e-2), fontsize = 24)
+text!(ax, "Eruption triggered \nby mass injection", position = (8.5e1, 2.5e0), fontsize = 24)
+text!(ax, "No eruption", position = (8.5e1, 5e-2), fontsize = 24)
 display(fig)
 
 save("./SmallScaleCaldera/Post_processing/Eruptibility_criteria.png", fig)
 save("./SmallScaleCaldera/Post_processing/Eruptibility_criteria.svg", fig)
 save("./SmallScaleCaldera/Post_processing/Eruptibility_criteria.pdf", fig)
-# f_exsolution = @. inv(τ_cool * 1e-10 * 20e6)
-
-# lines!(ax, f_exsolution, color=:orange, label = "Eruption triggered by second boiling")
-# fig
 end
 
 
