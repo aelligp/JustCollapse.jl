@@ -101,7 +101,7 @@ let
     rangebars!(ax, [6.5], [50], [60], color = :purple)
     rangebars!(ax, [55], [5.5], [7.5], direction = :x, color = :purple)
     # Structural diameter ref model
-    scatter!(ax, [6.6], [55], color = cmap[8], markersize = 18, marker = :star6, label = "Reference model \nStructural collapse")
+    scatter!(ax, [6.6], [55], color = cmap[8], markersize = 18, marker = :star6, label = "Reference model \nStructural diameter")
 
     # krakatau: geshi 2014 roof ratio ? (deplus 1995m carey 1996)
     scatter!(ax, [2.4], [12], color = :green, markersize = 17, marker = :star5, label = "Krakatau 1883")
@@ -133,7 +133,7 @@ let
     rangebars!(ax, [2.2], [3.7], [5.3], color = cmap[5])
     rangebars!(ax, [4.5], [2.0], [2.4], direction = :x, color = cmap[5])
 
-    xlims!(ax, 1e0, 10+0.5)
+    xlims!(ax, 1e0, 10)
     ylims!(ax, 0e0, 1.5*10^2)
 
     # fig[1, 1] = Legend(fig, ax, position = :lt, merge = true, unique = true)

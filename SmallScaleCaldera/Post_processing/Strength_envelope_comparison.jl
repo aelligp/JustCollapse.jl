@@ -73,8 +73,10 @@ else
     Temp = LinTemp(0.0u"°C", Tbot)
 end
 
-# Option 2: Use custom temperature vector from simulation
 
+@load "/Users/pascalaellig/Documents/PhD/JustCollapse.jl/SmallScaleCaldera/Post_processing/Creep_law_analysis/Temparature_Vector_Creep_Laws.jld2" Temp_Vec
+Temp_custom = (reverse(Temp_Vec) .* 1.0u"K") .|> u"°C"
+z_vec_custom = range(0.0u"km", Thickness_total, length=length(Temp_custom))
 
 ε = 10^(-15) / u"s"  # Strain rate
 # Define different rheologies to compare
@@ -101,10 +103,16 @@ fig = Figure(size = (1400, 900), fontsize=14)
 
 # Strength envelope plot
 ax1 = Axis(fig[1, 1],
-    title = "Strength Envelope Comparison - Different Dislocation Creep Laws",
+    title = "Strength Envelope Comparison",
     xlabel = "Maximum Strength [MPa]",
     ylabel = "Depth [km]",
-    yreversed = true
+    yreversed = true,
+    xlabelsize = 24,
+    ylabelsize = 24,
+    xticklabelsize = 20,
+    yticklabelsize = 20,
+    titlesize = 30,
+
 )
 
 # Temperature profile plot
@@ -112,7 +120,38 @@ ax2 = Axis(fig[1, 2],
     title = "Temperature Profile",
     xlabel = "Temperature [°C]",
     ylabel = "Depth [km]",
-    yreversed = true
+    yreversed = true,
+    xlabelsize = 24,
+    ylabelsize = 24,
+    xticklabelsize = 20,
+    yticklabelsize = 20,
+    titlesize = 30,
+)
+
+ax_inset_env = Axis(fig[1, 1],
+    width=Relative(0.45),
+    height=Relative(0.4),
+    yreversed = true,
+    halign=0.95,
+    valign=0.925,
+    xlabelsize = 18,
+    ylabelsize = 18,
+    xticklabelsize = 15,
+    yticklabelsize = 15,
+    backgroundcolor = (:white,1.0),
+)
+
+ax_inset_T = Axis(fig[1, 2],
+    width=Relative(0.45),
+    height=Relative(0.4),
+    yreversed = true,
+    halign=0.95,
+    valign=0.925,
+    xlabelsize = 18,
+    ylabelsize = 18,
+    xticklabelsize = 15,
+    yticklabelsize = 15,
+    backgroundcolor = (:white,1.0),
 )
 
 # Colors for different rheologies
@@ -168,35 +207,36 @@ for (i, (name, creep_law)) in enumerate(creep_laws)
             lines!(ax2, T_plot, z_plot, linewidth=2, color=:black)
         end
 
+        # Compute with custom temperature for insets
+        z_ins, τ_ins, T_ins = StrengthEnvelopeWithTempVector(rheology, Thickness, z_vec_custom, Temp_custom, ε, 201)
+        z_ins_plot = ustrip.(u"km", z_ins)
+        τ_ins_plot = ustrip.(u"MPa", τ_ins)
+        T_ins_plot = ustrip.(u"°C", T_ins)
+
+        lines!(ax_inset_env, τ_ins_plot, z_ins_plot, linewidth=1.5, color=colors[i])
+        if i == 1
+            lines!(ax_inset_T, T_ins_plot, z_ins_plot, linewidth=2, color=:black)
+        end
+
     catch e
         println("Error computing $name: $e")
     end
 end
 
 # Set axis limits
-# ylims!(ax1, (maximum(z_plot), 0))
-# ylims!(ax2, (maximum(z_plot), 0))
 xlims!(ax1, low = 0)
-xlims!(ax2, (0, 1000 + 50))
+xlims!(ax2, (0, ustrip(u"°C", Tbot) + 50))
+xlims!(ax_inset_env, low = 0)
+xlims!(ax_inset_T, (0, 1000))
+ylims!(ax1, (ustrip(u"km", Thickness_total), 0))
+ylims!(ax2, (ustrip(u"km", Thickness_total), 0))
+ylims!(ax_inset_env, (ustrip(u"km", Thickness_total), 0))
+ylims!(ax_inset_T, (ustrip(u"km", Thickness_total), 0))
 
 # Add legend
-Legend(fig[2, 1:1], ax1, framevisible=true, nbanks=2,
-    tellwidth=false, tellheight=true)
-
-# Add text box with parameters
-text_str = """
-Fixed Parameters:
-• Cohesion: C = $(C)
-• Friction angle: φ = $(ϕ)°
-• Strain rate: ε = $(ε)
-• Temperature gradient: 0-$(Tbot)
-"""
-
-Label(fig[0, 1:2], text_str,
-    tellwidth=false,
-    fontsize=12,
-    halign=:left,
-    padding=(10, 10, 5, 5))
+Legend(fig[2, 1:2], ax1, framevisible=true, nbanks=2,
+    # tellwidth=false, tellheight=true, labelsize=12, markerwidth=20, markerheight=10, padding=(10, 10, 10, 10))
+    tellwidth=false, tellheight=true,orientation = :horizontal, fontsize = 24, "Dislocation Creep Laws", titleposition = :top, titlesize = 24, labelsize = 20)
 
 println("\nPlot created successfully!")
 println("Saving figure...")
@@ -204,9 +244,9 @@ println("Saving figure...")
 # Save figure
 # save("strength_envelope_comparison_magma.png", fig, px_per_unit=2)
 # save("strength_envelope_comparison_magma.svg", fig, px_per_unit=2)
-save("strength_envelope_comparison_lithosphere.png", fig, px_per_unit=2)
-save("strength_envelope_comparison_lithosphere.svg", fig, px_per_unit=2)
-
+save("./SmallScaleCaldera/Post_processing/Strength_Envelope_plot.png", fig, px_per_unit=2)
+save("./SmallScaleCaldera/Post_processing/Strength_Envelope_plot.svg", fig, px_per_unit=2)
+save("./SmallScaleCaldera/Post_processing/Strength_Envelope_plot.pdf", fig)
 
 # Display figure
 display(fig)
