@@ -84,7 +84,9 @@ for angle in friction_angles_unique
             if any(valid)
 
                 ref_mask = x_vals[valid] .≈ 0.68
-                if any(.!ref_mask)
+                upper_mask = x_vals[valid] .≈  1.7
+                transition = x_vals[valid] .≈ 0.95
+                if any(.!ref_mask) && any(.!upper_mask) && any(.!transition)
                     scatter!(ax, x_vals[valid][.!ref_mask], y_vals[valid][.!ref_mask];
                         color = friction_colors[j],
                         markersize = 18,
@@ -99,9 +101,29 @@ for angle in friction_angles_unique
                         color = :grey,
                         markersize = 20,
                         marker = :star4,
-                        strokecolor = :grey,
-                        strokewidth = 2,
-                        label = "Reference model"
+                        strokecolor = :white,
+                        strokewidth = 0.5,
+                        label = "Reference model\nType 1"
+                    )
+                end
+                if any(transition)
+                    scatter!(ax, x_vals[valid][transition], y_vals[valid][transition];
+                        color = :orange,
+                        markersize = 20,
+                        marker = :star6,
+                        strokecolor = :white,
+                        strokewidth = 0.5,
+                        label = "Transition"
+                    )
+                end
+                if any(upper_mask)
+                    scatter!(ax, x_vals[valid][upper_mask], y_vals[valid][upper_mask];
+                        color = :purple,
+                        markersize = 20,
+                        marker = :star5,
+                        strokecolor = :white,
+                        strokewidth = 0.5,
+                        label = "Type 2"
                     )
                 end
             end

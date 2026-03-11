@@ -81,7 +81,7 @@ z_vec_custom = range(0.0u"km", Thickness_total, length=length(Temp_custom))
 ε = 10^(-15) / u"s"  # Strain rate
 # Define different rheologies to compare
 creep_laws = [
-    ("Granite (Carter 1987)ᵃ", Dislocation.granite_Carter_1987),
+    ("Westerly Granite (Hansen & Carter 1983)ᵃ", Dislocation.granite_Carter_1987),
     ("Quartz Diorite (Hansen & Carter 1982)ᵇ", Dislocation.quartz_diorite_HansenCarter_1982),
     ("Diabase (Caristan 1982)ᶜ", Dislocation.diabase_Caristan_1982),
     ("Wet Quartzite (Ueda 2008)ᵈ", Dislocation.wet_quartzite_Ueda_2008),
@@ -234,7 +234,7 @@ ylims!(ax_inset_env, (ustrip(u"km", Thickness_total), 0))
 ylims!(ax_inset_T, (ustrip(u"km", Thickness_total), 0))
 
 # Add legend
-Legend(fig[2, 1:2], ax1, framevisible=true, nbanks=2,
+Legend(fig[2, 1:2], ax1, framevisible=true, nbanks=3,
     # tellwidth=false, tellheight=true, labelsize=12, markerwidth=20, markerheight=10, padding=(10, 10, 10, 10))
     tellwidth=false, tellheight=true,orientation = :horizontal, fontsize = 24, "Dislocation Creep Laws", titleposition = :top, titlesize = 24, labelsize = 20)
 
