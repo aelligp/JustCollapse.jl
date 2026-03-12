@@ -39,7 +39,7 @@ all_angles = [15.0, 20.0, 25.0, 30.0]
 
 fig = Figure(size = (1200, 900))
 ax = Axis(fig[1, 1];
-    ylabel = "Underpressure ΔP [MPa]",
+    ylabel = "Underpressure [MPa]",
     xticks = [0.3, collect(0.5:0.5:2.5)...],
     xminorticks = 0.0:0.1:2.5,
     xticklabelsize = 18,
@@ -50,7 +50,7 @@ ax = Axis(fig[1, 1];
 
 ax2 = Axis(fig[2, 1];
     xlabel = "Roof ratio R = Depth/Width",
-    ylabel = "Underpressure ΔP [MPa]",
+    ylabel = "Underpressure [MPa]",
     xticks = [0.3, collect(0.5:0.5:2.5)...],
     xminorticks = 0.0:0.1:2.5,
     xticklabelsize = 18,
@@ -95,14 +95,14 @@ for (i, phi) in enumerate(all_angles)
 
 
     mask = (friction_angle[1:265] .== phi) #.& (tectonic_setting .== 0.0)
-    s1 = scatter!(ax, roof_ratio_chamber[1:265][mask], abs.(underpressure_MPa[1:265][mask]); color = :black, alpha = 0.2, marker = markers[i], markersize = 8, label = "Models")
+    s1 = scatter!(ax, roof_ratio_chamber[1:265][mask], -(underpressure_MPa[1:265][mask]); color = :black, alpha = 0.2, marker = markers[i], markersize = 8, label = "Models")
 
     mask1 = (friction_angle[1:265] .== phi) .& (tectonic_setting[1:265] .== 0.0)
-    s2 = scatter!(ax2, roof_ratio_chamber[1:265][mask1], abs.(underpressure_MPa[1:265][mask1]); color = :black, alpha = 1.0, marker = markers[i], markersize = 8, label = "Models")
+    s2 = scatter!(ax2, roof_ratio_chamber[1:265][mask1], -(underpressure_MPa[1:265][mask1]); color = :black, alpha = 1.0, marker = markers[i], markersize = 8, label = "Models")
 
     mask_variations = (friction_angle[266:end] .== phi) .& (tectonic_setting[266:end] .== 0.0)
-    s3 = scatter!(ax, roof_ratio_chamber[266:end][mask_variations], abs.(underpressure_MPa[266:end][mask_variations]); color = :blue, alpha = 0.3, marker = :star6, markersize = 8, label = "Ref model Variations")
-    s3 = scatter!(ax2, roof_ratio_chamber[266:end][mask_variations], abs.(underpressure_MPa[266:end][mask_variations]); color = :blue, alpha = 1.0, marker = :star6, markersize = 8, label = "Ref model Variations")
+    s3 = scatter!(ax, roof_ratio_chamber[266:end][mask_variations], -(underpressure_MPa[266:end][mask_variations]); color = :blue, alpha = 0.3, marker = :star6, markersize = 8, label = "Ref model Variations")
+    s3 = scatter!(ax2, roof_ratio_chamber[266:end][mask_variations], -(underpressure_MPa[266:end][mask_variations]); color = :blue, alpha = 1.0, marker = :star6, markersize = 8, label = "Ref model Variations")
 
     if i == 4 && phi == 30.0
         sc1 = scatter!(ax, [2.0], [(166 + 205)/2], color = cmap[1], markersize = 20, marker = :star5, label = "Katmai")
