@@ -70,7 +70,7 @@ friction_colors = cmap[1:3:8]
 marker_shapes = [:circle, :rect, :diamond]
 tectonic_settings_unique = [0.0, 1e-15, -1e-15]
 friction_angles_unique = [15.0, 20.0, 25.0, 30.0]
-setting_label = ["0.0", "Extension", "Compression"]
+setting_label = ["No Boundary\nCondition", "Extension", "Compression"]
 
 for angle in friction_angles_unique
     for (j, setting) in enumerate(tectonic_settings_unique)
