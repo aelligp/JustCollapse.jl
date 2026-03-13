@@ -81,21 +81,11 @@ for angle in friction_angles_unique
             y_vals = abs.(underpressure_MPa[mask])
             valid = .!ismissing.(y_vals) .&& .!ismissing.(x_vals)
 
-            if any(valid)
+            ref_mask = x_vals[valid] .≈ 0.68
+            upper_mask = x_vals[valid] .≈  1.7
+            transition = x_vals[valid] .≈ 0.95
 
-                ref_mask = x_vals[valid] .≈ 0.68
-                upper_mask = x_vals[valid] .≈  1.7
-                transition = x_vals[valid] .≈ 0.95
-                if any(.!ref_mask) && any(.!upper_mask) && any(.!transition)
-                    scatter!(ax, x_vals[valid][.!ref_mask], y_vals[valid][.!ref_mask];
-                        color = friction_colors[j],
-                        markersize = 18,
-                        marker = marker_shapes[j],
-                        strokecolor = :white,
-                        strokewidth = 0.5,
-                        label = "$(setting_label[j])"
-                    )
-                end
+            if any(valid)
                 if any(ref_mask)
                     scatter!(ax, x_vals[valid][ref_mask], y_vals[valid][ref_mask];
                         color = :grey,
@@ -104,16 +94,6 @@ for angle in friction_angles_unique
                         strokecolor = :white,
                         strokewidth = 0.5,
                         label = "Reference model\nType 1"
-                    )
-                end
-                if any(transition)
-                    scatter!(ax, x_vals[valid][transition], y_vals[valid][transition];
-                        color = :orange,
-                        markersize = 20,
-                        marker = :star6,
-                        strokecolor = :white,
-                        strokewidth = 0.5,
-                        label = "Transition"
                     )
                 end
                 if any(upper_mask)
@@ -126,8 +106,70 @@ for angle in friction_angles_unique
                         label = "Type 2"
                     )
                 end
+                if any(transition)
+                    scatter!(ax, x_vals[valid][transition], y_vals[valid][transition];
+                        color = :orange,
+                        markersize = 20,
+                        marker = :star6,
+                        strokecolor = :white,
+                        strokewidth = 0.5,
+                        label = "Transition"
+                    )
+                end
+                if any(.!ref_mask) && any(.!upper_mask) && any(.!transition)
+                    scatter!(ax, x_vals[valid][.!ref_mask], y_vals[valid][.!ref_mask];
+                    color = friction_colors[j],
+                    markersize = 18,
+                    marker = marker_shapes[j],
+                    strokecolor = :white,
+                    strokewidth = 0.5,
+                    label = "$(setting_label[j])"
+                    )
+                end
             end
+        end
+        if any(mask)
 
+            x_vals = roof_ratio_chamber[mask]
+            y_vals = abs.(underpressure_MPa[mask])
+            valid = .!ismissing.(y_vals) .&& .!ismissing.(x_vals)
+
+            ref_mask = x_vals[valid] .≈ 0.68
+            upper_mask = x_vals[valid] .≈  1.7
+            transition = x_vals[valid] .≈ 0.95
+
+            if any(valid)
+                if any(ref_mask)
+                scatter!(ax, x_vals[valid][ref_mask], y_vals[valid][ref_mask];
+                    color = :grey,
+                    markersize = 20,
+                    marker = :star4,
+                    strokecolor = :white,
+                    strokewidth = 0.5,
+                    label = "Reference model\nType 1"
+                )
+                end
+                if any(upper_mask)
+                scatter!(ax, x_vals[valid][upper_mask], y_vals[valid][upper_mask];
+                    color = :purple,
+                    markersize = 20,
+                    marker = :star5,
+                    strokecolor = :white,
+                    strokewidth = 0.5,
+                    label = "Type 2"
+                )
+                end
+                if any(transition)
+                scatter!(ax, x_vals[valid][transition], y_vals[valid][transition];
+                    color = :orange,
+                    markersize = 20,
+                    marker = :star6,
+                    strokecolor = :white,
+                    strokewidth = 0.5,
+                    label = "Transition"
+                )
+                end
+            end
         end
     end
 end
