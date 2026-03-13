@@ -52,9 +52,9 @@ for (i_idx, i) in enumerate(models), (j_idx, j) in enumerate(melt_fractions)
         xticklabelsize = 20,
     )
 
-    ln0 = lines!(ax_i , overpressure_time, overpressure_03./1e6, color=(:black, j == 3 ? 1.0 : 0.3), linewidth = 3, label="30% melt fraction")
-    ln2 = !isnothing(overpressure_04) ? lines!(ax_i , overpressure_time, overpressure_04./1e6, color=(:blue, j == 4 ? 1.0 : 0.3), linewidth = 3, label = "40% melt fraction") : nothing
-    ln3 = !isnothing(overpressure_05) ? lines!(ax_i , overpressure_time, overpressure_05./1e6, color=(:green, j == 5 ? 1.0 : 0.3), linewidth = 3, label = "50% melt fraction") : nothing
+    ln0 = lines!(ax_i , overpressure_time, overpressure_03./1e6, color=(:black, j == 3 ? 1.0 : 0.3), linewidth = 3, label="ϕ = 30%")
+    ln2 = !isnothing(overpressure_04) ? lines!(ax_i , overpressure_time, overpressure_04./1e6, color=(:blue, j == 4 ? 1.0 : 0.3), linewidth = 3, label = "ϕ = 40%") : nothing
+    ln3 = !isnothing(overpressure_05) ? lines!(ax_i , overpressure_time, overpressure_05./1e6, color=(:green, j == 5 ? 1.0 : 0.3), linewidth = 3, label = "ϕ = 50%") : nothing
     xlims!(ax_i, 0, maximum(overpressure_time) + 15)
 
     panel_label = string(Char('a' + (i_idx - 1) * 3 + (j_idx - 1)))
@@ -62,13 +62,13 @@ for (i_idx, i) in enumerate(models), (j_idx, j) in enumerate(melt_fractions)
     hidedecorations!(inset_ax); hidespines!(inset_ax)
     text!(inset_ax, 0.5, 0.5, text = panel_label, space = :relative, align = (:center, :center), fontsize = 18, color = :black)
     !isnothing(overpressure_05) ? println("Minimum and maximum overpressure for model $(i) and melt fraction $(j): \n ", minimum(overpressure_05)/1e6, " MPa, ", maximum(overpressure_03)/1e6, " MPa") : nothing
-    (i_idx == 3 && j_idx == 3) ? fig[4, 1:3] = Legend(fig, [ln0, ln2, ln3], ["30% melt fraction", "40% melt fraction", "50% melt fraction"], orientation = :horizontal, fontsize = 24, "Eruption triggered at", titleposition = :top, titlesize = 24, labelsize = 20) : nothing
+    (i_idx == 3 && j_idx == 3) ? fig[4, 1:3] = Legend(fig, [ln0, ln2, ln3], ["ϕ = 30%", "ϕ = 40%", "ϕ = 50%"], orientation = :horizontal, fontsize = 24, "Eruption triggered at", titleposition = :top, titlesize = 24, labelsize = 20) : nothing
 end
 for (i, label) in enumerate(["Ref", "Lower end-member", "Upper end-member"])
     Box(fig[i, 4], color = :gray90)
     Label(fig[i, 4], label, rotation = pi/2, tellheight = false, fontsize = 18, color = :black)
 end
-for (j, label) in enumerate(["30%", "40%", "50%"])
+for (j, label) in enumerate(["ϕ = 30%", "ϕ = 40%", "ϕ = 50%"])
     Box(fig[0, j], color = :gray90)
     Label(fig[0, j], label, tellwidth = false, fontsize = 18, color = :black)
 end
