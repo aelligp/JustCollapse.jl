@@ -181,9 +181,9 @@ c_up   = _cmap[round(Int, 0.90 * _n)]
 vlines!(ax, 0.7,  color = :black, linestyle = :dash)
 vlines!(ax, 1.1,  color = :black, linestyle = :dash)
 
-text!(ax, 0.35,  185; text = "Downward\npropagating", color = :black, fontsize = 24, align = (:center, :top))
+text!(ax, 0.35,  185; text = "Downwards\npropagating", color = :black, fontsize = 24, align = (:center, :top))
 text!(ax, 0.9,   185; text = "Transition", color = :black,fontsize = 24, align = (:center, :top))
-text!(ax, 1.675, 185; text = "Upward\npropagating", color = :black, fontsize = 24, align = (:center, :top))
+text!(ax, 1.675, 185; text = "Upwards\npropagating", color = :black, fontsize = 24, align = (:center, :top))
 xlims!(ax, 0.0, 2.25)
 ylims!(ax, 0, 200)
 axislegend(ax, position = :rb, merge = true, unique = true, fontsize = 22, labelsize = 22)

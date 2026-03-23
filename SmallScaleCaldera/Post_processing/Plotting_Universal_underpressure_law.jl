@@ -36,9 +36,14 @@ tau_DP_eff_total(H_km, phi) = C_rock * cosd(phi) + (ρ * g * H_km * 1e3) / 1e6 *
 Roof_ratio_lines = collect(LinRange(0.1, 3.25, length(total_radius)))
 
 all_angles = [15.0, 20.0, 25.0, 30.0]
+
+analytical_solution = false
+
 let
-fig = Figure(size = (1200, 900))
+analytical_solution == false ? fig = Figure(size = (1200, 600)) : fig = Figure(size = (1200, 900))
+xlab = (analytical_solution == false ? "Roof ratio of chamber (depth / width)" : nothing)
 ax = Axis(fig[1, 1];
+    xlabel = analytical_solution == false ? "Roof ratio of chamber (depth / width)" : "",
     ylabel = "Underpressure [MPa]",
     xticks = [0.3, collect(0.5:0.5:2.5)...],
     xminorticks = 0.0:0.1:2.5,
@@ -48,7 +53,7 @@ ax = Axis(fig[1, 1];
     ylabelsize = 22,
 )
 
-ax2 = Axis(fig[2, 1];
+analytical_solution == true ? (ax2 = Axis(fig[2, 1];
     xlabel = "Roof ratio R = Depth/Width",
     ylabel = "Underpressure [MPa]",
     xticks = [0.3, collect(0.5:0.5:2.5)...],
@@ -57,7 +62,7 @@ ax2 = Axis(fig[2, 1];
     yticklabelsize = 18,
     xlabelsize = 22,
     ylabelsize = 22,
-)
+)) : nothing
 cmap = CairoMakie.categorical_colors(:lipari10, 10)
 markers = [:circle, :rect, :diamond, :utriangle]
 
@@ -82,7 +87,7 @@ for (i, phi) in enumerate(all_angles)
         color = cline, linestyle = :solid, linewidth = 3,
         label = "Universal Fit - this study (H = 5.8 km)"
     )
-
+    if analytical_solution == true
     ln2 = lines!(ax2, Roof_ratio_lines, scaling_law_bower;
         color = (:black, 0.5), linestyle = :dot, linewidth = 2,
         label = "Analytical Solution: Hollow Sphere"
@@ -92,20 +97,20 @@ for (i, phi) in enumerate(all_angles)
         color = (:black, 0.5), linestyle = :dashdot, linewidth = 2,
         label = "Analytical Solution: Cylinder"
     )
-
+    end
 
     mask = (friction_angle[1:252] .== phi) #.& (tectonic_setting .== 0.0)
-    s1 = scatter!(ax, roof_ratio_chamber[1:252][mask], -(underpressure_MPa[1:252][mask]); color = :black, alpha = 0.2, marker = markers[i], markersize = 8, label = "Models")
+    s1 = scatter!(ax, roof_ratio_chamber[1:252][mask], -(underpressure_MPa[1:252][mask]); color = :black, alpha = 0.3, marker = markers[i], markersize = 10, label = "Models")
+    s5 = scatter!(ax, roof_ratio_chamber[325:end], -(underpressure_MPa[325:end]); color = :orange, alpha = 0.4, marker = :star6, markersize =  10, label = "Creep law variations")
+    mask_variations = (friction_angle[253:324] .== phi) .& (tectonic_setting[253:324] .== 0.0)
+    s3 = scatter!(ax, roof_ratio_chamber[253:324][mask_variations], -(underpressure_MPa[253:324][mask_variations]); color = :blue, alpha = 0.4, marker = :star6, markersize = 10, label = "Ref model Variations")
 
+    if analytical_solution == true
     mask1 = (friction_angle[1:252] .== phi) .& (tectonic_setting[1:252] .== 0.0)
     s2 = scatter!(ax2, roof_ratio_chamber[1:252][mask1], -(underpressure_MPa[1:252][mask1]); color = :black, alpha = 1.0, marker = markers[i], markersize = 8, label = "Models")
-
-    s5 = scatter!(ax, roof_ratio_chamber[325:end], -(underpressure_MPa[325:end]); color = :orange, alpha = 0.3, marker = :star6, markersize = 8, label = "Creep law variations")
-    s6 = scatter!(ax2, roof_ratio_chamber[325:end], -(underpressure_MPa[325:end]); color = :orange, alpha = 1.0, marker = :star6, markersize = 8, label = "Creep law variations")
-
-    mask_variations = (friction_angle[253:324] .== phi) .& (tectonic_setting[253:324] .== 0.0)
-    s3 = scatter!(ax, roof_ratio_chamber[253:324][mask_variations], -(underpressure_MPa[253:324][mask_variations]); color = :blue, alpha = 0.3, marker = :star6, markersize = 8, label = "Ref model Variations")
     s4 = scatter!(ax2, roof_ratio_chamber[253:324][mask_variations], -(underpressure_MPa[253:324][mask_variations]); color = :blue, alpha = 1.0, marker = :star6, markersize = 8, label = "Ref model Variations")
+    s6 = scatter!(ax2, roof_ratio_chamber[325:end], -(underpressure_MPa[325:end]); color = :orange, alpha = 1.0, marker = :star6, markersize = 8, label = "Creep law variations")
+    end
 
     if i == 4 && phi == 30.0
         sc1 = scatter!(ax, [2.0], [(166 + 205)/2], color = cmap[1], markersize = 20, marker = :star5, label = "Katmai")
@@ -130,28 +135,49 @@ for (i, phi) in enumerate(all_angles)
         katmai      = MarkerElement(color = cmap[1], marker = :star5, markersize = 18)
         pinatuno    = MarkerElement(color = cmap[3], marker = :star5, markersize = 18)
         fernandina  = MarkerElement(color = cmap[6], marker = :star5, markersize = 18)
-        fig[3, 1]   = Legend(fig,
+        if analytical_solution == true
+            fig[3, 1]   = Legend(fig,
             [range, scaling, sphere, cylinder, models...,
             ref_var, creep_laws, katmai, pinatuno, fernandina],
-            ["Range for Depth=5.6-9.45 km", "Universal Fit", "Hollow Sphere (A = 2)", "Cylinder (A = 2/√3)", "30° Models", "25° Models", "20° Models", "15° Models",
-            "Ref model variations", "Creep law lariations", "Katmai", "Pinatubo", "Fernandina"],
+            ["Range for Depth=5.6-9.45 km", rich("Universal Fit (A = 1.84, B = 2", CairoMakie.superscript("3.2"), ")"), "Hollow Sphere (A = 2)", "Cylinder (A = 2/√3)", "ϕ = 30°", "ϕ = 25°", "ϕ = 20°", "ϕ = 15°",
+            "Ref model variations", "Creep law variations", "Katmai", "Pinatubo", "Fernandina"],
             tellheight = true, tellwidth = false,
             orientation = :horizontal, nbanks = 4, fontsize = 22, labelsize = 22
         )
+        else
+            fig[2, 1]   = Legend(fig,
+            [range, scaling, models..., ref_var, creep_laws, katmai, pinatuno, fernandina],
+            ["Range for Depth=5.6-9.45 km", rich("Universal Fit (A = 1.84, B = 2", CairoMakie.superscript("3.2"), ")"), "ϕ = 30°", "ϕ = 25°", "ϕ = 20°", "ϕ = 15°",
+            "Ref model variations", "Creep law variations", "Katmai", "Pinatubo", "Fernandina"],
+            tellheight = true, tellwidth = false,
+            orientation = :horizontal, nbanks = 2, fontsize = 22, labelsize = 22
+            )
+        end
     end
 
-end
 
+end
 ylims!(ax, -50, 325)
 xlims!(ax, 0.0, 3.25)
-xlims!(ax2, 0.0, 3.25)
+text!(ax, 0.752, -4;  text = L"P_\textrm{under} = (A \ln(BR) \cdot [C \ \cos(\phi) + \bar{P} \ \sin(\phi)]", color = :black, fontsize = 30)
 
-text!(ax, 0.752, -5;  text = L"P_\textrm{under} = (1.84 \ln(R) + 3.2\ln(2)) \cdot [C \ \cos(\phi) + \bar{P} \ \sin(\phi)]", color = :black, fontsize = 24)
+if analytical_solution == true
+    panel_label = "a"
+    inset_ax = Axis(fig[1,1], width = Relative(0.03), height = Relative(0.1), halign = :left, valign = :top, backgroundcolor = :gray90)
+    hidedecorations!(inset_ax); hidespines!(inset_ax)
+    text!(inset_ax, 0.5, 0.5, text = panel_label, space = :relative, align = (:center, :center), fontsize = 20, color = :black)
 
-text!(ax2, 0.752, -5;  text = L"P_\textrm{under} = A \cdot \ln(1 + 2R) \cdot [C \ \cos(\phi) + \bar{P} \ \sin(\phi)]", color = :black, fontsize = 24)
+    panel_label = "b"
+    inset_ax = Axis(fig[2,1], width = Relative(0.03), height = Relative(0.1), halign = :left, valign = :top, backgroundcolor = :gray90)
+    hidedecorations!(inset_ax); hidespines!(inset_ax)
+    text!(inset_ax, 0.5, 0.5, text = panel_label, space = :relative, align = (:center, :center), fontsize = 20, color = :black)
+    xlims!(ax2, 0.0, 3.25)
+    text!(ax2, 0.752, -5;  text = L"P_\textrm{under} = A \cdot \ln(1 + 2R) \cdot [C \ \cos(\phi) + \bar{P} \ \sin(\phi)]", color = :black, fontsize = 24)
+end
+
 display(fig)
 
-save("./SmallScaleCaldera/Post_processing/Underpressure_scaling_law.png", fig)
-save("./SmallScaleCaldera/Post_processing/Underpressure_scaling_law.pdf", fig)
-save("./SmallScaleCaldera/Post_processing/Underpressure_scaling_law.svg", fig)
+save("./SmallScaleCaldera/Post_processing/Underpressure_scaling_law_no_analytical_solution.png", fig)
+save("./SmallScaleCaldera/Post_processing/Underpressure_scaling_law_no_analytical_solution.pdf", fig)
+save("./SmallScaleCaldera/Post_processing/Underpressure_scaling_law_no_analytical_solution.svg", fig)
 end

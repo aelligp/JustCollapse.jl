@@ -70,7 +70,7 @@ ax = Axis(f[1, 1],
     yticks = -80:10:35
     )
 ax1= Axis(f[1, 1],
-    ylabel = "Injection and Eruption volume",
+    ylabel = "Injection and eruption volume [km³]",
     yaxisposition = :right,
     yticklabelcolor = :purple,
     ylabelsize = 24,
@@ -106,7 +106,7 @@ ln1 = lines!(ax, t_final, p_final, color=:black, label="Pressure evolution")
 
 
 # Plot the secondary line (Capture the object in ln2)
-ln2 = lines!(ax1, overpressure_time, (Q_strain_rate./1e9), color=:purple, label="Injection and Eruption volume", linestyle = :dash)
+ln2 = lines!(ax1, overpressure_time, (Q_strain_rate./1e9), color=:purple, label="Injection and eruption volume [km³]", linestyle = :dash)
 
 
 # 2. Add the cross at the critical timestep (Capture the object in sc1)
