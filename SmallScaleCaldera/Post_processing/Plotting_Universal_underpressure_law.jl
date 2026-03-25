@@ -159,7 +159,7 @@ for (i, phi) in enumerate(all_angles)
 end
 ylims!(ax, -50, 325)
 xlims!(ax, 0.0, 3.25)
-text!(ax, 0.752, -4;  text = L"P_\textrm{under} = (A \ln(BR) \cdot [C \ \cos(\phi) + \bar{P} \ \sin(\phi)]", color = :black, fontsize = 30)
+text!(ax, 0.752, -4;  text = L"P_\textrm{under} = A \cdot \ln(BR) \cdot [C \ \cos(\phi) + \bar{P} \ \sin(\phi)]", color = :black, fontsize = 30)
 
 if analytical_solution == true
     panel_label = "a"
