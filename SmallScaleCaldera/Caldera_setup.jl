@@ -12,6 +12,7 @@ function setup2D(
         chamber_depth = 5.0e0,
         chamber_radius = 1.75e0,
         aspect_x = 2.5,
+        thermal_age = 20
     )
 
     Lx = Ly = dimensions[1]
@@ -22,7 +23,6 @@ function setup2D(
 
     # Allocate Phase and Temp arrays
     air_phase = layers + 6
-    # Phases = fill(6, nx, 2, nz);
     Phases = fill(air_phase, nx, 2, nz)
     Temp = fill(0.0, nx, 2, nz)
     Temp_bg = fill(0.0, nx, 2, nz)
@@ -33,7 +33,7 @@ function setup2D(
         ylim = (minimum(Grid.y.val), maximum(Grid.y.val)),
         zlim = (minimum(Grid.z.val), 0.0),
         phase = LithosphericPhases(Layers = [chamber_depth], Phases = [1, 2]),
-        T = HalfspaceCoolingTemp(Age = 20)
+        T = HalfspaceCoolingTemp(Age = thermal_age)
     )
 
     add_stripes!(Phases, Grid;
@@ -57,7 +57,7 @@ function setup2D(
                 base = 0.0,
                 background = nothing,
                 # T               = HalfspaceCoolingTemp(Age=20)
-                T = i == 1 ? HalfspaceCoolingTemp(Age = 20) : nothing,
+                T = i == 1 ? HalfspaceCoolingTemp(Age = thermal_age) : nothing,
             )
         end
     end
@@ -80,17 +80,6 @@ function setup2D(
         T = ConstantTemp(T = chamber_T)
     )
 
-    # if chimney
-    #     add_cylinder!(
-    #         Phases, Temp, Grid;
-    #         base = (mean(Grid.x.val), 0, -(chamber_depth - chamber_radius)),
-    #         cap = (mean(Grid.x.val), 0, flat ? 0.0e0 : volcano_size[1]),
-    #         radius = conduit_radius,
-    #         phase = ConstantPhase(layers + 6),
-    #         # T      = ConstantTemp(T=chamber_T),
-    #     )
-    # end
-
     Grid = addfield(Grid, (; Phases, Temp))
     li = (abs(last(x) - first(x)), abs(last(z) - first(z))) .* 1.0e3
     origin = (x[1], z[1]) .* 1.0e3
@@ -100,7 +89,7 @@ function setup2D(
     T_bg = Temp_bg[:, 1, :] .+ 273
     V_total = (4 / 3 * π * (chamber_radius * aspect_x) * chamber_radius * (chamber_radius * aspect_x)) * 1.0e9
     V_eruptible = (4 / 3 * π * (chamber_radius / 1.25) * aspect_x * (chamber_radius / 2) * ((chamber_radius / 1.25) * aspect_x)) * 1.0e9
-    R = ((chamber_depth - chamber_radius)) / (chamber_radius * aspect_x)
+    R = ((chamber_depth - chamber_radius) + volcano_size[1] -0.2) / (2* chamber_radius * aspect_x)
     chamber_diameter = 2 * (chamber_radius * aspect_x)
     chamber_erupt = 2 * ((chamber_radius / 1.25) * aspect_x)
     printstyled("Magma volume of the initial chamber:$(round(ustrip.(uconvert(u"km^3", (V_total)u"m^3")); digits = 5)) km³ \n"; bold = true, color = :red, blink = true)

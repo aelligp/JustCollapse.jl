@@ -1,14 +1,12 @@
 using GeoParams.Dislocation
 using Random
 
-function init_rheologies(layers, oxd_wt, fric_angle; CharDim = nothing, linear = false, incompressible = true, plastic = true, magma = false, softening_C=true, softening_ϕ=false)
+function init_rheologies(layers, oxd_wt, fric_angle; CharDim = nothing, linear = false, incompressible = true, plastic = true, magma = false, softening_C=true, softening_ϕ=false, disl_law = Dislocation.granite_Carter_1987)
 
-    η_reg = 1.0e15
+    η_reg = 1.0e18
     C = plastic ? 10.0e6 : Inf
     ϕ = fric_angle
     Ψ = 0.0
-    # soft_C = NonLinearSoftening(; ξ₀ = C, Δ = C / 2, σ = 0.001)       # nonlinear softening law
-    # soft_ϕ = NonLinearSoftening(; ξ₀ = ϕ, Δ = ϕ / 2, σ = 0.001)       # nonlinear softening law
     soft_C = softening_C ? LinearSoftening(C/2, C, 0.0, 0.5) : NoSoftening()       # nonlinear softening law
     soft_ϕ = softening_ϕ ? LinearSoftening(fric_angle/2, fric_angle, 0.0, 0.5) : NoSoftening()       # nonlinear softening law
     pl = DruckerPrager_regularised(; C = C, ϕ = ϕ, η_vp = (η_reg), Ψ = Ψ, softening_C = soft_C, softening_ϕ = soft_ϕ)
@@ -29,13 +27,11 @@ function init_rheologies(layers, oxd_wt, fric_angle; CharDim = nothing, linear =
     Cp = 1050.0
 
     magma_visc = magma ? ViscosityPartialMelt_Costa_etal_2009(η = GiordanoMeltViscosity(oxd_wt = oxd_wt, η0 = 1.0Pas)) : LinearViscous(η = 1.0e15)
-    # melting = MeltingParam_Assimilation(T_s = (725+273)K, T_l= (1140+273)K)
     melting = SmoothMelting(; p=MeltingParam_5thOrder(a = 2.08326e-12 / K^5, b= -1.239504e-8 / K^4, T_s = 983K, T_l=1351K), k_sol= 0.3/K,  k_liq=  0.031/K)
 
     #dislocation laws
-    disl_top = linear ? LinearViscous(η = 1.0e23) : SetDislocationCreep(Dislocation.granite_Carter_1987)
-
-    disl_bot = linear ? LinearViscous(η = 1.0e21) : SetDislocationCreep(Dislocation.granite_Carter_1987)
+    disl_top = linear ? LinearViscous(η = 1.0e23) : SetDislocationCreep(disl_law)
+    disl_bot = linear ? LinearViscous(η = 1.0e21) : SetDislocationCreep(disl_law)
 
 
     # Define the Volcano cone rheology
@@ -231,25 +227,3 @@ end
 
     return nothing
 end
-
-
-## old conduit rheology:
-# # Name              = "Conduit",
-# SetMaterialParams(;
-#     Phase             = Int64(layers+5),
-#     # Density           = BubbleFlow_Density(ρgas=ConstantDensity(ρ=10.0), ρmelt=MeltDependent_Density(ρsolid=T_Density(ρ0=2.65e3, T0=273.15), ρmelt=T_Density(ρ0=2.4e3, T0=273.15)), c0=4e-2),
-#     # # Density           = BubbleFlow_Density(ρgas=ConstantDensity(ρ=10.0), ρmelt=ConstantDensity(ρ=2.4e3), c0=4e-2),
-#     # # Density           = T_Density(; ρ0=1.5e3, T0=273.15),
-#     # Conductivity      = ConstantConductivity(; k  = 3.0),
-#     # # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity()),
-#     # HeatCapacity      = Latent_HeatCapacity(Cp=ConstantHeatCapacity(), Q_L=350e3J/kg),
-#     # LatentHeat        = ConstantLatentHeat(Q_L=350e3J/kg),
-#     # CompositeRheology = CompositeRheology((conduit_visc, el_magma,)),
-#     # Melting           = MeltingParam_Smooth3rdOrder(a=3043.0,b=-10552.0,c=12204.9,d=-4709.0), #felsic melting curve
-#     Density           = PT_Density(; ρ0=2.7e3, T0=273.15, β=β),
-#     HeatCapacity      = ConstantHeatCapacity(; Cp = Cp),
-#     Conductivity      = ConstantConductivity(; k  = 3.0),
-#     CompositeRheology = CompositeRheology( (disl_top, el, pl)),
-#     # CompositeRheology = CompositeRheology( (LinearViscous(; η=1e23), el, pl)),
-# Melting = MeltingParam_Smooth3rdOrder(a = 3043.0, b = -10552.0, c = 12204.9, d = -4709.0), #felsic melting curve
-#     ),
