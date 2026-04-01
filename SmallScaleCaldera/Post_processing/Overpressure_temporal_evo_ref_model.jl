@@ -4,8 +4,6 @@ using JLD2, Statistics
 using JustRelax, JustRelax.JustRelax2D
 
 model = jldopen("/Users/pascalaellig/Documents/PhD/JustCollapse.jl/Systematics/Reference_models_local/ReRun_Caldera2D_2026-02-02_granite_d_5.0_r_1.75_ar_2.5_ex_0.0_phi_30.0/checkpoint/checkpoint0000.jld2")
-# model = jldopen("/Volumes/Pascal/Caldera_Systematics/SmallCaldera_Systematics/No_extension/Caldera2D_2025-12-05_granite_d_5.0_r_1.75_ar_2.5_ex_0.0_phi_25.0/checkpoint/checkpoint0000.jld2")
-# model = jldopen("/Users/pascalaellig/Documents/PhD/ScienceProjects/SmallScaleCollapse/Figures/04_mf_overpressure_checkpoint0000.jld2")
 
 overpressure = model["overpressure"]
 overpressure_04 = haskey(model, "overpressure_04") ? model["overpressure_04"] : nothing
@@ -18,8 +16,7 @@ Q = haskey(model, "Q") ? model["Q"] : nothing
 
 Volume = model["Volume"]
 volume_times = model["volume_times"]
-# Critical_timestep = 160
-Critical_timestep = 145
+Critical_timestep = 160
 overpressure_time[Critical_timestep]
 overpressure[Critical_timestep]
 Critical_undepressure_MPa = round(overpressure[Critical_timestep]/1e6;digits=3)
@@ -67,7 +64,9 @@ ax = Axis(f[1, 1],
     xlabelsize = 24,
     yticklabelsize = 20,
     xticklabelsize = 20,
-    yticks = -80:10:35
+    yticks = -80:10:35,
+    xgridvisible = false,
+    ygridvisible = false
     )
 ax1= Axis(f[1, 1],
     ylabel = "Injection and eruption volume [km³]",
@@ -75,7 +74,10 @@ ax1= Axis(f[1, 1],
     yticklabelcolor = :purple,
     ylabelsize = 24,
     yticklabelsize = 20,
-    xticklabelsvisible = false
+    xticklabelsvisible = false,
+    yticks = -80:20:35,
+    xgridvisible = false,
+    ygridvisible = false
     )
 
 n_avg = 11
@@ -102,21 +104,10 @@ p_final = vcat(p_raw, p_smooth)
 # 1. Plot the main line (Capture the object in ln1)
 ln0 = lines!(ax , overpressure_time, overpressure./1e6, color=(:black, 0.3), linewidth = 3)
 ln1 = lines!(ax, t_final, p_final, color=:black, label="Pressure evolution")
-# ln1 = lines!(ax, moving_average(overpressure_time, 11), moving_average(overpressure./1e6, 11), color=:black, label="Pressure evolution")
-
 
 # Plot the secondary line (Capture the object in ln2)
-ln2 = lines!(ax1, overpressure_time, (Q_strain_rate./1e9), color=:purple, label="Injection and eruption volume [km³]", linestyle = :dash)
+ln2 = lines!(ax1, overpressure_time, (Q_strain_rate./1e9), color=:purple, label="Injection volume (0.003- 0.03 km³/yr)\nEruption volume ($(Int64(round((abs.(minimum(Q_strain_rate)./1e9)); digits = 0))) km³)", linestyle = :dash)
 
-
-# 2. Add the cross at the critical timestep (Capture the object in sc1)
-sc1 = scatter!(ax, [overpressure_time[Critical_timestep]], [overpressure[Critical_timestep]]./1e6,
-    # marker = :xcross,  # shape of the marker (can also use :x or :cross)
-    marker = 'x',  # shape of the marker (can also use :x or :cross)
-    color = :orange,
-    markersize = 24,
-    label = "Roof failure Figure 2d ($(Int64(round(Critical_undepressure_MPa;digits = 0))) MPa)"
-)
 
 sc2 = scatter!(ax, [overpressure_time[150]], [overpressure[150]]./1e6,
     # marker = :xcross,  # shape of the marker (can also use :x or :cross)
@@ -133,6 +124,15 @@ sc3 = scatter!(ax, [overpressure_time[155]], [overpressure[155]]./1e6,
     label = "Figure 2c ($(Int64(round(overpressure[155]./1e6; digits = 0))) MPa)"
 )
 
+sc1 = scatter!(ax, [overpressure_time[Critical_timestep]], [overpressure[Critical_timestep]]./1e6,
+    # marker = :xcross,  # shape of the marker (can also use :x or :cross)
+    marker = 'x',  # shape of the marker (can also use :x or :cross)
+    color = :orange,
+    markersize = 24,
+    label = "Roof failure Figure 2d ($(Int64(round(Critical_undepressure_MPa;digits = 0))) MPa)"
+)
+
+
 sc4 = scatter!(ax, [overpressure_time[810]], [overpressure[810]]./1e6,
     # marker = :xcross,  # shape of the marker (can also use :x or :cross)
     marker = 'x',  # shape of the marker (can also use :x or :cross)
@@ -148,12 +148,8 @@ sc5 = scatter!(ax, [overpressure_time[1280]], [overpressure[1280]]./1e6,
     label = "End of simulation Figure 2f ($(Int64(round(overpressure[1280]./1e6; digits = 0))) MPa)"
 )
 
-hline1 = hlines!(ax, mean_underpressure_MPa; xmin = 0.4, xmax = 0.95, color=:red, linestyle=:dash, label="Mean underpressure $(Int64(round(mean_underpressure_MPa;digits = 0))) MPa")
-
 # Create a combined legend on the primary axis (ax)
-# axislegend(ax, [ln1, sc1, ln2, hline1], ["Over- & Underpressure", "Roof failure (P= $(Critical_undepressure_MPa) MPa)", "Injection and Eruption volume", "Mean underpressure $(mean_underpressure_MPa) MPa"], position = :rt)
-# axislegend(ax, [ln1, ln2, sc1, sc2, sc3, sc4, hline1], ["Pressure evolution", "Injection and Eruption volume", "Roof failure (P= $(Critical_undepressure_MPa) MPa)", "First faults (P= $(Critical_undepressure_MPa) MPa)", "First faults (P= $(Critical_undepressure_MPa) MPa)", "Mean underpressure after roof failure \n (P = $(mean_underpressure_MPa)) MPa"], position = :rt)
-axislegend(ax)#, ["Pressure evolution", "Injection and Eruption volume", "Roof failure (P= $(Critical_undepressure_MPa) MPa)", "First faults (P= $(round(overpressure[150]/1e6; digits=3)) MPa)", "First faults (P= $(round(overpressure[155]/1e6; digits=3)) MPa)", "First faults (P= $(round(overpressure[1280]/1e6; digits=3)) MPa)", "Mean underpressure after roof failure \n (P = $(mean_underpressure_MPa)) MPa"], position = :rt)
+axislegend(ax)
 ylims!(ax, minimum(overpressure)./1e6 - 5, maximum(overpressure)./1e6 + 5)
 ylims!(ax1, minimum(overpressure)./1e6 - 5, maximum(overpressure)./1e6 + 5)
 display(f)

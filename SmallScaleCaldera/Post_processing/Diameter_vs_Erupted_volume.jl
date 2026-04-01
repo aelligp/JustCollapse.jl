@@ -1,8 +1,7 @@
 ## Diameter vs Erupted volume for different friction angles
 using CairoMakie, CSV, XLSX, DataFrames
 
-data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "All_models"))
-# data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Reference_run_variations"))
+data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse.xlsx", "All_models"))
 
 tectonic_setting = data[:, 2]
 diameter_caldera = data[:, 3]
@@ -33,27 +32,21 @@ let
 
     fig = Figure(size = (800, 600))
     ax = Axis(fig[1, 1];
-        # xlabel = Geshi ? "L/Sc x 10⁴" : "Roof ratio of chamber (depth / width)",
         xlabel = "Caldera diameter [km]",
-        # ylabel = "Underpressure at caldera collapse (MPa)",
         ylabel = "Erupted volume (DRE in km³)",
         xlabelsize = 24,
         ylabelsize = 24,
         xticklabelsize = 20,
         yticklabelsize = 20,
-        # xscale = log10,
-        # yscale = log10,
         xminorticksvisible=true,
         xticks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         xminorticks = [0:0.5:10...],
-        # xminorticks=IntervalsBetween(4),
         yminorticksvisible=true,
         yminorticks=IntervalsBetween(5),
     )
 
     friction_colors = cmap[1:3:8]
     marker_shapes = [:circle, :rect, :diamond]
-    # tectonic_settings_unique = 0.0
     tectonic_settings_unique = [0.0, 1e-15, -1e-15]
     friction_angles_unique = [15.0, 20.0, 25.0, 30.0]
 
@@ -67,16 +60,11 @@ let
 
                 if any(valid)
                     ref_mask = x_vals[valid] .≈ 7.440
-                    # upper_ref_mask = x_vals[valid] .≈ 7.510
-                    # lower_ref_mask = x_vals[valid] .≈ 6.980
                     if any(.!ref_mask)
                         scatter!(ax, x_vals[valid][.!ref_mask], y_vals[valid][.!ref_mask];
-                            # color = friction_colors[2],
                             color = :grey,
                             alpha = 0.5,
-                            # color = :black,
                             markersize = 14,
-                            # marker = marker_shapes[j],
                             label = "Models"
                         )
                     end
@@ -113,11 +101,6 @@ let
     rangebars!(ax, [2.3], [10], [14], color = :orange)
     rangebars!(ax, [12], [2.1], [2.5], direction = :x, color = :orange)
 
-    # Aniakchak: Miller and Smith 1987, dreher
-    # scatter!(ax, [10], [27], color = :brown, markersize = 17, marker = :star5, label = "Aniakchak")
-    # rangebars!(ax, [10], [15], [25], color = :brown)
-    # rangebars!(ax, [20], [6.5], [7.5], direction = :x, color = :brown)
-
     # Ksudach Kamchatka Braitseva et al. (1996) 240AD Caldera
     scatter!(ax, [5], [8], color = :pink, markersize = 17, marker = :star5, label = "Ksudach 240 AD")
     rangebars!(ax, [5], [7], [9], color = :pink)
@@ -136,7 +119,6 @@ let
     xlims!(ax, 1e0, 10)
     ylims!(ax, 0e0, 1.5*10^2)
 
-    # fig[1, 1] = Legend(fig, ax, position = :lt, merge = true, unique = true)
     axislegend(ax, position = :lt, merge = true, unique = true, labelsize = 20)
     display(fig)
 

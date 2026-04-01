@@ -1,12 +1,9 @@
 using JLD2, JustRelax, JustRelax.JustRelax2D
 using CairoMakie
 
-dir = "/Users/pascalaellig/Documents/PhD/JustCollapse.jl/Systematics/Reference_models_local/Eruptibility/plotting"
+dir = joinpath(@__DIR__, "Eruptibility_testing") # Adjust the path as needed
 files = readdir(dir)
 
-# reference_model = "d_5.0_r_1.75_ar_2.5_ex_0.0_phi_30.0"
-# lower_end_member = "d_5.0_r_2.5_ar_2.0_ex_0.0_phi_30.0"
-# upper_end_member = "d_5.0_r_1.75_ar_0.85_ex_0.0_phi_30.0"
 models = ["d_5.0_r_1.75_ar_2.5_ex_0.0_phi_30.0", "d_5.0_r_2.5_ar_2.0_ex_0.0_phi_30.0", "d_5.0_r_1.75_ar_0.85_ex_0.0_phi_30.0"]
 
 melt_fractions = [03, 04, 05]
@@ -62,7 +59,6 @@ for (i_idx, i) in enumerate(models), (j_idx, j) in enumerate(melt_fractions)
     hidedecorations!(inset_ax); hidespines!(inset_ax)
     text!(inset_ax, 0.5, 0.5, text = panel_label, space = :relative, align = (:center, :center), fontsize = 18, color = :black)
     !isnothing(overpressure_05) ? println("Minimum and maximum overpressure for model $(i) and melt fraction $(j): \n ", minimum(overpressure_05)/1e6, " MPa, ", maximum(overpressure_03)/1e6, " MPa") : nothing
-    (i_idx == 3 && j_idx == 3) ? fig[4, 1:3] = Legend(fig, [ln0, ln2, ln3], ["30% melt fraction", "40% melt fraction", "50% melt fraction"], orientation = :horizontal, fontsize = 24, "Eruption triggered at", titleposition = :top, titlesize = 24, labelsize = 20) : nothing
 end
 for (i, label) in enumerate(["Ref", "Lower end-member", "Upper end-member"])
     Box(fig[i, 4], color = :gray90)
@@ -77,8 +73,13 @@ for (j, label) in enumerate([
     Label(fig[0, j], label, tellwidth = false, fontsize = 18, color = :black)
 end
 
+loose = LineElement(color = (:black, 1.0), linewidth = 3)
+intermediate = LineElement(color = (:blue, 1.0), linewidth = 3)
+strict = LineElement(color = (:green, 1.0), linewidth = 3)
+fig[4, 1:3] = Legend(fig, [loose, intermediate, strict], ["30% melt fraction", "40% melt fraction", "50% melt fraction"], orientation = :horizontal, fontsize = 24, "Eruption triggered at", titleposition = :top, titlesize = 24, labelsize = 20)
+
 display(fig)
-save("./SmallScaleCaldera/Post_processing/Eruptibility_testing.png", fig)
-save("./SmallScaleCaldera/Post_processing/Eruptibility_testing.pdf", fig)
-save("./SmallScaleCaldera/Post_processing/Eruptibility_testing.svg", fig)
+save(joinpath(@__DIR__,"Eruptibility_testing/Eruptibility_testing.png"), fig)
+save(joinpath(@__DIR__,"Eruptibility_testing/Eruptibility_testing.pdf"), fig)
+save(joinpath(@__DIR__,"Eruptibility_testing/Eruptibility_testing.svg"), fig)
 end

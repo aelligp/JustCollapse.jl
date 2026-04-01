@@ -1,7 +1,6 @@
 using CairoMakie, GeoParams, LaTeXStrings, CSV, XLSX, DataFrames
 
-# data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Systematics"))
-data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "All_models"))
+data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse.xlsx", "All_models"))
 
 tectonic_setting = data[:, 2]
 diameter_caldera = data[:, 3]

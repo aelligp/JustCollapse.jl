@@ -2,8 +2,7 @@ using JustRelax, JustRelax.JustRelax2D, JustRelax.DataIO
 
 using CairoMakie, XLSX, DataFrames
 
-data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Systematics"))
-# data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Reference_run_variations"))
+data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse.xlsx", "Systematics"))
 
 tectonic_setting = data[:, 2]
 diameter_caldera = data[:, 3]
@@ -326,7 +325,7 @@ models_1e20 = MarkerElement(color = colors[5], marker = :circle, markersize = 18
 models_1e19 = MarkerElement(color = colors[6], marker = :circle, markersize = 18)
 scaling_degruyter = LineElement(color = :black, linestyle = :dash, linewidth = 2)
 axislegend(ax, [ref_model, models_normal, models_increased, models_1e22, models_1e20, models_1e19, scaling_degruyter],
-    ["Reference model", "Normal injection rate", "Increased injection rate", L"\eta_r =  10^{22} ", L"\eta_r =  10^{20} ", L"\eta_r =  10^{19} ", "Degruyter & Huber 2014 -\nScaling law for number of eruptions"],
+    ["Reference model", "Normal injection rate", "Increased injection rate", L"\eta_r =  10^{22} ", L"\eta_r =  10^{20} ", L"\eta_r =  10^{19} ", "Degruyter & Huber 2014 -\nRegime Boundaries"],
     framevisible = true, merge=true, unique=true, position = :lt, fontsize = 22, labelsize = 22
 )
 
@@ -339,38 +338,3 @@ save("./SmallScaleCaldera/Post_processing/Eruptibility_criteria.png", fig)
 save("./SmallScaleCaldera/Post_processing/Eruptibility_criteria.svg", fig)
 save("./SmallScaleCaldera/Post_processing/Eruptibility_criteria.pdf", fig)
 end
-
-
-# Number of eruptions (Degruyter & HUber 2014)
-
-b1 = 2.4
-b2 = 3.5
-b3 = 2.5
-
-η_host_rock = 1e20 # Pa s
-
-fig = Figure(size = (1200, 800))
-ax = Axis(fig[1, 1],
-    xlabel = "Roof ratio of the chamber",
-    ylabel = "Number of eruptions",
-    title = "Number of eruptions - Degruyter & Huber 2014
-")
-
-for eta in [η_host_rock_Townsend2019, η_host_rock_JustCollapse_strong, η_host_rock_JustCollapse_weak]
-    markers = [:circle, :diamond, :square]
-# for i in 1:3
-    cmap = Makie.categorical_colors(:lipari10, 10)
-    colors = cmap[1:1:10]
-    θ2_degruyter = (b3 * θ1_ref_townsend) * inv(b1*θ1_ref_townsend + b2 -1)
-
-    A = @. (-4π * b3 * ΔPc * density_magma) * (total_radius*1e3).^3
-    B = @. (4π * b2 * eta * thermal_diffusivity * density_magma) * (total_radius*1e3)
-    C = @. 2*b3 * eta * M_injection_increased_T2019
-    D = @. (4π * eta * thermal_diffusivity * density_magma) * (total_radius*1e3)
-
-    N = @. (A + B + C) * inv(D)
-
-    scatter!(ax, roof_ratio_chamber, N; label = "η_host_rock = $(eta)")#, marker = markers[i])
-end
-axislegend(ax, "Number of eruptions - Degruyter & Huber 2014", framevisible = true, merge=true, unique=true, position = :rb)
-display(fig)

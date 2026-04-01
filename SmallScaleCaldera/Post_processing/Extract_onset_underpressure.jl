@@ -10,7 +10,7 @@ using JustRelax, JustRelax.JustRelax2D
 # model = jldopen("/Volumes/Pascal/Caldera_Systematics/SmallCaldera_Systematics/No_extension/Caldera2D_2025-12-05_granite_d_5.0_r_1.75_ar_2.5_ex_0.0_phi_30.0/checkpoint/checkpoint0000.jld2")
 # model = jldopen("/Users/pascalaellig/Desktop/084_systematics_checkpoint/checkpoint0000.jld2")
 # model = jldopen("/Users/pascalaellig/Desktop/Volcano2D/Convergence_Test/Test_checkpoint0000.jld2")
-model = jldopen("/Volumes/Pascal/Caldera_Systematics/SmallCaldera_Systematics/Reference_Case_Additional_Runs/ReRun_Caldera2D_2026-02-02_granite_d_5.0_r_1.75_ar_2.5_ex_0.0_phi_30.0/checkpoint/checkpoint0000.jld2")
+model = jldopen("/Volumes/Pascal/Caldera_Systematics/SmallCaldera_Systematics/Creep_laws/Caldera2D_2026-03-13_diabase_d_5.0_r_1.75_ar_2.5_ex_-1.0e-15_phi_15.0/checkpoint/checkpoint0000.jld2")
 overpressure = model["overpressure"]
 overpressure_time = model["overpressure_t"]
 eruption_times = model["eruption_times"]
@@ -37,7 +37,7 @@ volume_times = round(model["volume_times"][Critical_timestep]; digits=3)
 using XLSX
 using JLD2
 using DataFrames
-data = DataFrame(XLSX.readtable("/Users/pascalaellig/Documents/PhD/JustCollapse.jl/Onset_of_caldera_collapse_CSV.xlsx", "Failed_Unused models"))
+data = DataFrame(XLSX.readtable("/Users/pascalaellig/Documents/PhD/JustCollapse.jl/Onset_of_caldera_collapse.xlsx", "Creep_Laws"))
 extractions = true
 
 for extract in extractions
@@ -49,14 +49,14 @@ depth = data[:, 5]
 radius = data[:, 6]
 aspect_ratio = data[:, 7]
 friction_angle = data[:, 9]
-timestep = data[:, 12]
+timestep = data[:, 15]
 
 
 
 for model_name in name
     # model = jldopen("/Volumes/Pascal/Caldera_Systematics/SmallCaldera_Systematics/Reference_Case_Additional_Runs/$(model_name)/checkpoint/checkpoint0000.jld2")
     model = try
-        model = jldopen("/Volumes/Pascal/Caldera_Systematics/SmallCaldera_Systematics/Additional_runs/$(model_name)/checkpoint/checkpoint0000.jld2")
+        model = jldopen("/Volumes/Pascal/Caldera_Systematics/SmallCaldera_Systematics/Creep_laws/$(model_name)/checkpoint/checkpoint0000.jld2")
     catch e
         println("Could not open model: $(model_name), skipping...")
         continue
@@ -88,14 +88,14 @@ end
 XLSX.writetable("/Users/pascalaellig/Documents/PhD/JustCollapse.jl/Onset_of_caldera_collapse_CSV_copy.xlsx",
                 data,
                 overwrite=true,
-                sheetname="Failed_Unused models")
+                sheetname="Creep_Laws")
 end
 
 
 
 using XLSX
 using DataFrames
-data = DataFrame(XLSX.readtable("/Users/pascalaellig/Documents/PhD/JustCollapse.jl/Onset_of_caldera_collapse_CSV.xlsx", "Systematics"))
+data = DataFrame(XLSX.readtable("/Users/pascalaellig/Documents/PhD/JustCollapse.jl/Onset_of_caldera_collapse.xlsx", "Systematics"))
 extractions = true
 
 
@@ -149,5 +149,5 @@ end
 XLSX.writetable("/Users/pascalaellig/Documents/PhD/JustCollapse.jl/Onset_of_caldera_collapse_CSV_copy.xlsx",
                 data,
                 overwrite=true,
-                sheetname="Reference_run_variations")
+                sheetname="Creep_laws")
 end

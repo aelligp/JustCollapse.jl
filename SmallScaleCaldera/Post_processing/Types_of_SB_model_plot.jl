@@ -1,8 +1,7 @@
 # Underpressure vs roof Ratio SB propagation type
 using CairoMakie, XLSX, DataFrames
 
-data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Systematics"))
-# data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse_CSV.xlsx", "Reference_run_variations"))
+data = DataFrame(XLSX.readtable("Onset_of_caldera_collapse.xlsx", "Systematics"))
 
 tectonic_setting = data[:, 2]
 diameter_caldera = data[:, 3]
@@ -35,7 +34,6 @@ ax = Axis(fig[1, 1];
     aspect = 1.5,
     xlabel = "Roof ratio of chamber (depth / width)",
     ylabel = "Underpressure [MPa]",
-    # title = "Onset of caldera collapse vs roof ratio of chamber with Topo added",
     xticks = [0.7, 1.1, collect(0.5:0.5:2.25)...],
     xticklabelsize = 18,
     yticklabelsize = 18,
@@ -62,9 +60,6 @@ else
     poly!(ax, Rect2f(1.1, 0.0, 1.15, 200.0); color = (cmap_bg[8], 0.4))
 end
 
-# cmap = CairoMakie.categorical_colors(:roma10, 10)
-# cmap = CairoMakie.categorical_colors(:berlin10, 10)
-# cmap = CairoMakie.categorical_colors(:lisbon10, 10)
 cmap = CairoMakie.categorical_colors(:grayC, 10)
 friction_colors = cmap[1:3:8]
 marker_shapes = [:circle, :rect, :diamond]
@@ -81,42 +76,14 @@ for angle in friction_angles_unique
             y_vals = abs.(underpressure_MPa[mask])
             valid = .!ismissing.(y_vals) .&& .!ismissing.(x_vals)
 
+            LEM = x_vals[valid] .≈ 0.52
+            UEM = x_vals[valid] .≈  2.0
             ref_mask = x_vals[valid] .≈ 0.68
             upper_mask = x_vals[valid] .≈  1.7
             transition = x_vals[valid] .≈ 0.95
 
             if any(valid)
-                if any(ref_mask)
-                    scatter!(ax, x_vals[valid][ref_mask], y_vals[valid][ref_mask];
-                        color = :grey,
-                        markersize = 20,
-                        marker = :star4,
-                        strokecolor = :white,
-                        strokewidth = 0.5,
-                        label = "Reference model\nType 1"
-                    )
-                end
-                if any(upper_mask)
-                    scatter!(ax, x_vals[valid][upper_mask], y_vals[valid][upper_mask];
-                        color = :purple,
-                        markersize = 20,
-                        marker = :star5,
-                        strokecolor = :white,
-                        strokewidth = 0.5,
-                        label = "Type 2"
-                    )
-                end
-                if any(transition)
-                    scatter!(ax, x_vals[valid][transition], y_vals[valid][transition];
-                        color = :orange,
-                        markersize = 20,
-                        marker = :star6,
-                        strokecolor = :white,
-                        strokewidth = 0.5,
-                        label = "Transition"
-                    )
-                end
-                if any(.!ref_mask) && any(.!upper_mask) && any(.!transition)
+                if any(.!ref_mask) && any(.!upper_mask) && any(.!transition) && any(.!LEM) && any(.!UEM)
                     scatter!(ax, x_vals[valid][.!ref_mask], y_vals[valid][.!ref_mask];
                     color = friction_colors[j],
                     markersize = 18,
@@ -134,6 +101,8 @@ for angle in friction_angles_unique
             y_vals = abs.(underpressure_MPa[mask])
             valid = .!ismissing.(y_vals) .&& .!ismissing.(x_vals)
 
+            LEM = x_vals[valid] .≈ 0.52
+            UEM = x_vals[valid] .≈  2.0
             ref_mask = x_vals[valid] .≈ 0.68
             upper_mask = x_vals[valid] .≈  1.7
             transition = x_vals[valid] .≈ 0.95
@@ -169,6 +138,27 @@ for angle in friction_angles_unique
                     label = "Transition"
                 )
                 end
+                if any(LEM)
+                scatter!(ax, x_vals[valid][LEM], y_vals[valid][LEM];
+                    color = :blue,
+                    markersize = 20,
+                    marker = :star8,
+                    strokecolor = :white,
+                    strokewidth = 0.5,
+                    label = "LEM"
+                )
+                end
+
+                if any(UEM)
+                    scatter!(ax, x_vals[valid][UEM], y_vals[valid][UEM];
+                        color = :magenta,
+                        markersize = 20,
+                        marker = :star5,
+                        strokecolor = :white,
+                        strokewidth = 0.5,
+                        label = "UEM"
+                    )
+                end
             end
         end
     end
@@ -186,7 +176,18 @@ text!(ax, 0.9,   185; text = "Transition", color = :black,fontsize = 24, align =
 text!(ax, 1.675, 185; text = "Upwards\npropagating", color = :black, fontsize = 24, align = (:center, :top))
 xlims!(ax, 0.0, 2.25)
 ylims!(ax, 0, 200)
-axislegend(ax, position = :rb, merge = true, unique = true, fontsize = 22, labelsize = 22)
+
+NoTectonics = MarkerElement(color = :black, marker = :circle, markersize = 18)
+Extension = MarkerElement(color = :black, marker = :rect, markersize = 18)
+Compression = MarkerElement(color = :black, marker = :diamond, markersize = 18)
+LEM = MarkerElement(color = :blue, marker = :star8, markersize = 18)
+UEM = MarkerElement(color = :magenta, marker = :star5, markersize = 18)
+RefModel = MarkerElement(color = :grey, marker = :star4, markersize = 20)
+Type2 = MarkerElement(color = :purple, marker = :star5, markersize = 20)
+Transition = MarkerElement(color = :orange, marker = :star6, markersize = 20)
+axislegend(ax, [RefModel, Type2, Transition, LEM, UEM, NoTectonics, Extension, Compression], ["Reference model\nType 1", "Type 2", "Transition", "LEM", "UEM", "Without Tectonics", "Extension", "Compression"], position = :rb, merge = true, unique = true, fontsize = 22, labelsize = 22)
+
+# axislegend(ax, position = :rb, merge = true, unique = true, fontsize = 22, labelsize = 22)
 display(fig)
 save("./SmallScaleCaldera/Post_processing/Types_of_SB_model_plot.png", fig)
 save("./SmallScaleCaldera/Post_processing/Types_of_SB_model_plot.svg", fig)

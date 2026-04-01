@@ -64,17 +64,9 @@ Tbot = 600.0u"°C"
 # Option 1: Use linear temperature gradient (standard)
 use_custom = false
 
-if use_custom
-    # JLD2.load("/Users/pascalaellig/Documents/PhD/JustCollapse.jl/SmallScaleCaldera/Post_processing/Creep_law_analysis/Temparature_Vector_Creep_Laws.jld2")
-    Temp = (reverse(Temp_Vec_lithosphere) .* 1.0u"K" ) .|> u"°C"  # Convert from Kelvin to Celsius with units (reversed for surface-to-depth ordering)
-    Temp = (reverse(Temp_Vec) .* 1.0u"K" ) .|> u"°C"  # Convert from Kelvin to Celsius with units (reversed for surface-to-depth ordering)
-    z_vec = range(0.0u"km", Thickness_total, length=length(Temp))  # Depth vector
-else
-    Temp = LinTemp(0.0u"°C", Tbot)
-end
+Temp = LinTemp(0.0u"°C", Tbot)
 
-
-@load "/Users/pascalaellig/Documents/PhD/JustCollapse.jl/SmallScaleCaldera/Post_processing/Creep_law_analysis/Temparature_Vector_Creep_Laws.jld2" Temp_Vec
+@load joinpath(@__DIR__,"Post_processing/Creep_law_analysis/Temparature_Vector_Creep_Laws.jld2") Temp_Vec
 Temp_custom = (reverse(Temp_Vec) .* 1.0u"K") .|> u"°C"
 z_vec_custom = range(0.0u"km", Thickness_total, length=length(Temp_custom))
 
@@ -235,15 +227,12 @@ ylims!(ax_inset_T, (ustrip(u"km", Thickness_total), 0))
 
 # Add legend
 Legend(fig[2, 1:2], ax1, framevisible=true, nbanks=3,
-    # tellwidth=false, tellheight=true, labelsize=12, markerwidth=20, markerheight=10, padding=(10, 10, 10, 10))
     tellwidth=false, tellheight=true,orientation = :horizontal, fontsize = 24, "Dislocation Creep Laws", titleposition = :top, titlesize = 24, labelsize = 20)
 
 println("\nPlot created successfully!")
 println("Saving figure...")
 
 # Save figure
-# save("strength_envelope_comparison_magma.png", fig, px_per_unit=2)
-# save("strength_envelope_comparison_magma.svg", fig, px_per_unit=2)
 save("./SmallScaleCaldera/Post_processing/Strength_Envelope_plot.png", fig, px_per_unit=2)
 save("./SmallScaleCaldera/Post_processing/Strength_Envelope_plot.svg", fig, px_per_unit=2)
 save("./SmallScaleCaldera/Post_processing/Strength_Envelope_plot.pdf", fig)
