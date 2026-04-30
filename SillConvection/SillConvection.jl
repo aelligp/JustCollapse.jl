@@ -221,9 +221,9 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
     # Physical properties using GeoParams ----------------
                      # (SiO2   TiO2  Al2O3  FeO   MgO   CaO   Na2O  K2O   H2O)
     # oxd_wt_sill      = (70.78, 0.55, 15.86, 3.93, 1.11, 1.20, 2.54, 3.84, 3.0)
-    oxd_wt_sill       = (68.78, 0.53, 15.41, 3.82, 1.08, 1.17, 2.47, 3.73, 3.0)
+    oxd_wt_sill       = (70.78, 0.55, 15.86, 3.93, 1.11, 1.20, 2.54, 3.84, 3.0)
     # oxd_wt_host_rock = (75.75, 0.28, 12.48, 2.14, 0.09, 0.48, 3.53, 5.19, 3.0)
-    oxd_wt_host_rock  = (73.51, 0.27, 12.11, 2.08, 0.08, 0.46, 3.43, 5.04, 3.0)
+    oxd_wt_host_rock  = (75.75, 0.28, 12.48, 2.14, 0.09, 0.48, 3.53, 5.19, 3.0)
 
     # Sr_87_86_sill = 0.71071 # "06HS-14"
     # Sr_87_86_host_rock = 0.71028 # "TNP96-43
@@ -864,7 +864,7 @@ nx, ny = n, n #>> 1
 
 sill_temp = 1273.15 # in K
 host_rock_temp = 500.0 + 273.15 # in C
-sill_size = 1000.0 # in m
+sill_size = 100.0 # in m
 depth = 5e3 # in m
 li = dimensions = (300.0, 200.0) # in m
 origin = (0.0, -li[2])
