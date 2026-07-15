@@ -35,6 +35,7 @@ end
 using GeoParams, CairoMakie, CellArrays, Statistics, Dates, JLD2, Printf
 
 # Load file with all the rheology configurations
+include("SillModelSetup_MPI.jl")
 include("SillRheology.jl")
 
 
@@ -166,12 +167,9 @@ function init_T!(
         sill_bottom = (dimensions[2] - (dimensions[2] - sill_size) / 2) + perturbation_bot
         sill_top = (dimensions[2] - sill_size) / 2 + perturbation
         if depth ≤ sill_bottom && depth ≥ sill_top
-            T[i + 1, j + 1] = sill_temp + 10*rand()
+            T[i + 1, j + 1] = sill_temp
         else
             T[i + 1, j + 1] = host_rock_temp
-        end
-        if (sill_top + 10 < depth ≤ sill_top + 20) && ((dimensions[1] / 2 - 5) < x[i] ≤  (dimensions[1] / 2 + 5))
-            T[i + 1, j + 1] = sill_temp + 75
         end
         return nothing
     end
@@ -183,9 +181,8 @@ end
 
 ## END OF HELPER FUNCTION ------------------------------------------------------------
 
-
 ## BEGIN OF MAIN SCRIPT --------------------------------------------------------------
-function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vtk = false, cutoff_visc = (-Inf, Inf), plotting = true, sill_temp = 1000, host_rock_temp = 500, sill_size = 0.1, depth = 5e3)
+function main(li, origin, phases_GMG, T_GMG, igg, x_global, z_global; nx = 64, ny =64, figdir="SillConvection2D", do_vtk = false, cutoff_visc = (-Inf, Inf), plotting = true, sill_temp = 1000, host_rock_temp = 500, sill_size = 0.1, depth = 5e3)
 
     # -----------------------------------------------------
     # Set up the JustRelax model
@@ -199,41 +196,50 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
 
     # Physical properties using GeoParams ----------------
                      # (SiO2   TiO2  Al2O3  FeO   MgO   CaO   Na2O  K2O   H2O)
-    oxd_wt_sill       = (70.78, 0.55, 15.86, 3.93, 1.11, 1.20, 2.54, 3.84, 3.0)
-    oxd_wt_host_rock  = (75.75, 0.28, 12.48, 2.14, 0.09, 0.48, 3.53, 5.19, 3.0)
-
-    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e4Pas, magma = true)
+    oxd_wt_sill      = (70.78, 0.55, 15.86, 3.93, 1.11, 1.20, 2.54, 3.84, 2.0)
+    oxd_wt_host_rock = (75.75, 0.28, 12.48, 2.14, 0.09, 0.48, 3.53, 5.19, 2.0)
+    rheology = init_rheologies(oxd_wt_sill, oxd_wt_host_rock; scaling = 1e5, magma = true)
     dt_time = 1.0 * 3600 * 24 * 365
-    κ            = (4 / (1050 * mean(rheology[1].Density[1].Rho.coefs)))
+    κ            = (4 / (1050 * rheology[1].Density[1].ρ))
     dt_diff = 0.5 * min(di...)^2 / κ / 2.01
     dt = min(dt_time, dt_diff)
     # ----------------------------------------------------
-
     # Weno model -----------------------------------------
-    weno = WENO5(backend, Val(2), ni) # T, phases and d18O all live at cell centers
-    # ----------------------------------------------------
+    weno = WENO5(backend, Val(2), ni) # T and d18O live at cell centers
+
+    # Initialize particles -------------------------------
+    nxcell, max_xcell, min_xcell = 100, 150, 75
+    particles = init_particles(
+        backend_JP, nxcell, max_xcell, min_xcell, grid.xi_vel...
+    )
+
+    # temperature
+    pT, pPhases      = init_cell_arrays(particles, Val(2));
+    # particle fields for the stress rotation
+    pτ = StressParticles(particles)
+    particle_args = (pT, pPhases, unwrap(pτ)...)
+    particle_args_reduced = (pT, unwrap(pτ)...)
 
     # Assign material phases --------------------------
-    phases_dev   = @zeros(ni...)
+    phases_dev   = PTArray(backend)(phases_GMG)
     phase_ratios = PhaseRatios(backend_JP, length(rheology), ni);
-    init_sill!(phases_dev, li, sill_size, xci; perturbation_amplitude = 2.0, wavelength = 100.0, bottom_pertubation = true)
+    init_phases!(pPhases, phases_dev, particles, xvi)
+    update_phase_ratios!(phase_ratios, particles, pPhases)
 
-    phase_sill = @zeros(ni...) # initialize phase_sill array
-    phase_host = @zeros(ni...) # initialize phase_host array
-    @views phase_sill[phases_dev .== 2.0] .= 1.0 # set the blob to 1.0 where phases == 2.0
-    @views phase_host[phases_dev .== 1.0] .= 1.0 # set the blob to 1.0 where phases == 2.0
-    clamp!(phase_sill, 0.0, 1.0) # clamp
-    clamp!(phase_host, 0.0, 1.0) # clamp phase_host to 0.0 and 1.0
-    update_phase_ratios_2D!(phase_ratios, (phase_host, phase_sill), xci, xvi)
+    update_halo!(particles.coords...);
+    update_halo!(particle_args...);
+    update_halo!(particles.index)
+    update_halo!(phase_ratios.center)
+    update_halo!(phase_ratios.vertex)
 
     # STOKES ---------------------------------------------
     # Allocate arrays needed for every Stokes problem
     stokes          = StokesArrays(backend, ni)
-    pt_stokes       = PTStokesCoeffs(li, di; Re = π / 2, ϵ_rel=1e-5, ϵ_abs=1e-5, CFL=0.98 / √2.1)
+    pt_stokes       = PTStokesCoeffs(li, di; Re = 14.9, ϵ_rel=1e-5, ϵ_abs=1e-7, CFL=0.9 / √2.1) #ϵ=1e-4,  CFL=1 / √2.1 CFL=0.27 / √2.1
     # ----------------------------------------------------
 
     thermal         = ThermalArrays(backend, ni) # T lives at cell centers with one ghost node on every boundary
-    init_T!(thermal.T, host_rock_temp, sill_temp, li, sill_size, xci; perturbation_amplitude = 2.0, wavelength = 100.0, bottom_pertubation = true)
+    vertex2center!(thermal.T, PTArray(backend)(T_GMG); ghost_x = true, ghost_y = true)
     thermal_bc      = TemperatureBoundaryConditions(;
         no_flux     = (left = true, right = true, top = false, bot = false),
     )
@@ -262,9 +268,8 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
     compute_melt_fraction!(
         ϕ, phase_ratios, rheology, (T=thermal.T, P=stokes.P)
     )
-    compute_viscosity!(
-        stokes, phase_ratios, args, rheology, cutoff_visc
-    )
+    compute_viscosity!(stokes, phase_ratios, args, rheology, cutoff_visc)
+
     # Track isotope ratios
     d18O = @zeros(ni...)
     d18O_anomaly!(d18O, xci[2], phase_ratios; crust_gradient = false, crust_const = -3.0)
@@ -310,30 +315,78 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
     end
     let
         compo = [oxd_wt_sill[1] (oxd_wt_sill[7]+oxd_wt_sill[8]);
-                 oxd_wt_host_rock[1] (oxd_wt_host_rock[7]+oxd_wt_host_rock[8])]
+                oxd_wt_host_rock[1] (oxd_wt_host_rock[7]+oxd_wt_host_rock[8])]
         fig=Plot_TAS_diagram(compo; sz=(1000, 1000))
         save(joinpath(figdir, "TAS_diagram.png"), fig)
     end
+    #MPI
+    # global array
+    nx_v = (nx - 2) * igg.dims[1]
+    ny_v = (ny - 2) * igg.dims[2]
+    # center
+    P_v = zeros(nx_v, ny_v)
+    τII_v = zeros(nx_v, ny_v)
+    η_vep_v = zeros(nx_v, ny_v)
+    η_v = zeros(nx_v, ny_v)
+    εII_v = zeros(nx_v, ny_v)
+    phases_c_v = zeros(nx_v, ny_v)
+    d18O_c_v = zeros(nx_v, ny_v)    # d18O
+    ϕ_v = zeros(nx_v, ny_v)         # Melt fraction
+    ρg_v = zeros(nx_v, ny_v)     # Buoyancy force
+    Re_v = zeros(nx_v, ny_v)         # Reynolds number
+    Ra_v = zeros(nx_v, ny_v)         # Rayleigh number
+    #center nohalo
+    P_nohalo = zeros(nx - 2, ny - 2)
+    τII_nohalo = zeros(nx - 2, ny - 2)
+    η_vep_nohalo = zeros(nx - 2, ny - 2)
+    η_nohalo = zeros(nx - 2, ny - 2)
+    εII_nohalo = zeros(nx - 2, ny - 2)
+    phases_c_nohalo = zeros(nx - 2, ny - 2)
+    d18O_c_nohalo = zeros(nx - 2, ny - 2)
+    ϕ_nohalo = zeros(nx - 2, ny - 2)
+    ρg_nohalo = zeros(nx - 2, ny - 2)
+    Re_nohalo = zeros(nx - 2, ny - 2)
+    Ra_nohalo = zeros(nx - 2, ny - 2)
+    #vertex
+    Vxv_v = zeros(nx_v, ny_v)
+    Vyv_v = zeros(nx_v, ny_v)
+    T_v = zeros(nx_v, ny_v)
+    #vertex nohalo
+    Vxv_nohalo = zeros(nx - 2, ny - 2)
+    Vyv_nohalo = zeros(nx - 2, ny - 2)
+    T_nohalo = zeros(nx - 2, ny - 2)
+
+    xci_v = LinRange(minimum(x_global) .* 1.0e3, maximum(x_global) .* 1.0e3, nx_v),
+        LinRange(minimum(z_global) .* 1.0e3, maximum(z_global) .* 1.0e3, ny_v)
+
+
     # WENO arrays
     T_WENO  = @zeros(ni...)
     Vx_v = @zeros(ni.+1...)
     Vy_v = @zeros(ni.+1...)
     Vx_c = @zeros(ni...)
     Vy_c = @zeros(ni...)
+    Vx = @zeros(ni...)
+    Vy = @zeros(ni...)
+    τxx_v = @zeros(ni .+ 1...)
+    τyy_v = @zeros(ni .+ 1...)
 
     # Time loop
     t, it = 0.0, 0
 
     Re = @zeros(ni...)
     Ra = @zeros(ni...)
-    time_vec = Float64[0.0]
-    d18O_evo = Float64[5.5]
-    melt_fraction_evo = Float64[1.0]
 
-    while it < 100e3 && round(maximum(ϕ), digits=2) > 0.3 && t < (650 * 3600 * 24 * 365)
+    while it < 3000
+    # while it < 50
 
-        args = (; ϕ= ϕ,T = thermal.T, P = stokes.P, dt = dt)
+        args = (; ϕ= ϕ,T = thermal.T, P = stokes.P, dt = dt, ΔT = thermal.ΔT)
         compute_ρg!(ρg[end], phase_ratios, rheology, (T = thermal.T, P = stokes.P))
+        compute_viscosity!(
+            stokes, phase_ratios, args, rheology, cutoff_visc
+        )
+
+        stress2grid!(stokes, pτ, particles)
         # ------------------------------
 
         # Stokes solver ----------------
@@ -349,18 +402,21 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
             Inf,
             igg;
             kwargs = (;
-                iterMax = 50.0e3,
-                nout = 2.0e3,
+                iterMax = 150.0e3,
+                nout = 1.0e3,
                 viscosity_cutoff = cutoff_visc,
             )
         )
+        # rotate stresses
+        rotate_stress!(pτ, stokes, particles, dt)
 
         tensor_invariant!(stokes.ε)
         tensor_invariant!(stokes.ε_pl)
-        tensor_invariant!(stokes.τ)
+        ## Save the checkpoint file before a possible thermal solver blow up
+        checkpointing_jld2(joinpath(checkpoint, "thermal"), stokes, thermal, t, dt, igg)
 
-        dt   = compute_dt(stokes, di, dt_diff, igg)
-        println("dt = $(dt/(3600*24)) days")
+        dt   = compute_dt(stokes, di, dt_diff)
+        println("dt = $(dt/(3600*24))")
         # Thermal solver ---------------
         heatdiffusion_PT!(
             thermal,
@@ -373,7 +429,7 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
             kwargs =(;
                 igg     = igg,
                 phase   = phase_ratios,
-                iterMax = 10e3,
+                iterMax = 150e3,
                 nout    = 1e3,
                 verbose = true,
             )
@@ -382,80 +438,126 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
 
         T_WENO .= @views thermal.T[2:end-1, 2:end-1]
         velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
+        ## for Re and Ra number:
         velocity2center!(Vx_c, Vy_c, @velocity(stokes)...)
 
-        # Advect temperature, phases and isotopes on the same center grid
         WENO_advection!(T_WENO, (Vx_c, Vy_c), weno, di, dt)
         @views thermal.T[2:(end - 1), 2:(end - 1)] .= T_WENO
 
-        WENO_advection!(phase_sill, (Vx_c, Vy_c), weno, di, dt)
-        WENO_advection!(phase_host, (Vx_c, Vy_c), weno, di, dt)
-
+        # Isotope advection
         WENO_advection!(d18O, (Vx_c, Vy_c), weno, di, dt)
 
         thermal.ΔT .= thermal.T .- thermal.Told
 
-        compute_Re!(Re, Vx_c, Vy_c, ρg[end] ./9.81,  li[2], stokes.viscosity.η);
-        compute_Ra!(Ra, sill_temp - host_rock_temp, ρg[end] ./ 9.81, 3e-5, rheology[1].Gravity[1].g.val, li[2], κ, stokes.viscosity.η);
+        compute_Re!(Re, Vx_c, Vy_c, ρg[end] ./9.81,  sill_size *1e3, stokes.viscosity.η);
+        compute_Ra!(Ra, sill_temp - host_rock_temp, ρg[end] ./ 9.81, 1050, rheology[1].Gravity[1].g.val, li, κ, stokes.viscosity.η);
 
         @show extrema(thermal.T)
         any(isnan.(thermal.T)) && break
 
-        update_phase_ratios_2D!(phase_ratios, (phase_host, phase_sill), xci, xvi)
+        # Advection --------------------
+        # advect particles in space
+        advection_MQS!(particles, RungeKutta4(), @velocity(stokes), dt)
+        update_halo!(particles.coords...);
+        update_halo!(particle_args...);
+        update_halo!(particles.index)
+        update_halo!(phase_ratios.center)
+        update_halo!(phase_ratios.vertex)
+        # advect particles in memory
+        move_particles!(particles, particle_args)
+        center2vertex!(τxx_v, stokes.τ.xx)
+        center2vertex!(τyy_v, stokes.τ.yy)
 
+        # check if we need to inject particles
+        inject_particles_phase!(
+            particles,
+            pPhases,
+            particle_args_reduced,
+            (T_WENO, τxx_v, τyy_v, stokes.τ.xy, stokes.ω.xy)
+        )
         compute_melt_fraction!(ϕ, phase_ratios, rheology, (T=thermal.T, P=stokes.P))
+        # update phase ratios
+        update_phase_ratios!(phase_ratios, particles, pPhases)
+        tensor_invariant!(stokes.τ)
 
-        @show it += 1
-        t        += dt
-        push!(time_vec, t)
-        push!(d18O_evo, round(mean(d18O[ϕ .> 0.2]), digits=2))
-        push!(melt_fraction_evo, round(maximum(ϕ), digits=2))
+        if igg.me == 0
+            @show it += 1
+            t += dt
+        end
+
+        #MPI gathering
+        phase_center = [argmax(p) for p in Array(phase_ratios.center)]
+        #centers
+        @views P_nohalo .= Array(stokes.P[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+        @views τII_nohalo .= Array(stokes.τ.II[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+        @views η_vep_nohalo .= Array(stokes.viscosity.η_vep[2:(end - 1), 2:(end - 1)])       # Copy data to CPU removing the halo
+        @views η_nohalo .= Array(stokes.viscosity.η[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+        @views εII_nohalo .= Array(stokes.ε.II[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+        @views phases_c_nohalo .= Array(phase_center[2:(end - 1), 2:(end - 1)])
+        @views d18O_c_nohalo .= Array(d18O[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+        @views ϕ_nohalo .= Array(ϕ[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+        @views ρg_nohalo .= Array(ρg[end][2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+        @views Re_nohalo .= Array(Re[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+        @views Ra_nohalo .= Array(Ra[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+
+        gather!(P_nohalo, P_v)
+        gather!(τII_nohalo, τII_v)
+        gather!(η_vep_nohalo, η_vep_v)
+        gather!(η_nohalo, η_v)
+        gather!(εII_nohalo, εII_v)
+        gather!(phases_c_nohalo, phases_c_v)
+        gather!(d18O_c_nohalo, d18O_c_v)
+        gather!(ϕ_nohalo, ϕ_v)
+        gather!(ρg_nohalo, ρg_v)
+        gather!(Re_nohalo, Re_v)
+        gather!(Ra_nohalo, Ra_v)
+        #vertices
+        if do_vtk
+            velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
+            vertex2center!(Vx, Vx_v)
+            vertex2center!(Vy, Vy_v)
+            @views Vxv_nohalo .= Array(Vx[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+            @views Vyv_nohalo .= Array(Vy[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+            gather!(Vxv_nohalo, Vxv_v)
+            gather!(Vyv_nohalo, Vyv_v)
+        end
+        @views T_nohalo .= Array(T_WENO[2:(end - 1), 2:(end - 1)]) # Copy data to CPU removing the halo
+        gather!(T_nohalo, T_v)
 
         # Data I/O and plotting ---------------------
-        if it == 1 || rem(it, 1) == 0
+        if it == 1 || rem(it, 25) == 0
             if igg.me == 0 && it == 1
-                metadata(pwd(), checkpoint, joinpath(@__DIR__, "SillConvection.jl"), joinpath(@__DIR__, "SillRheology.jl"))
+                metadata(pwd(), checkpoint, joinpath(@__DIR__, "SillConvection_MPI.jl"), joinpath(@__DIR__, "SillModelSetup_MPI.jl"), joinpath(@__DIR__, "SillRheology.jl"))
             end
             checkpointing_jld2(checkpoint, stokes, thermal, t, dt, igg)
-
-            η_eff = @. stokes.τ.II / (2 * stokes.ε.II)
-            (; η_vep, η) = stokes.viscosity
-
+            checkpointing_particles(checkpoint, particles; phases = pPhases, phase_ratios = phase_ratios, particle_args = particle_args, t = t, dt = dt)
 
             if do_vtk
-                velocity2vertex!(Vx_v, Vy_v, @velocity(stokes)...)
-                data_v = (;
-                    stress_xy = Array(stokes.τ.xy),
-                    strain_rate_xy = Array(stokes.ε.xy),
-                    phase_vertices = [argmax(p) for p in Array(phase_ratios.vertex)],
-                )
+
                 data_c = (;
-                    T = Array(thermal.T[2:(end - 1), 2:(end - 1)]),
-                    d18O = Array(d18O),
-                    P = Array(stokes.P),
-                    viscosity_vep = Array(η_vep),
-                    viscosity_eff = Array(η_eff),
-                    viscosity = Array(η),
-                    phases = [argmax(p) for p in Array(phase_ratios.center)],
-                    Melt_fraction = Array(ϕ),
-                    EII_pl = Array(stokes.EII_pl),
-                    stress_II = Array(stokes.τ.II),
-                    strain_rate_II = Array(stokes.ε.II),
-                    density = Array(ρg[2] ./ 9.81),
+                    T = Array(T_v),
+                    P = Array(P_v),
+                    viscosity_vep = Array(η_vep_v),
+                    viscosity = Array(η_v),
+                    phases = phases_c_v,
+                    d18O = Array(d18O_c_v),
+                    Melt_fraction = Array(ϕ_v),
+                    stress_II = Array(τII_v),
+                    strain_rate_II = Array(εII_v,),
+                    density = Array(ρg_v ./ 9.81),
                 )
                 velocity_v = (
-                    Array(Vx_v),
-                    Array(Vy_v),
+                    Array(Vxv_v),
+                    Array(Vyv_v),
                 )
                 save_vtk(
                     joinpath(vtk_dir, "vtk_" * lpad("$it", 6, "0")),
-                    xvi ./ 1.0e3,
-                    xci ./ 1.0e3,
-                    data_v,
+                    xci_v ./ 1.0e3,
                     data_c,
                     velocity_v;
                     t = round(t / (1.0e3 * 3600 * 24 * 365.25); digits = 3)
                 )
+                save_particles(particles, pPhases; conversion = 1.0e3, fname = joinpath(vtk_dir, "particles_" * lpad("$it", 6, "0")))
             end
 
             # Make Makie figure
@@ -525,28 +627,26 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
             # Plot temperature
             h1  = heatmap!(
                 ax1,
-                xci...,
-                Array(thermal.T[2:(end - 1), 2:(end - 1)].-273); colormap=:lipari, colorrange=(host_rock_temp .-273.15, sill_temp.-273.15))
+                xci_v...,
+                Array(T_v.-273); colormap=:lipari, colorrange=(host_rock_temp, sill_temp))
 
             h2  = heatmap!(
                 ax2,
-                xci...,
-                Array(ρg[end]./9.81);
+                xci_v...,
+                Array(ρg_v./9.81);
                 colormap=:batlowW)
 
             # Plot vy velocity
             h3  = heatmap!(
                 ax3,
-                xvi...,
-                Array(stokes.V.Vy); colormap=:batlow)
+                xci_v...,
+                Array(Vyv_v); colormap=:batlow)
 
             # Plot melt fraction
-            h4  = contourf!(ax4,
-                xci...,
-                Array(ϕ);
-                colormap=:lipari,
-                levels=0:0.1:1.0,
-            )
+            h4  = heatmap!(ax4,
+                xci_v...,
+                Array(ϕ_v);
+                colormap=:lipari)
 
             hidexdecorations!(ax1)
             hidexdecorations!(ax2)
@@ -561,10 +661,25 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
             figsave = joinpath(figdir, @sprintf("%06d.png", it))
             save(figsave, fig)
 
-            # Plot time evolution of mean melt fraction with flow regime backgrounds
             let
                 fig = Figure(size = (2000, 1000), title = "t = $t")
-
+                # Determine time scale and units for plotting
+                if t < 1e3
+                    TimeScale = 1
+                    TimeUnits = "s"
+                elseif t >= 1e3 && t < 24*3600
+                    TimeScale = 3600
+                    TimeUnits = "hr"
+                elseif t >= 24*3600 && t < 365*3600*24
+                    TimeScale = 3600*24
+                    TimeUnits = "days"
+                elseif t >= 365*3600*24 && t < 1e3*3600*24*365
+                    TimeScale = 3600*24*365
+                    TimeUnits = "yr"
+                else
+                    TimeScale = 1e3*3600*24*365
+                    TimeUnits = "kyr"
+                end
                 ax1 = Axis(
                     fig[1,1],
                     aspect = DataAspect(),
@@ -577,10 +692,9 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
                  # Plot temperature
                 h1  = heatmap!(
                     ax1,
-                    xci[1],
-                    xci[2],
-                    (Array(thermal.T[2:(end - 1), 2:(end - 1)].-273));
-                    colormap=:lipari, colorrange=(host_rock_temp-273.15, sill_temp-273.15))
+                    xci_v...,
+                    (Array(T_v.-273));
+                    colormap=:lipari, colorrange=(host_rock_temp, sill_temp))
                 Colorbar(fig[1,2], h1, height = Relative(4/4), ticklabelsize=25, ticksize=15)
                 save(joinpath(figdir, "Temperature_$(it).png"), fig)
                 fig
@@ -599,9 +713,8 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
                 # Plot Reynolds number
                 h1  = heatmap!(
                     ax1,
-                    xci[1],
-                    xci[2],
-                    Array(log10.(Re));
+                    xci_v...,
+                    Array(log10.(Re_v));
                     colormap=:lapaz)
 
                 Colorbar(fig1[1,2], h1, height = Relative(4/4), ticklabelsize=25, ticksize=15)
@@ -617,9 +730,8 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
                 # # Plot isotopes
                 h2  = heatmap!(
                     ax2,
-                    xci[1],
-                    xci[2],
-                    Array(d18O);
+                    xci_v...,
+                    Array(d18O_c_v);
                     colormap=:lapaz)
                 Colorbar(fig1[2,2], h2, height = Relative(4/4), ticklabelsize=25, ticksize=15)
                 linkaxes!(ax1, ax2)
@@ -635,118 +747,13 @@ function main(li, origin, igg; nx = 64, ny =64, figdir="SillConvection2D", do_vt
                 # Plot Rayleigh number
                 h3 = heatmap!(
                     ax3,
-                    xci[1],
-                    xci[2],
-                    Array(log10.(Ra));
-                    colormap=:lapaz, colorrange= (0, maximum(Array(log10.(Ra)))))
+                    xci_v...,
+                    Array(log10.(Ra_v));
+                    colormap=:lapaz)
                 Colorbar(fig1[1,4], h3, height = Relative(4/4), ticklabelsize=25, ticksize=15)
-
-                ax4 = Axis(
-                    fig1[2,3],
-                    title = "δ18O evolution - mean(d18O[ϕ .> 0.2])",
-                    titlesize=30,
-                    yticklabelsize=25,
-                    xticklabelsize=25,
-                    xlabelsize=25,
-                    ylabelsize=25,
-                    xlabel = "Time ($TimeUnits)",
-                    ylabel = "δ18O mean(ϕ > 0.2)"
-                    )
-                    lines!(
-                        ax4,
-                        time_vec ./ TimeScale,
-                        d18O_evo;
-                        color = :black,
-                        linewidth = 2,
-                    )
                 save(joinpath(figdir, "Re_$(it).png"), fig1)
                 fig1
 
-                fig2 = Figure(size = (1600, 800), title = "Melt Fraction Evolution")
-
-                ax = Axis(
-                    fig2[1,1],
-                    title = "Mean Melt Fraction Evolution",
-                    titlesize=30,
-                    yticklabelsize=25,
-                    xticklabelsize=25,
-                    xlabelsize=25,
-                    ylabelsize=25,
-                    xlabel = "Time ($TimeUnits)",
-                    ylabel = "mean(ϕ)"
-                )
-
-                # Define regime boundaries
-                porous_max = 0.08
-                mush_max = 0.45
-                suspension_max = 1.0
-
-                # Plot colored backgrounds for regimes
-                # Define x range for bands (span entire time axis)
-                x_min = 0.0
-                x_max = maximum(time_vec ./ TimeScale)
-                x_band = [x_min, x_max]
-
-                band!(
-                    x_band,
-                    [0.0, 0.0],
-                    [porous_max, porous_max],
-                    color = (:blue, 0.2),
-                )
-                text!(
-                    ax,
-                    x_min + 0.01 * (x_max - x_min),  # near left edge
-                    porous_max / 2,
-                    text = "Porous flow",
-                    align = (:left, :center),
-                    fontsize = 40,
-                    color = :blue,
-                    font = "bold"
-                )
-                band!(
-                    x_band,
-                    [porous_max, porous_max],
-                    [mush_max, mush_max],
-                    color = (:orange, 0.5),
-                )
-                text!(
-                    ax,
-                    x_min + 0.01 * (x_max - x_min),
-                    (porous_max + mush_max) / 2,
-                    text = "Mushy flow",
-                    align = (:left, :center),
-                    fontsize = 40,
-                    color = :orange,
-                    font = "bold"
-                )
-                band!(
-                    x_band,
-                    [mush_max, mush_max],
-                    [suspension_max, suspension_max],
-                    color = (:red, 0.2),
-                )
-                text!(
-                    ax,
-                    x_min + 0.01 * (x_max - x_min),
-                    (mush_max + suspension_max) / 2,
-                    text = "Suspension flow",
-                    align = (:left, :center),
-                    fontsize = 40,
-                    color = :red,
-                    font = "bold"
-                )
-
-                lines!(
-                    ax,
-                    time_vec ./ TimeScale,
-                    melt_fraction_evo;
-                    color = :black,
-                    linewidth = 2,
-                    label = "mean(ϕ)"
-                )
-
-                save(joinpath(figdir, "FlowRegime_diagram_$(it).png"), fig2)
-                fig2
             end
 
         end
@@ -761,21 +768,42 @@ const plotting = true
 do_vtk = true
 
 # (Path)/folder where output data and figures are stored
-figdir   = "PD_LARGE__SillConvection2D_$(today())"
-n = 128
-nx, ny = n, n
+figdir   = "SillConvection2D_$(today())"
+n = 64
+nx, ny = n, n *2  #>> 1
 
-sill_temp = 1273.15 # in K
-host_rock_temp = 500.0 + 273.15 # in C
-sill_size = 100.0 # in m
-depth = 5e3 # in m
-li = dimensions = (300.0, 200.0) # in m
-origin = (0.0, -li[2])
-igg = if !(JustRelax.MPI.Initialized())
-    IGG(init_global_grid(nx, ny, 1; init_MPI=true)...)
+igg = if !(JustRelax.MPI.Initialized()) # initialize (or not) MPI grid
+    IGG(init_global_grid(nx, ny, 1; init_MPI = true)...)
 else
     igg
 end
+##### USER INPUTS ##########################################################
+dimensions = (0.3, 0.25)
+sill_temp = 1000.0 # in C
+host_rock_temp = 500.0 # in C
+sill_size = 0.1 # in km
+depth = 5e3 # in m
+############################################################################
+
+x_global = range(0, dimensions[1], nx_g())
+z_global = range(-dimensions[2], 0.0, ny_g())
+origin   = (x_global[1], z_global[1]) # origin of the grid
+li = (abs(last(x_global) - first(x_global)), abs(last(z_global) - first(z_global)))
+
+ni = nx, ny           # number of cells
+di = @. li / (nx_g(), ny_g())           # grid steps
+grid_global = Geometry(ni, li; origin = origin)
+
+
+li, origin, phases_GMG, T_GMG, _ = SillSetup_MPI(
+    nx + 1,
+    ny + 1,
+    grid_global.xvi;
+    dimensions = dimensions,
+    sill_temp = sill_temp,
+    host_rock_temp = host_rock_temp,
+    sill_size = sill_size
+)
 
 # run main script
-main(li, origin, igg; nx = nx, ny = ny, figdir = figdir, do_vtk = do_vtk, cutoff_visc = (1e1, 1.0e16), plotting = plotting, sill_temp = sill_temp, host_rock_temp = host_rock_temp, sill_size = sill_size, depth = depth);
+main(li, origin, phases_GMG, T_GMG, igg, x_global, z_global; nx = nx, ny = ny, figdir = figdir, do_vtk = do_vtk, cutoff_visc = (1e1, 1.0e18), plotting = plotting, sill_temp = sill_temp, host_rock_temp = host_rock_temp, sill_size = sill_size, depth = depth);
